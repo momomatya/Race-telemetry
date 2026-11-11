@@ -1745,56 +1745,91 @@
     const valPingLatency = document.getElementById('valPingLatency');
     let pitPeer = null;
 
+    const PEER_CONFIG = {
+      config: {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' }
+        ]
+      }
+    };
+
+    function attachRemoteStream(remoteStream) {
+      if (!remoteStream) return;
+      webcamVideo.srcObject = remoteStream;
+      webcamVideo.muted = true;
+      webcamVideo.playsInline = true;
+      webcamVideo.classList.remove('hidden');
+      simCanvas.classList.add('opacity-0');
+      state.webcamActive = true;
+      webcamVideo.play().catch(err => console.warn('Video auto-play notice:', err));
+    }
+
     btnConnectInCar.addEventListener('click', () => {
       const roomCode = pitRoomIdInput.value.trim().toUpperCase().replace(/[^A-Z0-9-]/g, '');
       if (!roomCode) return;
 
       if (pitPeer) pitPeer.destroy();
-      pitPeer = new Peer();
+      pitPeer = new Peer(PEER_CONFIG);
 
       btnConnectInCar.textContent = 'LINKING...';
+      btnConnectInCar.classList.remove('bg-emerald-600');
+      btnConnectInCar.classList.add('bg-cyan-600');
 
-      pitPeer.on('open', () => {
-        const targetPeerId = `RACE-COACH-${roomCode}`;
-        // Establish low-latency DataChannel
-        const conn = pitPeer.connect(targetPeerId, { reliable: false });
-
-        conn.on('open', () => {
-          state.mode = 'webrtc';
-          btnConnectInCar.textContent = 'LINKED ✅';
-          btnConnectInCar.classList.replace('bg-cyan-600', 'bg-emerald-600');
-          liveBadgeText.textContent = `LIVE // CAR ${roomCode}`;
-        });
-
-        conn.on('data', (dataStr) => {
-          try {
-            const pkt = typeof dataStr === 'string' ? JSON.parse(dataStr) : dataStr;
-            state.telemetry.speed = pkt.spd ?? state.telemetry.speed;
-            state.telemetry.rpm = pkt.rpm ?? state.telemetry.rpm;
-            state.telemetry.gear = pkt.gr ?? state.telemetry.gear;
-            state.telemetry.throttle = pkt.thr ?? state.telemetry.throttle;
-            state.telemetry.brake = pkt.brk ?? state.telemetry.brake;
-            state.telemetry.brakePressure = state.telemetry.brake * 0.085;
-            state.telemetry.latG = pkt.gx ?? state.telemetry.latG;
-            state.telemetry.lonG = pkt.gy ?? state.telemetry.lonG;
-
-            if (pkt.t) {
-              const latency = Math.max(12, Math.min(999, Date.now() - pkt.t));
-              valPingLatency.textContent = `${latency}ms`;
-            }
-          } catch (e) {}
+      // 1. Listen for incoming media calls from the In-Car Smartphone
+      pitPeer.on('call', (incomingCall) => {
+        incomingCall.answer();
+        incomingCall.on('stream', (remoteStream) => {
+          attachRemoteStream(remoteStream);
         });
       });
 
-      // Receive live camera stream from In-Car Smartphone
-      pitPeer.on('call', (call) => {
-        call.answer();
-        call.on('stream', (remoteStream) => {
-          webcamVideo.srcObject = remoteStream;
-          webcamVideo.classList.remove('hidden');
-          simCanvas.classList.add('hidden');
-          state.webcamActive = true;
-        });
+      pitPeer.on('open', () => {
+        // Connect to car's data channel (supporting both RACE-CAR- and legacy RACE-COACH- prefixes)
+        const primaryTargetId = `RACE-CAR-${roomCode}`;
+        const fallbackTargetId = `RACE-COACH-${roomCode}`;
+
+        function setupDataChannel(conn) {
+          conn.on('open', () => {
+            state.mode = 'webrtc';
+            btnConnectInCar.textContent = 'LINKED ✅';
+            btnConnectInCar.classList.replace('bg-cyan-600', 'bg-emerald-600');
+            liveBadgeText.textContent = `LIVE // CAR ${roomCode}`;
+            // Trigger the smartphone's reverse video call immediately
+            conn.send({ type: 'REQUEST_VIDEO' });
+          });
+
+          conn.on('data', (dataPayload) => {
+            try {
+              const pkt = typeof dataPayload === 'string' ? JSON.parse(dataPayload) : dataPayload;
+              if (pkt.type === 'REQUEST_VIDEO') return;
+
+              state.telemetry.speed = pkt.spd ?? state.telemetry.speed;
+              state.telemetry.rpm = pkt.rpm ?? state.telemetry.rpm;
+              state.telemetry.gear = pkt.gr ?? state.telemetry.gear;
+              state.telemetry.throttle = pkt.thr ?? state.telemetry.throttle;
+              state.telemetry.brake = pkt.brk ?? state.telemetry.brake;
+              state.telemetry.brakePressure = state.telemetry.brake * 0.085;
+              state.telemetry.latG = pkt.gx ?? state.telemetry.latG;
+              state.telemetry.lonG = pkt.gy ?? state.telemetry.lonG;
+
+              if (pkt.t) {
+                const latency = Math.max(12, Math.min(999, Date.now() - pkt.t));
+                valPingLatency.textContent = `${latency}ms`;
+              }
+            } catch (e) {}
+          });
+        }
+
+        const connPrimary = pitPeer.connect(primaryTargetId, { reliable: false });
+        setupDataChannel(connPrimary);
+
+        const connFallback = pitPeer.connect(fallbackTargetId, { reliable: false });
+        setupDataChannel(connFallback);
+      });
+
+      pitPeer.on('error', (err) => {
+        console.warn('Pit PeerJS notice:', err.type);
       });
     });
 
@@ -1805,10 +1840,7 @@
             video: { width: 1280, height: 720, frameRate: 60 },
             audio: false
           });
-          webcamVideo.srcObject = stream;
-          webcamVideo.classList.remove('hidden');
-          simCanvas.classList.add('hidden');
-          state.webcamActive = true;
+          attachRemoteStream(stream);
           btnToggleWebcam.textContent = 'Switch to Track Sim';
           btnToggleWebcam.classList.add('bg-cyan-600', 'text-white');
         } catch (err) {
@@ -1819,7 +1851,7 @@
           webcamVideo.srcObject.getTracks().forEach(track => track.stop());
         }
         webcamVideo.classList.add('hidden');
-        simCanvas.classList.remove('hidden');
+        simCanvas.classList.remove('opacity-0', 'hidden');
         state.webcamActive = false;
         btnToggleWebcam.textContent = 'Enable Webcam';
         btnToggleWebcam.classList.remove('bg-cyan-600', 'text-white');
