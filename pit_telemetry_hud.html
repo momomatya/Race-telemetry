@@ -8,7 +8,7 @@
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,400;0,600;0,700;0,800;0,900;1,700;1,800;1,900&family=JetBrains+Mono:wght@400;600;700;800&family=Oswald:wght@500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,500;0,600;0,700;0,800;0,900;1,700;1,800;1,900&family=JetBrains+Mono:wght@500;600;700;800&family=Oswald:ital,wght@0,600;0,700;1,700&display=swap" rel="stylesheet">
   <style>
     body {
       font-family: 'Barlow Condensed', sans-serif;
@@ -19,16 +19,16 @@
     }
     .mono { font-family: 'JetBrains Mono', monospace; }
     .oswald { font-family: 'Oswald', sans-serif; }
-    .hud-box {
-      background: linear-gradient(135deg, rgba(8, 12, 22, 0.88) 0%, rgba(3, 7, 18, 0.94) 100%);
+    .gt-panel {
+      background: rgba(10, 14, 23, 0.88);
       backdrop-filter: blur(8px);
       -webkit-backdrop-filter: blur(8px);
-      box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.12);
-      border: 1px solid rgba(255, 255, 255, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.75);
       touch-action: none;
     }
-    .hud-box:hover {
-      border-color: rgba(56, 189, 248, 0.35);
+    .gt-panel:hover {
+      border-color: rgba(56, 189, 248, 0.4);
     }
     .hud-handle {
       cursor: grab;
@@ -38,17 +38,16 @@
     }
     .resize-handle {
       position: absolute;
-      right: 2px;
-      bottom: 2px;
-      width: 14px;
-      height: 14px;
+      right: 1px;
+      bottom: 1px;
+      width: 12px;
+      height: 12px;
       cursor: se-resize;
       z-index: 50;
-      color: #64748b;
-      font-size: 11px;
-      line-height: 14px;
+      color: rgba(148, 163, 184, 0.5);
+      font-size: 9px;
+      line-height: 12px;
       text-align: center;
-      transition: color 0.15s ease;
       touch-action: none;
     }
     .resize-handle:hover {
@@ -58,278 +57,256 @@
 </head>
 <body class="w-screen h-screen flex flex-col justify-between overflow-hidden relative bg-black select-none">
 
-  <!-- 16:9 背景ビデオ（全画面フィット強制） -->
+  <!-- 16:9 背景ビデオ（左半分が黒くならないよう全画面中央フィットを強制） -->
   <video id="remoteVideo" 
-         style="position: absolute !important; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important; object-fit: cover !important; object-position: center !important; z-index: 0 !important;" 
+         style="position: absolute !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important; width: 100vw !important; height: 100vh !important; object-fit: cover !important; object-position: center center !important; z-index: 1 !important;" 
          class="pointer-events-none opacity-0" 
          autoplay playsinline muted></video>
 
-  <!-- フォールバック用シミュレーター背景Canvas -->
+  <!-- カメラ未接続時の背景Canvas -->
   <canvas id="simCanvas" class="absolute inset-0 w-full h-full object-cover z-0"></canvas>
 
-  <!-- 上部ステータスバー -->
-  <header class="relative z-30 flex items-center justify-between px-3 py-1 bg-slate-950/85 backdrop-blur-md border-b border-white/10 text-xs font-bold tracking-wider">
-    <div class="flex items-center gap-3">
-      <span class="flex items-center gap-1.5 text-rose-500 animate-pulse font-black">
-        <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span> LIVE // CAR #27
+  <!-- 上部ヘッダーバー（スクショ完全一致） -->
+  <header class="relative z-30 flex items-center justify-between px-2.5 py-1 bg-[#070a12]/95 border-b border-white/15 text-[11px] font-bold tracking-wider">
+    <div class="flex items-center gap-2.5">
+      <span class="flex items-center gap-1.5 px-2 py-0.5 rounded bg-rose-950/90 border border-rose-500/50 text-rose-400 font-extrabold">
+        <span class="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span> LIVE // CAR ND-27
       </span>
-      <span class="text-slate-300 font-extrabold tracking-wide">CH 01 // ND-ROADSTER #27</span>
-      <span id="statLatency" class="mono text-cyan-400 bg-cyan-950/50 px-2 py-0.5 rounded border border-cyan-800/40">---ms</span>
-      <span class="mono text-slate-400">720p 60FPS</span>
-      <span id="statRate" class="mono text-emerald-400 bg-emerald-950/50 px-2 py-0.5 rounded border border-emerald-800/40">25Hz (AiM EXP)</span>
+      <span class="text-white font-extrabold tracking-wide">CH 01 // ND-ROADSTER #27</span>
+      <span class="text-slate-600">|</span>
+      <span id="statLatency" class="mono text-cyan-400 font-bold">244ms</span>
+      <span class="text-slate-600">|</span>
+      <span class="mono text-slate-300">720p 60FPS</span>
+      <span class="text-slate-600">|</span>
+      <span id="statRate" class="mono text-amber-400 font-bold">25Hz (AiM EXP)</span>
     </div>
 
-    <!-- WebRTC 接続＆コントロール -->
-    <div class="flex items-center gap-2">
-      <div class="flex items-center bg-slate-900/90 border border-white/20 rounded px-2 py-0.5">
-        <span class="text-[10px] text-slate-400 mr-1.5 font-bold">ROOM:</span>
-        <input id="inputRoomCode" type="text" value="ND-27" class="bg-transparent text-cyan-400 font-bold mono text-xs w-16 focus:outline-none uppercase" />
+    <div class="flex items-center gap-1.5">
+      <div class="flex items-center bg-[#0d1322] border border-white/15 rounded px-2 py-0.5">
+        <span class="text-[10px] text-slate-400 mr-1 font-bold">ROOM</span>
+        <input id="inputRoomCode" type="text" value="ND-27" class="bg-transparent text-white font-bold mono text-[11px] w-12 focus:outline-none uppercase" />
       </div>
-      <button id="btnConnectCar" class="px-2.5 py-1 bg-cyan-600 hover:bg-cyan-500 active:bg-cyan-700 text-white font-extrabold text-xs rounded tracking-wider shadow">
-        📡 LINK CAR
+      <button id="btnConnectCar" class="px-2.5 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-[11px] rounded tracking-wider shadow">
+        LINKED 📡
       </button>
-      <button id="btnReplay" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded border border-white/10 flex items-center gap-1">
+      <button id="btnReplay" class="px-2 py-0.5 bg-[#161f33] hover:bg-slate-700 text-amber-400 text-[11px] font-bold rounded border border-white/10">
         ⏪ REPLAY 5s
       </button>
-      <button id="btnFreeze" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded border border-white/10 flex items-center gap-1">
+      <button id="btnFreeze" class="px-2 py-0.5 bg-[#161f33] hover:bg-slate-700 text-slate-200 text-[11px] font-bold rounded border border-white/10">
         ⏸ FREEZE
       </button>
-      <button id="btnPtt" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-extrabold text-xs rounded tracking-wider shadow flex items-center gap-1">
-        🎙 RADIO PTT <span class="text-[10px] opacity-75">[SPACE]</span>
+      <button id="btnPtt" class="px-2.5 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-[11px] rounded tracking-wider shadow">
+        🎙 RADIO PTT [SPACE]
       </button>
-      <button id="btnResetHud" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded border border-white/10 flex items-center gap-1">
-        🔄 RESET HUD
+      <button id="btnResetHud" class="px-2 py-0.5 bg-[#161f33] hover:bg-slate-700 text-cyan-300 text-[11px] font-bold rounded border border-cyan-500/30">
+        ↺ RESET HUD
       </button>
-      <button id="btnLog" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded border border-white/10">
+      <button id="btnLog" class="px-2 py-0.5 bg-[#161f33] hover:bg-slate-700 text-slate-300 text-[11px] font-bold rounded border border-white/10">
         LOG
       </button>
-      <button id="btnToggleSim" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-400 text-xs rounded border border-white/10">
+      <button id="btnToggleSim" class="px-2 py-0.5 bg-[#161f33] hover:bg-slate-700 text-slate-300 text-[11px] font-bold rounded border border-white/10">
         ⚙ SIM
       </button>
     </div>
   </header>
 
-  <!-- HUDメイン領域（16:9キャンバス） -->
+  <!-- HUDメイン領域 -->
   <main id="hudContainer" class="relative flex-1 w-full h-full overflow-hidden z-20 pointer-events-none">
 
-    <!-- 1. スピードメーター / ギア / 回転数 パネル -->
-    <div id="panelSpeedo" data-base-w="170" data-base-h="90" data-min-w="130" data-min-h="70"
-         class="absolute pointer-events-auto hud-box rounded p-2 shadow-2xl flex flex-col justify-between"
-         style="top: 15px; left: 15px; width: 170px; height: 90px; --ui-scale: 1;">
-      <div class="hud-handle flex items-start justify-between border-b border-white/10 pb-1">
+    <!-- 1. 左上：スピード＆ギアパネル（下部にSTEER / LAP DIST外付けラベル付き） -->
+    <div id="panelSpeedo" data-base-w="115" data-base-h="82" data-min-w="95" data-min-h="65"
+         class="absolute pointer-events-auto gt-panel rounded-sm p-2 flex flex-col justify-between"
+         style="top: 14px; left: 88px; width: 115px; height: 82px; --ui-scale: 1;">
+      <!-- 上部 ENGINE SPEED & RPMバー -->
+      <div>
+        <div class="hud-handle flex justify-between items-center text-[calc(0.5rem*var(--ui-scale))] font-bold text-slate-400 tracking-wider mb-0.5">
+          <span>⠿ ENGINE SPEED</span>
+          <span id="hudRpm" class="mono text-slate-200">4,580</span>
+        </div>
+        <div class="w-full bg-slate-800 h-1.5 rounded-sm overflow-hidden">
+          <div id="hudRpmBar" class="bg-gradient-to-r from-cyan-400 via-blue-500 to-rose-500 h-full w-[62%] transition-all duration-75"></div>
+        </div>
+      </div>
+
+      <!-- 中央 車速 ＆ ギア -->
+      <div class="flex items-end justify-between pt-1">
         <div>
-          <div class="text-[calc(0.55rem*var(--ui-scale))] font-bold text-slate-400 tracking-wider">ENGINE SPEED</div>
-          <div class="flex items-baseline gap-1">
-            <span id="hudSpeed" class="text-[calc(2.2rem*var(--ui-scale))] font-black italic oswald text-white leading-none">92</span>
-            <span class="text-[calc(0.6rem*var(--ui-scale))] text-slate-400 font-bold">km/h</span>
+          <div class="flex items-baseline gap-0.5">
+            <span id="hudSpeed" class="text-[calc(2.1rem*var(--ui-scale))] font-black italic oswald text-white leading-none tracking-tight">92</span>
+            <span class="text-[calc(0.5rem*var(--ui-scale))] text-slate-400 font-bold">KM/H</span>
           </div>
         </div>
+        <div class="text-right leading-none">
+          <div class="text-[calc(0.45rem*var(--ui-scale))] font-bold text-slate-400">GEAR</div>
+          <span id="hudGear" class="text-[calc(1.75rem*var(--ui-scale))] font-black oswald text-amber-400 leading-none">4</span>
+        </div>
+      </div>
+
+      <!-- パネル直下の枠外ラベル（STEER / LAP DIST） -->
+      <div class="absolute left-0 right-0 -bottom-7 flex justify-between text-[calc(0.52rem*var(--ui-scale))] mono text-slate-300 pointer-events-none">
+        <div>
+          <div class="text-[calc(0.42rem*var(--ui-scale))] text-slate-400 font-bold">STEER</div>
+          <div id="hudSteer" class="font-bold text-white">-1.2°</div>
+        </div>
         <div class="text-right">
-          <div class="text-[calc(0.55rem*var(--ui-scale))] font-bold text-slate-400">GEAR</div>
-          <span id="hudGear" class="text-[calc(2.0rem*var(--ui-scale))] font-black italic oswald text-amber-400 leading-none">4</span>
+          <div class="text-[calc(0.42rem*var(--ui-scale))] text-slate-400 font-bold">LAP DIST</div>
+          <div class="font-bold text-white">1,637m [S1]</div>
         </div>
       </div>
-      <div>
-        <div class="flex justify-between text-[calc(0.55rem*var(--ui-scale))] mono text-slate-400 mb-0.5">
-          <span>STEER: <span id="hudSteer" class="text-white">-1.2°</span></span>
-          <span>LAP DIST: <span class="text-white">1,637m [S1]</span></span>
+
+      <div class="resize-handle">⤡</div>
+    </div>
+
+    <!-- 2. 左上隣：GT7風 セクタータイム＆デルタボード（青/赤ベタ塗りバッジ仕様） -->
+    <div id="panelTimingBoard" data-base-w="115" data-base-h="96" data-min-w="95" data-min-h="75"
+         class="absolute pointer-events-auto gt-panel rounded-sm p-1.5 flex flex-col justify-between"
+         style="top: 14px; left: 204px; width: 115px; height: 96px; --ui-scale: 1;">
+      <div class="hud-handle space-y-[2px] text-[calc(0.58rem*var(--ui-scale))] mono font-bold leading-tight">
+        <div class="grid grid-cols-12 items-center">
+          <span class="col-span-2 text-slate-400 text-center bg-slate-800/80 rounded-sm text-[calc(0.5rem*var(--ui-scale))]">3</span>
+          <span class="col-span-6 text-right pr-1.5 text-slate-100">0'10.549</span>
+          <span class="col-span-4 text-center bg-blue-600 text-white rounded-sm py-[1px] text-[calc(0.52rem*var(--ui-scale))]">-3.077</span>
         </div>
-        <div class="w-full bg-slate-800/80 h-1.5 rounded-full overflow-hidden">
-          <div id="hudRpmBar" class="bg-gradient-to-r from-cyan-400 via-amber-400 to-rose-500 h-full w-[65%] transition-all duration-75"></div>
+        <div class="grid grid-cols-12 items-center">
+          <span class="col-span-2 text-slate-400 text-center bg-slate-800/80 rounded-sm text-[calc(0.5rem*var(--ui-scale))]">2</span>
+          <span class="col-span-6 text-right pr-1.5 text-slate-100">0'18.183</span>
+          <span class="col-span-4 text-center bg-blue-600 text-white rounded-sm py-[1px] text-[calc(0.52rem*var(--ui-scale))]">-17.844</span>
+        </div>
+        <div class="grid grid-cols-12 items-center">
+          <span class="col-span-2 text-slate-200 text-center bg-slate-700 rounded-sm text-[calc(0.5rem*var(--ui-scale))]">1</span>
+          <span class="col-span-6 text-right pr-1.5 text-white font-extrabold">0'10.699</span>
+          <span class="col-span-4 text-center bg-slate-700/80 text-slate-300 rounded-sm py-[1px] text-[calc(0.5rem*var(--ui-scale))]">LIVE</span>
+        </div>
+        <div class="grid grid-cols-12 items-center pt-0.5 border-t border-white/10">
+          <span class="col-span-3 text-slate-400 text-[calc(0.48rem*var(--ui-scale))]">LAST</span>
+          <span class="col-span-5 text-right pr-1 text-slate-300 text-[calc(0.52rem*var(--ui-scale))]">1'15.016</span>
+          <span class="col-span-4 text-center bg-rose-600 text-white rounded-sm py-[1px] text-[calc(0.52rem*var(--ui-scale))]">+1.891</span>
+        </div>
+        <div class="grid grid-cols-12 items-center">
+          <span class="col-span-3 text-emerald-400 text-[calc(0.48rem*var(--ui-scale))]">BEST</span>
+          <span class="col-span-6 text-right pr-1 text-emerald-400 text-[calc(0.52rem*var(--ui-scale))]">1'00.785</span>
+          <span class="col-span-3 text-right text-slate-500 text-[calc(0.45rem*var(--ui-scale))]">P1</span>
+        </div>
+        <div class="grid grid-cols-12 items-center">
+          <span class="col-span-3 text-amber-400 text-[calc(0.48rem*var(--ui-scale))]">OPT.</span>
+          <span class="col-span-6 text-right pr-1 text-amber-400 text-[calc(0.52rem*var(--ui-scale))]">1'07.447</span>
+          <span class="col-span-3 text-right text-slate-500 text-[calc(0.45rem*var(--ui-scale))]">IDEAL</span>
         </div>
       </div>
       <div class="resize-handle">⤡</div>
     </div>
 
-    <!-- 2. セクタータイム差分ボード (GT7風) -->
-    <div id="panelTimingBoard" data-base-w="155" data-base-h="95" data-min-w="120" data-min-h="70"
-         class="absolute pointer-events-auto hud-box rounded p-2 shadow-2xl flex flex-col justify-between"
-         style="top: 15px; left: 195px; width: 155px; height: 95px; --ui-scale: 1;">
-      <div class="hud-handle text-[calc(0.55rem*var(--ui-scale))] font-bold text-slate-400 tracking-wider border-b border-white/10 pb-0.5 flex justify-between">
-        <span>SECTOR DELTA</span>
-        <span class="text-cyan-400">REF: BEST</span>
+    <!-- 3. 中央上：スリムLIVE LAPタイマー（スクショ完全一致） -->
+    <div id="panelLap" data-base-w="135" data-base-h="32" data-min-w="110" data-min-h="26"
+         class="absolute pointer-events-auto gt-panel rounded-sm px-2.5 py-1 flex items-center justify-between"
+         style="top: 14px; left: 50%; transform: translateX(-50%); width: 135px; height: 32px; --ui-scale: 1;">
+      <div class="hud-handle leading-none">
+        <div class="text-[calc(0.42rem*var(--ui-scale))] font-bold text-slate-400">LIVE LAP</div>
+        <div class="text-[calc(0.45rem*var(--ui-scale))] font-extrabold text-cyan-400">SECTOR 1</div>
       </div>
-      <div class="space-y-0.5 text-[calc(0.6rem*var(--ui-scale))] mono font-bold">
-        <div class="flex justify-between items-center">
-          <span class="text-slate-400">3</span>
-          <span class="text-slate-200">0'10.549</span>
-          <span class="px-1 rounded bg-cyan-900/60 text-cyan-300 font-extrabold">-3.077</span>
-        </div>
-        <div class="flex justify-between items-center">
-          <span class="text-slate-400">2</span>
-          <span class="text-slate-200">0'18.183</span>
-          <span class="px-1 rounded bg-cyan-900/60 text-cyan-300 font-extrabold">-17.844</span>
-        </div>
-        <div class="flex justify-between items-center">
-          <span class="text-slate-400">1</span>
-          <span class="text-white font-extrabold">0'10.699</span>
-          <span class="px-1 rounded bg-slate-800 text-slate-300">LIVE</span>
-        </div>
-        <div class="flex justify-between items-center pt-0.5 border-t border-white/10">
-          <span class="text-slate-400">LAST</span>
-          <span class="text-slate-300">1'15.016</span>
-          <span class="text-rose-400">+1.891</span>
-        </div>
-        <div class="flex justify-between items-center">
-          <span class="text-slate-400">BEST</span>
-          <span class="text-emerald-400">1'00.785</span>
-          <span class="text-[0.55rem] text-slate-500">77</span>
-        </div>
-        <div class="flex justify-between items-center">
-          <span class="text-slate-400">OPT.</span>
-          <span class="text-amber-400">1'07.447</span>
-          <span class="text-[0.55rem] text-slate-500">IDEAL</span>
-        </div>
-      </div>
+      <div id="hudLapTime" class="text-[calc(1.05rem*var(--ui-scale))] font-black mono text-white leading-none tracking-tight">0'10.883</div>
+      <span class="px-1 py-[1px] rounded-sm bg-cyan-950 text-cyan-300 mono text-[calc(0.45rem*var(--ui-scale))] font-bold border border-cyan-500/40">LIVE</span>
       <div class="resize-handle">⤡</div>
     </div>
 
-    <!-- 3. ラップタイマー (中央上部) -->
-    <div id="panelLap" data-base-w="220" data-base-h="42" data-min-w="160" data-min-h="36"
-         class="absolute pointer-events-auto hud-box rounded px-3 py-1 shadow-2xl flex items-center justify-between"
-         style="top: 15px; left: 50%; transform: translateX(-50%); width: 220px; height: 42px; --ui-scale: 1;">
-      <div class="hud-handle">
-        <div class="text-[calc(0.5rem*var(--ui-scale))] font-bold text-slate-400">LIVE LAP / SECTOR 1</div>
-        <div id="hudLapTime" class="text-[calc(1.15rem*var(--ui-scale))] font-black mono text-white leading-none">0'10.883</div>
-      </div>
-      <div class="text-right">
-        <span class="px-1 py-0.5 rounded bg-cyan-900/60 text-cyan-300 mono text-[calc(0.65rem*var(--ui-scale))] font-bold border border-cyan-500/40">LIVE</span>
-      </div>
-      <div class="resize-handle">⤡</div>
-    </div>
-
-    <!-- 4. GPS サーキットマップ -->
-    <div id="panelGpsMap" data-base-w="110" data-base-h="85" data-min-w="80" data-min-h="65"
-         class="absolute pointer-events-auto hud-box rounded p-1.5 shadow-2xl flex flex-col justify-between"
-         style="top: 15px; right: 110px; width: 110px; height: 85px; --ui-scale: 1;">
-      <div class="hud-handle flex justify-between items-center text-[calc(0.5rem*var(--ui-scale))] font-bold text-slate-400">
-        <span class="text-cyan-400 flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span> GPS</span>
-        <span class="text-slate-300">STRAIGHT</span>
+    <!-- 4. 右上：GPS サーキットマップ（富士スピードウェイ形状） -->
+    <div id="panelGpsMap" data-base-w="88" data-base-h="68" data-min-w="70" data-min-h="55"
+         class="absolute pointer-events-auto gt-panel rounded-sm p-1.5 flex flex-col justify-between"
+         style="top: 14px; right: 162px; width: 88px; height: 68px; --ui-scale: 1;">
+      <div class="hud-handle flex justify-between items-center text-[calc(0.45rem*var(--ui-scale))] font-bold">
+        <span class="text-cyan-400">● GPS</span>
+        <span class="text-slate-200">STRAIGHT</span>
       </div>
       <canvas id="gpsCanvas" class="w-full flex-1"></canvas>
       <div class="resize-handle">⤡</div>
     </div>
 
-    <!-- 5. Gボール (摩擦円 / フリクションサークル) -->
-    <div id="panelGBall" data-base-w="90" data-base-h="85" data-min-w="75" data-min-h="65"
-         class="absolute pointer-events-auto hud-box rounded p-1.5 shadow-2xl flex flex-col justify-between"
-         style="top: 15px; right: 15px; width: 90px; height: 85px; --ui-scale: 1;">
-      <div class="hud-handle flex justify-between items-center text-[calc(0.5rem*var(--ui-scale))] font-bold text-slate-400">
-        <span>G-BALL</span>
-        <span class="mono text-amber-400 font-bold">1.14G</span>
+    <!-- 5. 右上端：G-BALL（摩擦円・下部外付けLAT/LON数値付き） -->
+    <div id="panelGBall" data-base-w="68" data-base-h="68" data-min-w="55" data-min-h="55"
+         class="absolute pointer-events-auto gt-panel rounded-sm p-1.5 flex flex-col justify-between"
+         style="top: 14px; right: 88px; width: 68px; height: 68px; --ui-scale: 1;">
+      <div class="hud-handle flex justify-between items-center text-[calc(0.45rem*var(--ui-scale))] font-bold">
+        <span class="text-slate-300">⠿ G-BALL</span>
+        <span id="hudGTotal" class="mono text-amber-400 font-extrabold">1.14G</span>
       </div>
       <canvas id="gCanvas" class="w-full flex-1"></canvas>
-      <div class="text-[calc(0.5rem*var(--ui-scale))] mono text-center text-slate-400">
-        LAT: <span class="text-cyan-300">-0.71</span> LON: <span class="text-rose-400">-0.15</span>
+      <!-- 枠外下部のLAT/LON表示 -->
+      <div class="absolute left-0 right-0 -bottom-4 text-[calc(0.42rem*var(--ui-scale))] mono text-center text-slate-300 whitespace-nowrap pointer-events-none">
+        LAT:<span id="hudGLat" class="text-cyan-300 font-bold">-0.71</span> LON:<span id="hudGLon" class="text-rose-400 font-bold">-0.15</span>
       </div>
       <div class="resize-handle">⤡</div>
     </div>
 
-    <!-- 6. コーナー脱出速度トースト -->
-    <div id="toastSpeed" data-base-w="260" data-base-h="42" data-min-w="200" data-min-h="36"
-         class="absolute pointer-events-auto hud-box rounded px-3 py-1 shadow-2xl flex items-center justify-between border-cyan-500/50"
-         style="top: 65px; left: 50%; transform: translateX(-50%); width: 260px; height: 42px; --ui-scale: 1;">
-      <div class="hud-handle flex items-center gap-2">
-        <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
-        <span class="text-[calc(0.7rem*var(--ui-scale))] font-bold tracking-wider text-slate-200">T1 EXIT MIN-SPD</span>
-      </div>
-      <div class="mono font-black text-[calc(0.9rem*var(--ui-scale))] text-cyan-300">
-        84.2 <span class="text-[calc(0.55rem*var(--ui-scale))] text-slate-400">km/h</span> <span class="text-emerald-400 text-[calc(0.65rem*var(--ui-scale))]">(+2.4)</span>
-      </div>
-      <div class="resize-handle">⤡</div>
-    </div>
+    <!-- 6. 下部：ペダルアプリケーション・トレース（スクショ完全一致・太線オシロスコープ） -->
+    <div id="panelPedals" data-base-w="880" data-base-h="66" data-min-w="420" data-min-h="50"
+         class="absolute pointer-events-auto gt-panel rounded-sm px-3 py-1.5 flex flex-col justify-between"
+         style="bottom: 10px; left: 50%; transform: translateX(-50%); width: 880px; height: 66px; --ui-scale: 1;">
 
-    <!-- 7. ペダルバー ＆ オシロスコープ (下部・太さ2.5倍仕様) -->
-    <div id="panelPedals" data-base-w="800" data-base-h="80" data-min-w="450" data-min-h="60"
-         class="absolute pointer-events-auto hud-box rounded p-2 shadow-2xl flex gap-3 items-center"
-         style="bottom: 12px; left: 50%; transform: translateX(-50%); width: 800px; height: 80px; --ui-scale: 1;">
+      <!-- 上段タイトル ＆ ライブ数値バー -->
+      <div class="hud-handle flex justify-between items-center text-[calc(0.68rem*var(--ui-scale))] font-extrabold tracking-wide">
+        <div class="flex items-center gap-3">
+          <span class="text-white flex items-center gap-1"><span class="text-cyan-400">⠿</span>•PEDAL APPLICATION TRACE (LAST 6s)</span>
+          <span class="text-emerald-400">THR: <span id="labelThr">0%</span></span>
+          <span class="text-rose-400">BRK: <span id="labelBrk">59% (5.0 MPa)</span></span>
+          <span class="text-slate-300">CLT: <span id="labelClt">0%</span></span>
+        </div>
+        <span class="text-slate-400 text-[calc(0.6rem*var(--ui-scale))] tracking-widest">TRAIL BRAKE RELEASE GRADIENT</span>
+      </div>
 
-      <!-- 縦型ペダルバー (幅40px / 2.5倍拡大) -->
-      <div class="flex gap-2 h-full items-end pb-0.5 border-r border-white/10 pr-3">
-        <!-- スロットル -->
-        <div class="flex flex-col items-center h-full justify-end">
-          <div id="valThrBar" class="text-[calc(0.6rem*var(--ui-scale))] mono font-bold text-emerald-400 mb-0.5">0%</div>
-          <div class="w-10 bg-slate-800/80 rounded-sm overflow-hidden flex flex-col justify-end border border-white/10" style="height: calc(100% - 1.2rem);">
-            <div id="barThr" class="w-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.7)]" style="height: 0%;"></div>
+      <!-- 下段：左端ミニバー＋ラベル ＆ 横幅いっぱいオシロスコープ -->
+      <div class="flex items-end gap-2.5 flex-1 pt-1 overflow-hidden">
+        <!-- 左端 THR / BRK / CLT ミニインジケータ -->
+        <div class="flex items-end gap-1.5 h-full pb-0.5 shrink-0">
+          <div class="flex flex-col items-center h-full justify-end">
+            <div class="w-4 flex-1 bg-slate-800/90 rounded-sm overflow-hidden flex flex-col justify-end border border-white/10">
+              <div id="barThr" class="w-full bg-emerald-400" style="height: 0%;"></div>
+            </div>
+            <span class="text-[calc(0.55rem*var(--ui-scale))] font-black text-emerald-400 leading-none mt-0.5">THR</span>
           </div>
-          <div class="text-[calc(0.65rem*var(--ui-scale))] font-extrabold text-emerald-400 mt-0.5">THR</div>
+          <div class="flex flex-col items-center h-full justify-end">
+            <div class="w-4 flex-1 bg-slate-800/90 rounded-sm overflow-hidden flex flex-col justify-end border border-white/10">
+              <div id="barBrk" class="w-full bg-rose-500" style="height: 59%;"></div>
+            </div>
+            <span class="text-[calc(0.55rem*var(--ui-scale))] font-black text-rose-500 leading-none mt-0.5">BRK</span>
+          </div>
+          <div class="flex flex-col items-center h-full justify-end">
+            <div class="w-4 flex-1 bg-slate-800/90 rounded-sm overflow-hidden flex flex-col justify-end border border-white/10">
+              <div id="barClt" class="w-full bg-cyan-400" style="height: 0%;"></div>
+            </div>
+            <span class="text-[calc(0.55rem*var(--ui-scale))] font-black text-cyan-400 leading-none mt-0.5">CLT</span>
+          </div>
         </div>
 
-        <!-- ブレーキ -->
-        <div class="flex flex-col items-center h-full justify-end">
-          <div id="valBrkBar" class="text-[calc(0.6rem*var(--ui-scale))] mono font-bold text-rose-500 mb-0.5">59%</div>
-          <div class="w-10 bg-slate-800/80 rounded-sm overflow-hidden flex flex-col justify-end border border-white/10" style="height: calc(100% - 1.2rem);">
-            <div id="barBrk" class="w-full bg-rose-600 shadow-[0_0_12px_rgba(225,29,72,0.9)]" style="height: 59%;"></div>
+        <!-- 波形オシロスコープ本体（内部に -6s -4s -2s 0s(NOW) をオーバーレイ） -->
+        <div class="relative flex-1 h-full bg-[#060911]/90 rounded-sm border border-white/10 overflow-hidden">
+          <canvas id="oscilloCanvas" class="w-full h-full block"></canvas>
+          <div class="absolute inset-x-2 bottom-0.5 flex justify-between text-[calc(0.55rem*var(--ui-scale))] mono font-bold text-slate-400 pointer-events-none">
+            <span>-6s</span>
+            <span>-4s</span>
+            <span>-2s</span>
+            <span class="text-cyan-400 font-extrabold">0s (NOW)</span>
           </div>
-          <div class="text-[calc(0.65rem*var(--ui-scale))] font-extrabold text-rose-500 mt-0.5">BRK</div>
-        </div>
-
-        <!-- クラッチ -->
-        <div class="flex flex-col items-center h-full justify-end">
-          <div id="valCltBar" class="text-[calc(0.6rem*var(--ui-scale))] mono font-bold text-cyan-400 mb-0.5">0%</div>
-          <div class="w-8 bg-slate-800/80 rounded-sm overflow-hidden flex flex-col justify-end border border-white/10" style="height: calc(100% - 1.2rem);">
-            <div id="barClt" class="w-full bg-cyan-500" style="height: 0%;"></div>
-          </div>
-          <div class="text-[calc(0.65rem*var(--ui-scale))] font-bold text-cyan-400 mt-0.5">CLT</div>
         </div>
       </div>
 
-      <!-- ペダル波形オシロスコープ (線幅5.5px / 2.5倍仕様) -->
-      <div class="flex-1 h-full flex flex-col justify-between">
-        <div class="hud-handle flex justify-between items-center text-[calc(0.55rem*var(--ui-scale))] font-bold text-slate-400">
-          <span class="flex items-center gap-2">
-            <span class="text-cyan-400">■■ PEDAL APPLICATION TRACE (LAST 6s)</span>
-            <span>THR: <span id="labelThr" class="text-emerald-400">0%</span></span>
-            <span>BRK: <span id="labelBrk" class="text-rose-500">59% (5.0 MPa)</span></span>
-            <span>CLT: <span class="text-cyan-400">0%</span></span>
-          </span>
-          <span class="text-slate-400 tracking-wider">TRAIL BRAKE RELEASE GRADIENT</span>
-        </div>
-        <div class="relative flex-1 w-full bg-slate-900/60 rounded border border-white/10 overflow-hidden my-0.5">
-          <canvas id="oscilloCanvas" class="w-full h-full"></canvas>
-        </div>
-        <div class="flex justify-between text-[calc(0.5rem*var(--ui-scale))] mono text-slate-500">
-          <span>-6s</span>
-          <span>-4s</span>
-          <span>-2s</span>
-          <span class="text-cyan-400 font-bold">0s (NOW)</span>
-        </div>
-      </div>
       <div class="resize-handle">⤡</div>
     </div>
 
   </main>
 
-  <!-- 右側設定ドロワー -->
-  <div id="drawerSim" class="fixed top-10 right-0 bottom-0 w-80 bg-slate-950/95 border-l border-white/15 p-4 z-40 transform translate-x-full transition-transform duration-200 overflow-y-auto space-y-4">
+  <!-- 右側シミュレーション設定ドロワー -->
+  <div id="drawerSim" class="fixed top-9 right-0 bottom-0 w-72 bg-slate-950/95 border-l border-white/15 p-4 z-40 transform translate-x-full transition-transform duration-200 space-y-4 text-xs">
     <div class="flex items-center justify-between border-b border-white/10 pb-2">
-      <h3 class="font-bold text-sm text-cyan-400">TELEMETRY SIMULATOR</h3>
+      <h3 class="font-bold text-cyan-400">TELEMETRY SIMULATOR</h3>
       <button id="btnCloseSim" class="text-slate-400 hover:text-white">✕</button>
     </div>
-    <div class="space-y-3 text-xs">
-      <div>
-        <label class="block text-slate-400 font-bold mb-1">AUTO SIM SPEED (KM/H)</label>
-        <input id="sliderSpeed" type="range" min="0" max="220" value="124" class="w-full" />
-      </div>
-      <div>
-        <label class="block text-slate-400 font-bold mb-1">THROTTLE (%)</label>
-        <input id="sliderThr" type="range" min="0" max="100" value="80" class="w-full" />
-      </div>
-      <div>
-        <label class="block text-slate-400 font-bold mb-1">BRAKE (%)</label>
-        <input id="sliderBrk" type="range" min="0" max="100" value="0" class="w-full" />
-      </div>
-      <div class="pt-2">
-        <label class="flex items-center gap-2 cursor-pointer">
-          <input id="chkAutoSim" type="checkbox" checked class="rounded" />
-          <span class="font-bold text-slate-200">RUN AUTO TEST SCENARIO</span>
-        </label>
-      </div>
-    </div>
+    <label class="flex items-center gap-2 cursor-pointer">
+      <input id="chkAutoSim" type="checkbox" checked class="rounded" />
+      <span class="font-bold text-slate-200">AUTO DEMO WAVEFORM</span>
+    </label>
   </div>
 
   <script>
-    // --- STUN & WebRTC 設定 ---
     const PEER_CONFIG = {
       debug: 1,
       config: {
@@ -346,13 +323,17 @@
     let isAutoSim = true;
 
     let telem = {
-      spd: 92, rpm: 4800, gear: 4, thr: 0, brk: 59, clt: 0, gx: -0.15, gy: -0.71, steer: -1.2
+      spd: 92, rpm: 4580, gear: 4, thr: 0, brk: 59, clt: 0, gx: -0.15, gy: -0.71, steer: -1.2
     };
 
     const oscilloHistory = [];
-    const MAX_HISTORY = 180;
+    const MAX_HISTORY = 240;
     for (let i = 0; i < MAX_HISTORY; i++) {
-      oscilloHistory.push({ thr: 0, brk: 0 });
+      const p = i * 0.06;
+      const w = Math.sin(p);
+      const b = w < -0.2 ? Math.min(100, Math.round((-w - 0.2) * 130)) : 0;
+      const t = b === 0 ? Math.min(100, Math.max(0, Math.round((w + 0.25) * 85))) : 0;
+      oscilloHistory.push({ thr: t, brk: b });
     }
 
     // --- WebRTC 受信処理 ---
@@ -361,17 +342,23 @@
     const remoteVideo = document.getElementById('remoteVideo');
     const simCanvas = document.getElementById('simCanvas');
 
+    function attachStreamToFullScreen(stream) {
+      remoteVideo.srcObject = stream;
+      remoteVideo.style.opacity = '1';
+      simCanvas.style.opacity = '0';
+      remoteVideo.play().catch(() => {});
+    }
+
     btnConnectCar.addEventListener('click', () => {
       const room = inputRoomCode.value.trim().toUpperCase();
       if (!room) return;
-
       if (peer) peer.destroy();
 
       const pitPeerId = 'RACE-COACH-' + room + '-' + Math.floor(Math.random() * 1000);
       const targetCarPeerId = 'RACE-CAR-' + room;
 
       btnConnectCar.textContent = 'CONNECTING...';
-      btnConnectCar.className = 'px-2.5 py-1 bg-amber-600 text-white font-extrabold text-xs rounded tracking-wider shadow';
+      btnConnectCar.className = 'px-2.5 py-0.5 bg-amber-600 text-white font-extrabold text-[11px] rounded tracking-wider shadow';
 
       peer = new Peer(pitPeerId, PEER_CONFIG);
 
@@ -379,8 +366,8 @@
         dataConn = peer.connect(targetCarPeerId, { reliable: false });
 
         dataConn.on('open', () => {
-          btnConnectCar.textContent = 'LINKED (受信中)';
-          btnConnectCar.className = 'px-2.5 py-1 bg-emerald-600 text-white font-extrabold text-xs rounded tracking-wider shadow';
+          btnConnectCar.textContent = 'LINKED 📡';
+          btnConnectCar.className = 'px-2.5 py-0.5 bg-emerald-600 text-white font-extrabold text-[11px] rounded tracking-wider shadow';
           isAutoSim = false;
           document.getElementById('chkAutoSim').checked = false;
           dataConn.send({ type: 'REQUEST_VIDEO' });
@@ -390,51 +377,36 @@
           if (data && typeof data.spd !== 'undefined') {
             telem = { ...telem, ...data };
             if (data.t) {
-              const lat = Date.now() - data.t;
-              document.getElementById('statLatency').textContent = `${Math.max(0, lat)}ms`;
+              const lat = Math.max(1, Date.now() - data.t);
+              document.getElementById('statLatency').textContent = `${lat}ms`;
             }
           }
-        });
-
-        dataConn.on('close', () => {
-          btnConnectCar.textContent = 'DISCONNECTED';
-          btnConnectCar.className = 'px-2.5 py-1 bg-rose-700 text-white font-extrabold text-xs rounded';
         });
       });
 
       peer.on('call', (call) => {
         call.answer();
         call.on('stream', (stream) => {
-          remoteVideo.srcObject = stream;
-          remoteVideo.style.opacity = '1';
-          remoteVideo.play().catch(() => {});
-          simCanvas.style.opacity = '0';
+          attachStreamToFullScreen(stream);
         });
-      });
-
-      peer.on('error', (err) => {
-        console.error('PeerJS Error:', err);
-        btnConnectCar.textContent = 'RETRY LINK';
-        btnConnectCar.className = 'px-2.5 py-1 bg-rose-600 text-white font-extrabold text-xs rounded';
       });
     });
 
-    // --- UI ドラッグ＆リサイズ処理 ---
+    // --- ドラッグ移動 ＆ リサイズ（文字スケール自動追従） ---
     const hudContainer = document.getElementById('hudContainer');
     const panels = document.querySelectorAll('#hudContainer > div');
 
     function updateScale(panel) {
-      const baseW = parseFloat(panel.dataset.baseW) || 200;
+      const baseW = parseFloat(panel.dataset.baseW) || 150;
       const currentW = panel.offsetWidth;
-      const scale = Math.max(0.65, Math.min(2.5, currentW / baseW));
+      const scale = Math.max(0.65, Math.min(2.8, currentW / baseW));
       panel.style.setProperty('--ui-scale', scale.toFixed(3));
     }
 
     panels.forEach(panel => {
       updateScale(panel);
-
-      let isDragging = false;
-      let startX, startY, startLeft, startTop;
+      let isDragging = false, isResizing = false;
+      let startX, startY, startLeft, startTop, initW, initH;
 
       panel.addEventListener('mousedown', (e) => {
         if (e.target.classList.contains('resize-handle')) return;
@@ -442,9 +414,9 @@
         startX = e.clientX;
         startY = e.clientY;
         const rect = panel.getBoundingClientRect();
-        const containerRect = hudContainer.getBoundingClientRect();
-        startLeft = rect.left - containerRect.left;
-        startTop = rect.top - containerRect.top;
+        const parentRect = hudContainer.getBoundingClientRect();
+        startLeft = rect.left - parentRect.left;
+        startTop = rect.top - parentRect.top;
         panel.style.transform = 'none';
         panel.style.left = startLeft + 'px';
         panel.style.top = startTop + 'px';
@@ -452,8 +424,6 @@
         panel.style.bottom = 'auto';
       });
 
-      let isResizing = false;
-      let initW, initH;
       const handle = panel.querySelector('.resize-handle');
       if (handle) {
         handle.addEventListener('mousedown', (e) => {
@@ -468,19 +438,13 @@
 
       window.addEventListener('mousemove', (e) => {
         if (isDragging) {
-          const dx = e.clientX - startX;
-          const dy = e.clientY - startY;
-          panel.style.left = (startLeft + dx) + 'px';
-          panel.style.top = (startTop + dy) + 'px';
+          panel.style.left = (startLeft + e.clientX - startX) + 'px';
+          panel.style.top = (startTop + e.clientY - startY) + 'px';
         } else if (isResizing) {
-          const dx = e.clientX - startX;
-          const dy = e.clientY - startY;
-          const minW = parseFloat(panel.dataset.minW) || 80;
-          const minH = parseFloat(panel.dataset.minH) || 40;
-          const newW = Math.max(minW, initW + dx);
-          const newH = Math.max(minH, initH + dy);
-          panel.style.width = newW + 'px';
-          panel.style.height = newH + 'px';
+          const minW = parseFloat(panel.dataset.minW) || 60;
+          const minH = parseFloat(panel.dataset.minH) || 30;
+          panel.style.width = Math.max(minW, initW + (e.clientX - startX)) + 'px';
+          panel.style.height = Math.max(minH, initH + (e.clientY - startY)) + 'px';
           updateScale(panel);
         }
       });
@@ -491,205 +455,143 @@
       });
     });
 
-    // リセットボタン
-    document.getElementById('btnResetHud').addEventListener('click', () => {
-      location.reload();
-    });
-
-    // PTT 無線ボタン
-    const btnPtt = document.getElementById('btnPtt');
-    function setPttState(active) {
-      if (active) {
-        btnPtt.className = 'px-3 py-1 bg-rose-600 text-white font-extrabold text-xs rounded tracking-wider shadow animate-pulse flex items-center gap-1';
-        btnPtt.innerHTML = '🔴 TRANSMITTING...';
-      } else {
-        btnPtt.className = 'px-3 py-1 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-extrabold text-xs rounded tracking-wider shadow flex items-center gap-1';
-        btnPtt.innerHTML = '🎙 RADIO PTT <span class="text-[10px] opacity-75">[SPACE]</span>';
-      }
-    }
-    btnPtt.addEventListener('mousedown', () => setPttState(true));
-    btnPtt.addEventListener('mouseup', () => setPttState(false));
-    window.addEventListener('keydown', (e) => { if (e.code === 'Space' && !e.repeat) setPttState(true); });
-    window.addEventListener('keyup', (e) => { if (e.code === 'Space') setPttState(false); });
-
-    // 設定ドロワー
+    document.getElementById('btnResetHud').addEventListener('click', () => location.reload());
     const drawerSim = document.getElementById('drawerSim');
     document.getElementById('btnToggleSim').addEventListener('click', () => drawerSim.classList.toggle('translate-x-full'));
     document.getElementById('btnCloseSim').addEventListener('click', () => drawerSim.classList.add('translate-x-full'));
     document.getElementById('chkAutoSim').addEventListener('change', (e) => isAutoSim = e.target.checked);
 
-    // --- メイン描画ループ (60fps) ---
-    let simPhase = 0;
+    // --- 60fps 描画ループ ---
+    let simPhase = 4.2;
     const oscilloCanvas = document.getElementById('oscilloCanvas');
     const oscCtx = oscilloCanvas.getContext('2d');
     const gCanvas = document.getElementById('gCanvas');
     const gCtx = gCanvas.getContext('2d');
     const gpsCanvas = document.getElementById('gpsCanvas');
     const gpsCtx = gpsCanvas.getContext('2d');
-    const sCanvas = document.getElementById('simCanvas');
-    const sCtx = sCanvas.getContext('2d');
+
+    // FSW風コース座標
+    const fswTrack = [
+      [0.12, 0.25], [0.85, 0.25], [0.90, 0.35], [0.78, 0.48],
+      [0.62, 0.42], [0.52, 0.55], [0.60, 0.75], [0.42, 0.82],
+      [0.28, 0.68], [0.18, 0.78], [0.10, 0.55], [0.12, 0.25]
+    ];
 
     function animate() {
       requestAnimationFrame(animate);
 
       if (isAutoSim) {
-        simPhase += 0.025;
+        simPhase += 0.03;
         const wave = Math.sin(simPhase);
-        const brk = wave < -0.3 ? Math.min(100, Math.round((-wave - 0.3) * 142)) : 0;
-        const thr = brk === 0 ? Math.min(100, Math.max(0, Math.round((wave + 0.3) * 90))) : 0;
-        const spd = Math.round(135 + wave * 65);
+        const brk = wave < -0.2 ? Math.min(100, Math.round((-wave - 0.2) * 135)) : 0;
+        const thr = brk === 0 ? Math.min(100, Math.max(0, Math.round((wave + 0.25) * 88))) : 0;
+        const spd = Math.round(125 + wave * 55);
         telem = {
           spd: spd,
-          rpm: Math.round(3800 + (spd % 45) * 80),
-          gear: spd > 175 ? 5 : spd > 135 ? 4 : spd > 95 ? 3 : 2,
+          rpm: Math.round(3800 + (spd % 45) * 75),
+          gear: spd > 165 ? 5 : spd > 125 ? 4 : spd > 88 ? 3 : 2,
           thr: thr,
           brk: brk,
           clt: 0,
-          gx: Number((brk > 0 ? -brk * 0.012 : thr * 0.004).toFixed(2)),
-          gy: Number((Math.cos(simPhase * 0.7) * 1.15).toFixed(2)),
-          steer: Math.round(Math.cos(simPhase * 0.7) * 95)
+          gx: Number((brk > 0 ? -brk * 0.011 : thr * 0.004).toFixed(2)),
+          gy: Number((Math.cos(simPhase * 0.7) * 0.95).toFixed(2)),
+          steer: Number((Math.cos(simPhase * 0.7) * 15).toFixed(1))
         };
       }
 
-      // 数値反映
-      document.getElementById('hudSpeed').textContent = telem.spd;
+      // 数値更新
+      document.getElementById('hudSpeed').textContent = Math.round(telem.spd);
       document.getElementById('hudGear').textContent = telem.gear;
+      document.getElementById('hudRpm').textContent = Math.round(telem.rpm).toLocaleString();
       document.getElementById('hudSteer').textContent = `${telem.steer}°`;
       document.getElementById('hudRpmBar').style.width = Math.min(100, (telem.rpm / 7500) * 100) + '%';
 
-      // ペダルバー反映
       document.getElementById('barThr').style.height = telem.thr + '%';
-      document.getElementById('valThrBar').textContent = telem.thr + '%';
       document.getElementById('barBrk').style.height = telem.brk + '%';
-      document.getElementById('valBrkBar').textContent = telem.brk + '%';
-      document.getElementById('barClt').style.height = telem.clt + '%';
-      document.getElementById('valCltBar').textContent = telem.clt + '%';
-      document.getElementById('labelThr').textContent = telem.thr + '%';
-      document.getElementById('labelBrk').textContent = `${telem.brk}% (${(telem.brk * 0.085).toFixed(1)} MPa)`;
+      document.getElementById('barClt').style.height = (telem.clt || 0) + '%';
+      document.getElementById('labelThr').textContent = `${Math.round(telem.thr)}%`;
+      document.getElementById('labelBrk').textContent = `${Math.round(telem.brk)}% (${(telem.brk * 0.085).toFixed(1)} MPa)`;
 
-      // 履歴更新
+      const gTotal = Math.hypot(telem.gx, telem.gy).toFixed(2);
+      document.getElementById('hudGTotal').textContent = `${gTotal}G`;
+      document.getElementById('hudGLat').textContent = telem.gy.toFixed(2);
+      document.getElementById('hudGLon').textContent = telem.gx.toFixed(2);
+
       oscilloHistory.shift();
       oscilloHistory.push({ thr: telem.thr, brk: telem.brk });
 
-      // 1. ペダルオシロスコープ描画 (線幅5.5px)
+      // 1. オシロスコープ描画（塗りつぶし＋5.5px太線）
       oscilloCanvas.width = oscilloCanvas.offsetWidth;
       oscilloCanvas.height = oscilloCanvas.offsetHeight;
       const w = oscilloCanvas.width;
       const h = oscilloCanvas.height;
-
       oscCtx.clearRect(0, 0, w, h);
 
-      oscCtx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-      oscCtx.lineWidth = 1;
-      for (let y = 0.25; y < 1; y += 0.25) {
-        oscCtx.beginPath();
-        oscCtx.moveTo(0, h * y);
-        oscCtx.lineTo(w, h * y);
-        oscCtx.stroke();
-      }
-
-      // スロットル波形 (緑・太さ5.5px)
+      // スロットル波形 (緑)
       oscCtx.strokeStyle = '#10b981';
-      oscCtx.lineWidth = 5.5;
-      oscCtx.lineCap = 'round';
-      oscCtx.lineJoin = 'round';
+      oscCtx.fillStyle = 'rgba(16, 185, 129, 0.15)';
+      oscCtx.lineWidth = 4.5;
       oscCtx.beginPath();
       for (let i = 0; i < oscilloHistory.length; i++) {
         const x = (i / (oscilloHistory.length - 1)) * w;
-        const y = h - (oscilloHistory[i].thr / 100) * (h - 6) - 3;
+        const y = h - (oscilloHistory[i].thr / 100) * (h - 8) - 4;
         if (i === 0) oscCtx.moveTo(x, y); else oscCtx.lineTo(x, y);
       }
       oscCtx.stroke();
 
-      // ブレーキ波形 (赤・太さ5.5px)
+      // ブレーキ波形 (赤)
       oscCtx.strokeStyle = '#f43f5e';
-      oscCtx.lineWidth = 5.5;
-      oscCtx.lineCap = 'round';
-      oscCtx.lineJoin = 'round';
+      oscCtx.lineWidth = 4.5;
       oscCtx.beginPath();
       for (let i = 0; i < oscilloHistory.length; i++) {
         const x = (i / (oscilloHistory.length - 1)) * w;
-        const y = h - (oscilloHistory[i].brk / 100) * (h - 6) - 3;
+        const y = h - (oscilloHistory[i].brk / 100) * (h - 8) - 4;
         if (i === 0) oscCtx.moveTo(x, y); else oscCtx.lineTo(x, y);
       }
       oscCtx.stroke();
 
-      // 2. Gボール (摩擦円) 描画
+      // 2. G-BALL描画
       gCanvas.width = gCanvas.offsetWidth;
       gCanvas.height = gCanvas.offsetHeight;
-      const gw = gCanvas.width;
-      const gh = gCanvas.height;
-      const cx = gw / 2;
-      const cy = gh / 2;
-      const radius = Math.min(cx, cy) - 4;
-
+      const gw = gCanvas.width, gh = gCanvas.height;
+      const cx = gw / 2, cy = gh / 2, r = Math.min(cx, cy) - 3;
       gCtx.clearRect(0, 0, gw, gh);
-      gCtx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+      gCtx.strokeStyle = 'rgba(255,255,255,0.18)';
       gCtx.lineWidth = 1;
+      gCtx.beginPath(); gCtx.arc(cx, cy, r * 0.6, 0, Math.PI * 2); gCtx.stroke();
+      gCtx.beginPath(); gCtx.arc(cx, cy, r, 0, Math.PI * 2); gCtx.stroke();
+      gCtx.beginPath(); gCtx.moveTo(cx, 0); gCtx.lineTo(cx, gh); gCtx.moveTo(0, cy); gCtx.lineTo(gw, cy); gCtx.stroke();
 
+      const bx = cx + (telem.gy / 1.5) * r;
+      const by = cy - (telem.gx / 1.5) * r;
+      gCtx.fillStyle = '#f59e0b';
       gCtx.beginPath();
-      gCtx.arc(cx, cy, radius * 0.66, 0, Math.PI * 2);
-      gCtx.stroke();
-      gCtx.beginPath();
-      gCtx.arc(cx, cy, radius, 0, Math.PI * 2);
-      gCtx.stroke();
-
-      gCtx.beginPath();
-      gCtx.moveTo(cx, 2); gCtx.lineTo(cx, gh - 2);
-      gCtx.moveTo(2, cy); gCtx.lineTo(gw - 2, cy);
-      gCtx.stroke();
-
-      const bx = cx + (telem.gy / 1.5) * radius;
-      const by = cy - (telem.gx / 1.5) * radius;
-      gCtx.fillStyle = '#38bdf8';
-      gCtx.shadowColor = '#38bdf8';
-      gCtx.shadowBlur = 8;
-      gCtx.beginPath();
-      gCtx.arc(Math.max(4, Math.min(gw - 4, bx)), Math.max(4, Math.min(gh - 4, by)), 4.5, 0, Math.PI * 2);
+      gCtx.arc(Math.max(3, Math.min(gw - 3, bx)), Math.max(3, Math.min(gh - 3, by)), 3.5, 0, Math.PI * 2);
       gCtx.fill();
-      gCtx.shadowBlur = 0;
 
-      // 3. GPSサーキットコースマップ描画
+      // 3. FSWコースマップ描画
       gpsCanvas.width = gpsCanvas.offsetWidth;
       gpsCanvas.height = gpsCanvas.offsetHeight;
-      const pw = gpsCanvas.width;
-      const ph = gpsCanvas.height;
+      const pw = gpsCanvas.width, ph = gpsCanvas.height;
       gpsCtx.clearRect(0, 0, pw, ph);
-
-      gpsCtx.strokeStyle = '#64748b';
-      gpsCtx.lineWidth = 2.5;
+      gpsCtx.strokeStyle = 'rgba(255,255,255,0.35)';
+      gpsCtx.lineWidth = 2;
+      gpsCtx.lineJoin = 'round';
       gpsCtx.beginPath();
-      gpsCtx.ellipse(pw * 0.5, ph * 0.52, pw * 0.38, ph * 0.32, -0.2, 0, Math.PI * 2);
+      fswTrack.forEach((pt, idx) => {
+        const x = pt[0] * pw, y = pt[1] * ph;
+        if (idx === 0) gpsCtx.moveTo(x, y); else gpsCtx.lineTo(x, y);
+      });
       gpsCtx.stroke();
 
-      const carAngle = simPhase * 0.5;
-      const cpx = pw * 0.5 + Math.cos(carAngle) * pw * 0.38;
-      const cpy = ph * 0.52 + Math.sin(carAngle) * ph * 0.32;
+      // 自車ドット
+      const idx = Math.floor((simPhase * 1.5) % (fswTrack.length - 1));
+      const dotX = fswTrack[idx][0] * pw;
+      const dotY = fswTrack[idx][1] * ph;
       gpsCtx.fillStyle = '#38bdf8';
-      gpsCtx.shadowColor = '#38bdf8';
-      gpsCtx.shadowBlur = 6;
       gpsCtx.beginPath();
-      gpsCtx.arc(cpx, cpy, 4, 0, Math.PI * 2);
+      gpsCtx.arc(dotX, dotY, 3.5, 0, Math.PI * 2);
       gpsCtx.fill();
-      gpsCtx.shadowBlur = 0;
-
-      // 4. 背景シミュレーション (カメラ未接続時)
-      if (simCanvas.style.opacity !== '0') {
-        sCanvas.width = sCanvas.offsetWidth;
-        sCanvas.height = sCanvas.offsetHeight;
-        const sw = sCanvas.width;
-        const sh = sCanvas.height;
-        sCtx.fillStyle = '#080c16';
-        sCtx.fillRect(0, 0, sw, sh);
-
-        sCtx.fillStyle = '#1e293b';
-        sCtx.beginPath();
-        sCtx.moveTo(sw * 0.45, sh * 0.45);
-        sCtx.lineTo(sw * 0.55, sh * 0.45);
-        sCtx.lineTo(sw * 0.85, sh);
-        sCtx.lineTo(sw * 0.15, sh);
-        sCtx.fill();
-      }
     }
 
     animate();
