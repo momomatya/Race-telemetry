@@ -1,0 +1,1837 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pit-Wall Telemetry & Video Coaching HUD</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- PeerJS for Real-Time WebRTC P2P Video + Telemetry DataChannel -->
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+  <!-- Google Fonts: Barlow Condensed & Rajdhani for Gran Turismo Motorsport Style -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,400;0,600;0,700;0,800;0,900;1,700;1,800;1,900&family=Rajdhani:wght@500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+
+  <style>
+    body {
+      font-family: 'Rajdhani', sans-serif;
+      user-select: none;
+      background-color: #050608;
+      letter-spacing: 0.02em;
+    }
+    .font-gt {
+      font-family: 'Barlow Condensed', sans-serif;
+    }
+    .font-mono-num {
+      font-family: 'Barlow Condensed', monospace;
+      font-feature-settings: "tnum";
+      font-variant-numeric: tabular-nums;
+    }
+    /* Gran Turismo 7 Signature Smoked Acrylic Glass Panel */
+    .telemetry-panel {
+      background: linear-gradient(135deg, rgba(14, 18, 26, 0.72) 0%, rgba(6, 9, 14, 0.65) 100%);
+      backdrop-filter: blur(16px) saturate(160%);
+      -webkit-backdrop-filter: blur(16px) saturate(160%);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    }
+    .gt-timing-board {
+      background: rgba(10, 13, 18, 0.78);
+      backdrop-filter: blur(16px) saturate(150%);
+      -webkit-backdrop-filter: blur(16px) saturate(150%);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6);
+    }
+    .panel-glow {
+      box-shadow: 0 0 20px rgba(0, 240, 255, 0.06);
+    }
+    /* Draggable panel enhancements with Dynamic Font Scaling */
+    .draggable-panel {
+      position: absolute;
+      touch-action: none;
+      cursor: grab;
+      user-select: none;
+      transition: box-shadow 0.15s ease, border-color 0.15s ease;
+      font-size: calc(1rem * var(--ui-scale, 1));
+    }
+    .draggable-panel:active {
+      cursor: grabbing;
+    }
+    .draggable-panel.is-dragging {
+      z-index: 50 !important;
+      border-color: rgba(0, 240, 255, 0.6) !important;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.8), 0 0 25px rgba(0, 240, 255, 0.3) !important;
+    }
+    .draggable-panel.is-resizing-panel {
+      z-index: 50 !important;
+      border-color: rgba(0, 240, 255, 0.7) !important;
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 240, 255, 0.3) !important;
+    }
+    .drag-handle-badge {
+      opacity: 0.35;
+      transition: opacity 0.2s ease;
+    }
+    .draggable-panel:hover .drag-handle-badge {
+      opacity: 1;
+    }
+    /* Motorsport Resize Handle styling */
+    .panel-resize-handle {
+      position: absolute;
+      bottom: 0;
+      right: 0;
+      width: 16px;
+      height: 16px;
+      cursor: se-resize;
+      z-index: 45;
+      display: flex;
+      align-items: flex-end;
+      justify-content: flex-end;
+      padding: 2px;
+      opacity: 0.35;
+      touch-action: none;
+      transition: opacity 0.15s ease, transform 0.15s ease;
+    }
+    .draggable-panel:hover .panel-resize-handle {
+      opacity: 0.85;
+    }
+    .panel-resize-handle:hover, .panel-resize-handle.is-resizing {
+      opacity: 1;
+      color: #00f0ff;
+      transform: scale(1.15);
+    }
+    /* Custom styling for sliders */
+    input[type=range] {
+      accent-color: #00f0ff;
+    }
+    /* Custom scrollbar for control drawers */
+    ::-webkit-scrollbar {
+      width: 4px;
+      height: 4px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #374151;
+      border-radius: 2px;
+    }
+  </style>
+</head>
+<body class="text-gray-100 h-screen w-screen overflow-hidden flex flex-col bg-[#050608]">
+
+  <!-- TOP HEADER / STATUS BAR -->
+  <header class="h-10 border-b border-white/10 bg-[#080b10]/95 px-3.5 flex items-center justify-between z-20 shrink-0 font-gt tracking-wider">
+    <div class="flex items-center space-x-3">
+      <div id="liveConnectionBadge" class="flex items-center space-x-1.5 bg-red-600/20 border border-red-500/50 px-2 py-0.5 rounded-sm text-[11px] font-black italic text-red-400">
+        <span class="w-2 h-2 rounded-full bg-red-500 animate-ping inline-block"></span>
+        <span id="liveBadgeText">SIM // WEBRTC READY</span>
+      </div>
+      <div class="text-[13px] text-gray-300 font-mono-num flex items-center space-x-2.5 italic">
+        <span class="text-white font-extrabold tracking-widest">CH 01 // ND-ROADSTER #27</span>
+        <span class="text-gray-600 not-italic">|</span>
+        <span id="valPingLatency" class="text-cyan-400 font-bold">142ms</span>
+        <span class="text-gray-600 not-italic">|</span>
+        <span class="text-gray-300">720p 60FPS</span>
+        <span class="text-gray-600 not-italic">|</span>
+        <span class="text-amber-400 font-bold">25Hz (AiM EXP)</span>
+      </div>
+    </div>
+
+    <!-- Coach Audio Radio Simulation & Top Controls -->
+    <div class="flex items-center space-x-2">
+      <!-- Real WebRTC Room Connect Input -->
+      <div class="flex items-center bg-black/60 border border-cyan-500/40 rounded-sm px-1.5 py-0.5 space-x-1">
+        <span class="text-[10px] text-cyan-400 font-bold">ROOM:</span>
+        <input id="pitRoomIdInput" type="text" value="ND-27" class="bg-transparent text-white font-mono-num font-bold text-xs w-14 uppercase focus:outline-none" />
+        <button id="btnConnectInCar" class="px-2 py-0.5 bg-cyan-600 hover:bg-cyan-500 text-white font-black italic text-[11px] rounded-sm transition">
+          📡 LINK CAR
+        </button>
+      </div>
+
+      <!-- Replay Buffer Indicator -->
+      <div id="replayStatusBadge" class="hidden items-center space-x-1.5 px-2 py-0.5 rounded-sm text-[11px] font-black italic bg-amber-500/20 text-amber-300 border border-amber-500/50">
+        <span>REWIND (-5s)</span>
+      </div>
+
+      <button id="btnInstantReplay" title="直近5秒前をリプレイ検証" class="px-2.5 py-1 text-xs font-bold bg-white/5 hover:bg-white/10 active:scale-95 text-amber-300 border border-amber-400/30 rounded-sm transition flex items-center gap-1.5">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0019 16V8a1 1 0 00-1.6-.8l-5.334 4zM4.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0011 16V8a1 1 0 00-1.6-.8l-5.334 4z"/></svg>
+        <span>REPLAY 5s</span>
+      </button>
+
+      <button id="btnPause" title="一時停止して波形を精査" class="px-2.5 py-1 text-xs font-bold bg-white/5 hover:bg-white/10 active:scale-95 text-gray-200 border border-white/15 rounded-sm transition flex items-center gap-1.5">
+        <span id="pauseBtnIcon">⏸</span>
+        <span id="pauseBtnText">FREEZE</span>
+      </button>
+
+      <!-- Coach Push-To-Talk Radio Button -->
+      <button id="btnPttRadio" class="px-3 py-1 text-xs font-black italic bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white rounded-sm shadow-md transition flex items-center gap-1.5 border border-emerald-400/40">
+        <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path d="M7 4a3 3 0 016 0v6a3 3 0 11-6 0V4z"/><path d="M5.5 9.64A5 5 0 0014.5 9.64v.36a4.5 4.5 0 01-9 0v-.36z"/><path d="M9 16.5a1 1 0 002 0v1.5a1 1 0 10-2 0v-1.5z"/></svg>
+        <span>RADIO PTT [SPACE]</span>
+      </button>
+
+      <!-- Reset HUD Layout Button -->
+      <button id="btnResetLayout" title="HUDレイアウトを初期位置にリセット" class="px-2.5 py-1 text-xs font-bold bg-white/5 hover:bg-white/10 active:scale-95 text-cyan-300 rounded-sm border border-cyan-400/30 transition flex items-center gap-1">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+        <span>RESET HUD</span>
+      </button>
+
+      <!-- Toggle Corner History Modal -->
+      <button id="btnToggleHistory" title="コーナー履歴を表示" class="px-2.5 py-1 text-xs font-bold bg-white/5 hover:bg-white/10 text-gray-300 rounded-sm border border-white/15">
+        LOG
+      </button>
+
+      <button id="btnToggleSettings" class="p-1 px-2.5 text-xs font-bold bg-white/5 hover:bg-white/10 text-gray-300 rounded-sm border border-white/15">
+        ⚙ SIM
+      </button>
+    </div>
+  </header>
+
+  <!-- MAIN VIEWPORT (STRICT 16:9 LETTERBOX CONTAINER) -->
+  <main class="relative flex-1 w-full h-full overflow-hidden bg-[#020306] flex items-center justify-center p-1.5 select-none">
+    
+    <!-- Strict 16:9 Video Canvas / Stream Container -->
+    <div id="videoContainer" class="relative shadow-2xl flex items-center justify-center overflow-hidden border border-white/10 rounded-sm bg-black" style="aspect-ratio: 16 / 9; width: min(100%, calc((100vh - 48px) * 16 / 9)); max-height: calc(100vh - 48px);">
+      <!-- Simulated Canvas Track Engine -->
+      <canvas id="simulatedTrackCanvas" class="w-full h-full object-cover block"></canvas>
+      <!-- Real Webcam Video Element -->
+      <video id="webcamVideo" autoplay playsinline muted class="hidden w-full h-full object-cover"></video>
+
+      <!-- ================= HUD OVERLAY CONTAINER (DRAGGABLE FREEFORM AREA) ================= -->
+      <div id="hudOverlayArea" class="absolute inset-0 pointer-events-none z-10 font-gt overflow-hidden">
+
+        <!-- PANEL 1-A: SPEEDOMETER, RPM & GEAR (STANDALONE) -->
+        <div id="panelSpeedo" class="draggable-panel telemetry-panel rounded-sm p-1.5 px-2.5 pointer-events-auto border-l-2 border-l-cyan-400 flex flex-col justify-between" data-base-w="170" data-base-h="115" data-min-w="130" data-min-h="85" style="top: 8px; left: 8px; width: 170px; height: 115px;">
+          <div>
+            <div class="flex items-center justify-between mb-0.5 text-[0.62em] font-bold tracking-widest text-gray-400">
+              <span class="flex items-center gap-1">
+                <span class="drag-handle-badge text-cyan-400">⠿</span>
+                <span>ENGINE SPEED</span>
+              </span>
+              <span id="valRpm" class="font-mono-num text-cyan-300 italic font-bold">5,820 <span class="text-[0.8em] not-italic text-gray-500">RPM</span></span>
+            </div>
+            <div class="flex space-x-0.5 h-1.5 w-full bg-black/60 rounded-none overflow-hidden p-[1px] mb-1.5 border border-white/10" id="rpmLedsContainer">
+              <!-- Dynamically populated -->
+            </div>
+
+            <!-- Speed & Gear Row -->
+            <div class="flex items-baseline justify-between">
+              <div class="flex items-baseline">
+                <span id="valSpeed" class="text-[2.2em] font-black italic font-mono-num tracking-tighter text-white leading-none drop-shadow-[0_2px_6px_rgba(255,255,255,0.25)]">134</span>
+                <span class="text-[0.65em] text-gray-400 font-bold ml-1 uppercase tracking-wider">km/h</span>
+              </div>
+              <div class="flex flex-col items-center pl-2 border-l border-white/10">
+                <span class="text-[0.55em] text-gray-400 font-bold tracking-widest">GEAR</span>
+                <div id="valGear" class="text-[1.7em] font-black italic font-mono-num text-amber-400 leading-none">4</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Steering & Lap Distance -->
+          <div class="grid grid-cols-2 gap-1 mt-1 pt-1 border-t border-white/10 text-[0.65em] font-mono-num">
+            <div>
+              <span class="text-gray-400 block font-bold tracking-wider">STEER</span>
+              <span id="valSteer" class="font-bold text-gray-200 italic">-12.4°</span>
+            </div>
+            <div>
+              <span class="text-gray-400 block font-bold tracking-wider">LAP DIST</span>
+              <span id="valDistSector" class="text-gray-200 italic">1,240m <span class="text-cyan-400">[S1]</span></span>
+            </div>
+          </div>
+
+          <!-- Resize Handle -->
+          <div class="panel-resize-handle" title="ドラッグしてサイズ変更">
+            <svg class="w-2.5 h-2.5 text-gray-400 hover:text-cyan-400 pointer-events-none" viewBox="0 0 10 10" fill="currentColor">
+              <path d="M8 2 L10 2 L10 10 L2 10 L2 8 L8 8 Z" opacity="0.8"/>
+              <path d="M5 5 L7 5 L7 7 L5 7 Z" opacity="0.5"/>
+            </svg>
+          </div>
+        </div>
+
+        <!-- PANEL 1-B: SECTOR TIMING DELTA BOARD (STANDALONE GT7 STYLE) -->
+        <div id="panelTimingBoard" class="draggable-panel gt-timing-board rounded-sm overflow-hidden font-mono-num pointer-events-auto flex flex-col justify-between" data-base-w="175" data-base-h="115" data-min-w="140" data-min-h="85" style="top: 8px; left: 184px; width: 175px; height: 115px;">
+          <!-- Sector 3 -->
+          <div class="flex items-center border-b border-white/10 flex-1 min-h-0">
+            <div class="w-6 h-full bg-[#424856]/90 text-white font-extrabold flex items-center justify-center text-[0.65em] shrink-0 border-r border-white/10">3</div>
+            <div id="timingS3Time" class="flex-1 px-1.5 text-right font-bold text-gray-100 tracking-wider text-[0.7em]">0'12.627</div>
+            <div id="timingS3Delta" class="w-13 h-full bg-[#1859a4] text-white font-black flex items-center justify-center text-[0.65em] px-1 shrink-0 italic">- 0.357</div>
+          </div>
+
+          <!-- Sector 2 -->
+          <div class="flex items-center border-b border-white/10 flex-1 min-h-0">
+            <div class="w-6 h-full bg-[#424856]/90 text-white font-extrabold flex items-center justify-center text-[0.65em] shrink-0 border-r border-white/10">2</div>
+            <div id="timingS2Time" class="flex-1 px-1.5 text-right font-bold text-gray-100 tracking-wider text-[0.7em]">0'36.027</div>
+            <div id="timingS2Delta" class="w-13 h-full bg-[#1859a4] text-white font-black flex items-center justify-center text-[0.65em] px-1 shrink-0 italic">- 0.961</div>
+          </div>
+
+          <!-- Sector 1 -->
+          <div class="flex items-center border-b border-white/10 flex-1 min-h-0">
+            <div class="w-6 h-full bg-[#424856]/90 text-white font-extrabold flex items-center justify-center text-[0.65em] shrink-0 border-r border-white/10">1</div>
+            <div id="timingS1Time" class="flex-1 px-1.5 text-right font-bold text-cyan-300 tracking-wider text-[0.7em]">0'21.151</div>
+            <div id="timingS1Delta" class="w-13 h-full bg-[#b51c1c] text-white font-black flex items-center justify-center text-[0.65em] px-1 shrink-0 italic">+ 2.358</div>
+          </div>
+
+          <!-- LAST LAP -->
+          <div class="flex items-center border-b border-white/10 flex-1 min-h-0 bg-black/30">
+            <div class="w-9 h-full bg-[#525a6c]/90 text-white font-black flex items-center justify-center text-[0.6em] shrink-0 border-r border-white/10 tracking-wider italic">LAST</div>
+            <div id="timingLastLapTime" class="flex-1 px-1.5 text-right font-bold text-gray-100 tracking-wider text-[0.7em]">1'09.805</div>
+            <div id="timingLastLapDelta" class="w-13 h-full bg-[#b51c1c] text-white font-black flex items-center justify-center text-[0.65em] px-1 shrink-0 italic">+ 1.040</div>
+          </div>
+
+          <!-- BEST LAP -->
+          <div class="flex items-center border-b border-white/10 flex-1 min-h-0 bg-black/40">
+            <div class="w-9 h-full bg-[#15803d] text-white font-black flex items-center justify-center text-[0.6em] shrink-0 border-r border-white/10 tracking-wider italic">BEST</div>
+            <div id="timingBestLapTime" class="flex-1 px-1.5 text-left font-black text-[#22c55e] tracking-wider text-[0.72em] italic">1'08.765</div>
+            <div class="w-10 h-full bg-black/40 flex items-center justify-center text-[0.6em] text-gray-400 font-bold italic">PB</div>
+          </div>
+
+          <!-- OPTIMAL LAP (OPT.) -->
+          <div class="flex items-center flex-1 min-h-0 bg-black/50">
+            <div class="w-9 h-full bg-[#1c222d] text-gray-300 font-black flex items-center justify-center text-[0.6em] shrink-0 border-r border-white/10 tracking-wider italic">OPT.</div>
+            <div id="timingOptLapTime" class="flex-1 px-1.5 text-left font-extrabold text-amber-300 tracking-wider text-[0.72em] italic">1'07.447</div>
+            <div class="w-10 h-full bg-black/50 flex items-center justify-center text-[0.6em] text-amber-400/80 font-bold italic">IDEAL</div>
+          </div>
+
+          <!-- Resize Handle -->
+          <div class="panel-resize-handle" title="ドラッグしてサイズ変更">
+            <svg class="w-2.5 h-2.5 text-gray-400 hover:text-cyan-400 pointer-events-none" viewBox="0 0 10 10" fill="currentColor">
+              <path d="M8 2 L10 2 L10 10 L2 10 L2 8 L8 8 Z" opacity="0.8"/>
+              <path d="M5 5 L7 5 L7 7 L5 7 Z" opacity="0.5"/>
+            </svg>
+          </div>
+        </div>
+
+        <!-- PANEL 2: COMPACT CURRENT LAP TIMER -->
+        <div id="panelLapTimer" class="draggable-panel telemetry-panel rounded-sm px-3 py-1 pointer-events-auto text-center flex items-center justify-center space-x-2" data-base-w="170" data-base-h="42" data-min-w="120" data-min-h="32" style="top: 8px; left: calc(50% - 85px); width: 170px; height: 42px;">
+          <div class="flex flex-col items-start pr-1.5 border-r border-white/10">
+            <span class="text-[0.55em] tracking-widest text-gray-400 uppercase font-black italic flex items-center gap-1">
+              <span class="drag-handle-badge text-cyan-400">⠿</span>
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span>LIVE LAP</span>
+            </span>
+            <span class="text-[0.65em] font-mono-num text-cyan-400 font-bold italic" id="valCurrentSectorName">SECTOR 2</span>
+          </div>
+          <div class="flex items-baseline space-x-1.5">
+            <span id="valLapTime" class="text-[1.3em] font-mono-num font-black italic text-white tracking-wider">0'34.120</span>
+            <div id="valLiveDelta" class="bg-cyan-500/20 border border-cyan-400/40 text-cyan-300 font-mono-num font-bold italic text-[0.6em] px-1 py-0.2 rounded-sm">
+              LIVE
+            </div>
+          </div>
+          <!-- Resize Handle -->
+          <div class="panel-resize-handle" title="ドラッグしてサイズ変更">
+            <svg class="w-2.5 h-2.5 text-gray-400 hover:text-cyan-400 pointer-events-none" viewBox="0 0 10 10" fill="currentColor">
+              <path d="M8 2 L10 2 L10 10 L2 10 L2 8 L8 8 Z" opacity="0.8"/>
+              <path d="M5 5 L7 5 L7 7 L5 7 Z" opacity="0.5"/>
+            </svg>
+          </div>
+        </div>
+
+        <!-- PANEL 3-A: GPS CIRCUIT MAP (STANDALONE) -->
+        <div id="panelGpsMap" class="draggable-panel telemetry-panel rounded-sm p-1.5 flex flex-col items-center pointer-events-auto" data-base-w="115" data-base-h="100" data-min-w="80" data-min-h="65" style="top: 8px; right: 110px; width: 115px; height: 100px;">
+          <div class="w-full flex justify-between text-[0.6em] font-bold text-gray-400 mb-0.5 px-0.5">
+            <span class="flex items-center gap-1 text-cyan-400 font-black tracking-wider">
+              <span class="drag-handle-badge text-cyan-400">⠿</span>
+              <span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span> GPS
+            </span>
+            <span id="mapCornerLabel" class="text-amber-300 font-mono-num truncate max-w-[60px] italic text-[0.9em]">STRAIGHT</span>
+          </div>
+          <div class="relative w-full flex-1 min-h-[30px] flex items-center justify-center overflow-hidden">
+            <canvas id="gpsMapCanvas" class="w-full h-full block rounded-sm bg-black/40 border border-white/5"></canvas>
+          </div>
+          <!-- Resize Handle -->
+          <div class="panel-resize-handle" title="ドラッグしてサイズ変更">
+            <svg class="w-2.5 h-2.5 text-gray-400 hover:text-cyan-400 pointer-events-none" viewBox="0 0 10 10" fill="currentColor">
+              <path d="M8 2 L10 2 L10 10 L2 10 L2 8 L8 8 Z" opacity="0.8"/>
+              <path d="M5 5 L7 5 L7 7 L5 7 Z" opacity="0.5"/>
+            </svg>
+          </div>
+        </div>
+
+        <!-- PANEL 3-B: G-BALL / FRICTION CIRCLE (STANDALONE) -->
+        <div id="panelGBall" class="draggable-panel telemetry-panel rounded-sm p-1.5 flex flex-col items-center pointer-events-auto" data-base-w="98" data-base-h="100" data-min-w="75" data-min-h="75" style="top: 8px; right: 8px; width: 98px; height: 100px;">
+          <div class="w-full flex justify-between text-[0.6em] text-gray-400 font-bold mb-0.5">
+            <span class="flex items-center gap-1 tracking-wider">
+              <span class="drag-handle-badge text-cyan-400">⠿</span>
+              <span>G-BALL</span>
+            </span>
+            <span id="valCurrentG" class="text-amber-400 font-mono-num font-bold italic text-[1em]">1.12G</span>
+          </div>
+          <div class="relative w-full flex-1 min-h-[35px] flex items-center justify-center overflow-hidden">
+            <canvas id="frictionCircleCanvas" class="w-full h-full block rounded-full bg-black/40 border border-white/5"></canvas>
+          </div>
+          <div class="w-full flex justify-between text-[0.55em] font-mono-num text-gray-400 mt-0.5 italic">
+            <span>LAT:<b id="valLatG" class="text-cyan-400 not-italic ml-0.5">+0.85</b></span>
+            <span>LON:<b id="valLonG" class="text-red-400 not-italic ml-0.5">-0.72</b></span>
+          </div>
+          <!-- Resize Handle -->
+          <div class="panel-resize-handle" title="ドラッグしてサイズ変更">
+            <svg class="w-2.5 h-2.5 text-gray-400 hover:text-cyan-400 pointer-events-none" viewBox="0 0 10 10" fill="currentColor">
+              <path d="M8 2 L10 2 L10 10 L2 10 L2 8 L8 8 Z" opacity="0.8"/>
+              <path d="M5 5 L7 5 L7 7 L5 7 Z" opacity="0.5"/>
+            </svg>
+          </div>
+        </div>
+
+        <!-- PANEL 4: CORNER SPEED TOAST (AUTO-DISMISS NOTIFICATION, COMPACT) -->
+        <div id="cornerAlertCard" class="draggable-panel opacity-0 pointer-events-auto telemetry-panel rounded-sm p-2 px-3 border border-emerald-400/60 shadow-[0_8px_25px_rgba(0,0,0,0.8)] flex flex-col justify-between items-center" data-base-w="280" data-base-h="75" data-min-w="200" data-min-h="60" style="top: 55px; left: calc(50% - 140px); width: 280px; height: 75px;">
+          
+          <div class="flex items-center space-x-2 w-full justify-between pb-1 border-b border-white/10">
+            <div class="flex items-center space-x-1.5">
+              <span class="drag-handle-badge text-emerald-400">⠿</span>
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+              <span id="alertCornerName" class="text-[0.75em] font-black italic tracking-wider text-white">T1 // FIRST CORNER</span>
+            </div>
+            <span class="text-[0.6em] px-1.5 py-0.2 rounded-sm font-black italic bg-emerald-500/20 text-emerald-300 border border-emerald-400/40">
+              EXIT
+            </span>
+          </div>
+
+          <div class="flex items-center space-x-4 my-0.5 font-mono-num">
+            <!-- Entry MAX Speed -->
+            <div class="text-center">
+              <span class="text-[0.55em] text-gray-400 block font-bold uppercase tracking-wider">ENTRY MAX</span>
+              <div class="flex items-baseline justify-center space-x-0.5">
+                <span id="alertMaxSpeed" class="text-[1.5em] font-black italic text-cyan-300 leading-none">194</span>
+                <span class="text-[0.6em] text-gray-400 font-bold">km/h</span>
+              </div>
+            </div>
+
+            <!-- Arrow divider -->
+            <span class="text-gray-500 text-sm font-bold">➔</span>
+
+            <!-- Apex Bottom Speed -->
+            <div class="text-center">
+              <span class="text-[0.55em] text-gray-400 block font-bold uppercase tracking-wider">APEX BOTTOM</span>
+              <div class="flex items-baseline justify-center space-x-0.5">
+                <span id="alertBottomSpeed" class="text-[1.5em] font-black italic text-emerald-400 leading-none">67.8</span>
+                <span class="text-[0.6em] text-gray-400 font-bold">km/h</span>
+              </div>
+            </div>
+
+            <!-- Delta vs Target/Best -->
+            <div class="pl-2 border-l border-white/10 text-left">
+              <span class="text-[0.55em] text-gray-400 block font-bold tracking-wider">vs BEST</span>
+              <span id="alertDeltaBottom" class="text-[0.65em] font-black italic text-emerald-300 bg-emerald-500/20 px-1.5 py-0.5 rounded-sm border border-emerald-400/40 inline-block mt-0.5">
+                +2.4 ▲
+              </span>
+            </div>
+          </div>
+
+          <!-- Auto-dismiss Progress Bar -->
+          <div class="w-full bg-white/10 h-0.5 rounded-none overflow-hidden mt-0.5">
+            <div id="cornerAlertTimerBar" class="bg-cyan-400 h-full w-full"></div>
+          </div>
+
+          <!-- Resize Handle -->
+          <div class="panel-resize-handle" title="ドラッグしてサイズ変更">
+            <svg class="w-2.5 h-2.5 text-gray-400 hover:text-cyan-400 pointer-events-none" viewBox="0 0 10 10" fill="currentColor">
+              <path d="M8 2 L10 2 L10 10 L2 10 L2 8 L8 8 Z" opacity="0.8"/>
+              <path d="M5 5 L7 5 L7 7 L5 7 Z" opacity="0.5"/>
+            </svg>
+          </div>
+        </div>
+
+        <!-- PANEL 5: BOTTOM HUD (PEDAL TRACE & 2.5x THICKENED BARS & OSCILLOSCOPE) -->
+        <div id="panelPedalTrace" class="draggable-panel pointer-events-auto" data-base-w="620" data-base-h="85" data-min-w="340" data-min-h="65" style="bottom: 8px; left: 8px; right: 8px; height: 85px;">
+          <div class="telemetry-panel rounded-sm p-1.5 px-2.5 shadow-2xl h-full flex flex-col justify-between">
+            <!-- Header of Bottom HUD -->
+            <div class="flex items-center justify-between pb-0.5 mb-0.5 border-b border-white/10 text-[0.7em] font-mono-num">
+              <div class="flex items-center space-x-3">
+                <span class="text-[0.95em] font-black italic text-gray-200 tracking-wider flex items-center gap-1">
+                  <span class="drag-handle-badge text-cyan-400">⠿</span>
+                  <span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+                  PEDAL APPLICATION TRACE (LAST 6s)
+                </span>
+                <div class="flex items-center space-x-2.5 italic font-bold text-[0.95em]">
+                  <span class="text-emerald-400">THR: <span id="valThrottlePct" class="not-italic text-white">0%</span></span>
+                  <span class="text-red-400">BRK: <span id="valBrakePct" class="not-italic text-white">0% (0.0 MPa)</span></span>
+                  <span class="text-cyan-400">CLT: <span id="valClutchPct" class="not-italic text-white">0%</span></span>
+                </div>
+              </div>
+              <div class="text-[0.85em] text-gray-400 font-bold tracking-widest hidden sm:block italic">
+                TRAIL BRAKE RELEASE GRADIENT
+              </div>
+            </div>
+
+            <!-- Oscilloscope Canvas + 2.5x Thicker Vertical Pedal Bars -->
+            <div class="flex items-stretch flex-1 min-h-[46px] w-full space-x-2">
+              <!-- Instant Pedal Vertical Bars (2.5x wider: from w-4 to w-10) -->
+              <div class="flex space-x-1.5 shrink-0 bg-black/60 p-1 rounded-sm border border-white/10 font-mono-num h-full">
+                <!-- Throttle (Wide) -->
+                <div class="flex flex-col items-center justify-end w-10 h-full">
+                  <div class="w-full bg-black/80 rounded-none flex-1 flex flex-col justify-end p-0.5 overflow-hidden border border-emerald-500/30">
+                    <div id="barThrottle" class="w-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.8)] transition-all duration-75" style="height: 0%;"></div>
+                  </div>
+                  <span class="text-[0.65em] text-emerald-400 font-black italic mt-0.5">THR</span>
+                </div>
+                <!-- Brake (Wide with Heavy Red Glow) -->
+                <div class="flex flex-col items-center justify-end w-10 h-full">
+                  <div class="w-full bg-black/80 rounded-none flex-1 flex flex-col justify-end p-0.5 overflow-hidden border border-red-500/40">
+                    <div id="barBrake" class="w-full bg-red-600 shadow-[0_0_14px_rgba(239,68,68,1)] transition-all duration-75" style="height: 0%;"></div>
+                  </div>
+                  <span class="text-[0.65em] text-red-400 font-black italic mt-0.5">BRK</span>
+                </div>
+                <!-- Clutch (Wide) -->
+                <div class="flex flex-col items-center justify-end w-8 h-full">
+                  <div class="w-full bg-black/80 rounded-none flex-1 flex flex-col justify-end p-0.5 overflow-hidden border border-cyan-500/30">
+                    <div id="barClutch" class="w-full bg-cyan-500 shadow-[0_0_8px_rgba(0,240,255,0.7)] transition-all duration-75" style="height: 0%;"></div>
+                  </div>
+                  <span class="text-[0.65em] text-cyan-400 font-black italic mt-0.5">CLT</span>
+                </div>
+              </div>
+
+              <!-- Rolling Waveform Canvas -->
+              <div class="relative flex-1 h-full bg-black/60 rounded-sm border border-white/10 overflow-hidden">
+                <canvas id="pedalWaveformCanvas" class="w-full h-full block"></canvas>
+                <div class="absolute inset-0 pointer-events-none flex justify-between px-2 text-[0.6em] font-mono-num text-gray-500 italic">
+                  <span>-6s</span>
+                  <span>-4s</span>
+                  <span>-2s</span>
+                  <span class="text-cyan-400 font-black not-italic">0s (NOW)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- Resize Handle -->
+          <div class="panel-resize-handle" title="ドラッグしてサイズ変更">
+            <svg class="w-2.5 h-2.5 text-gray-400 hover:text-cyan-400 pointer-events-none" viewBox="0 0 10 10" fill="currentColor">
+              <path d="M8 2 L10 2 L10 10 L2 10 L2 8 L8 8 Z" opacity="0.8"/>
+              <path d="M5 5 L7 5 L7 7 L5 7 Z" opacity="0.5"/>
+            </svg>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- MODAL 1: CORNER LOG HISTORY DRAWER (Toggleable via LOG button) -->
+    <div id="historyDrawer" class="hidden absolute top-14 right-4 w-80 telemetry-panel rounded-md p-3 z-30 border border-white/15 text-xs shadow-2xl font-gt">
+      <div class="flex items-center justify-between border-b border-white/10 pb-1.5 mb-2">
+        <span class="font-black italic text-gray-200 tracking-wider flex items-center gap-1.5">
+          <span>📋</span> CORNER SPEED HISTORY
+        </span>
+        <button id="btnCloseHistory" class="text-gray-400 hover:text-white font-mono-num font-bold">✕</button>
+      </div>
+      <div id="cornerHistoryList" class="space-y-1 max-h-60 overflow-y-auto font-mono-num text-xs">
+        <!-- Dynamic History Rows -->
+      </div>
+    </div>
+
+    <!-- MODAL 2: SIMULATION CONTROLS DRAWER -->
+    <div id="settingsPanel" class="hidden absolute top-14 right-4 w-96 telemetry-panel rounded-md p-4 z-30 border border-cyan-500/40 text-xs shadow-2xl font-gt">
+      <div class="flex items-center justify-between border-b border-white/10 pb-2 mb-3">
+        <h3 class="font-black italic text-cyan-400 tracking-wider flex items-center gap-1.5">
+          <span>🛠</span> SIMULATION & CAMERA SOURCE
+        </h3>
+        <button id="btnCloseSettings" class="text-gray-400 hover:text-white font-mono-num font-bold">✕</button>
+      </div>
+
+      <div class="space-y-3 font-mono-num text-xs">
+        <div>
+          <label class="block text-gray-400 mb-1 font-bold">INPUT SOURCE</label>
+          <div class="grid grid-cols-2 gap-1.5">
+            <button id="modeSimAuto" class="py-1.5 px-2 rounded-sm bg-cyan-600 font-bold text-white text-center transition">
+              AUTO TRACK LAP
+            </button>
+            <button id="modeManual" class="py-1.5 px-2 rounded-sm bg-white/5 text-gray-300 hover:bg-white/10 border border-white/10 text-center transition font-bold">
+              MANUAL SLIDERS
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-gray-400 mb-1 font-bold">CAMERA SOURCE</label>
+          <div class="flex items-center justify-between bg-black/50 p-2 rounded-sm border border-white/10">
+            <span class="text-gray-300 font-bold">Use Real Webcam</span>
+            <button id="btnToggleWebcam" class="px-2.5 py-1 rounded-sm bg-white/5 hover:bg-white/10 text-gray-300 border border-white/15 transition font-bold">
+              Enable Webcam
+            </button>
+          </div>
+        </div>
+
+        <div id="manualControlsArea" class="opacity-50 pointer-events-none space-y-2 pt-2 border-t border-white/10">
+          <div>
+            <div class="flex justify-between text-gray-300 mb-0.5">
+              <span>Throttle (%)</span>
+              <span id="sliderValThr">0%</span>
+            </div>
+            <input type="range" id="sliderThrottle" min="0" max="100" value="0" class="w-full h-1 bg-gray-700 rounded-none">
+          </div>
+          <div>
+            <div class="flex justify-between text-gray-300 mb-0.5">
+              <span>Brake Pressure (%)</span>
+              <span id="sliderValBrk">0%</span>
+            </div>
+            <input type="range" id="sliderBrake" min="0" max="100" value="0" class="w-full h-1 bg-gray-700 rounded-none">
+          </div>
+          <div>
+            <div class="flex justify-between text-gray-300 mb-0.5">
+              <span>Lateral G (-Left / +Right)</span>
+              <span id="sliderValLat">0.0 G</span>
+            </div>
+            <input type="range" id="sliderLatG" min="-15" max="15" value="0" class="w-full h-1 bg-gray-700 rounded-none">
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    /* =====================================================================
+     *  RACE TELEMETRY & COACHING HUD - JAVASCRIPT ENGINE
+     * ===================================================================== */
+    
+    // --- Application State ---
+    const state = {
+      isFrozen: false,
+      isReplay: false,
+      mode: 'auto',
+      webcamActive: false,
+      
+      telemetry: {
+        timestamp: Date.now(),
+        speed: 135,
+        rpm: 5600,
+        gear: 4,
+        throttle: 0,
+        brake: 0,
+        brakePressure: 0,
+        clutch: 0,
+        steerAngle: 0,
+        latG: 0.0,
+        lonG: 0.0,
+        lapTime: 34.12,
+        lapDistance: 0
+      },
+
+      historyBuffer: [],
+      maxBufferLength: 600,
+
+      gTrail: [],
+      maxTrailLength: 35,
+
+      // Timing & Sector Performance Tracking
+      timing: {
+        currentSector: 1, // 1, 2, or 3
+        sectorStartTime: 0,
+        s1Elapsed: 0,
+        s2Elapsed: 0,
+        s3Elapsed: 0,
+        s1Completed: 21.151,
+        s2Completed: 36.027,
+        s3Completed: 12.627,
+        s1Delta: +2.358,
+        s2Delta: -0.961,
+        s3Delta: -0.357,
+        s1Best: 18.793,
+        s2Best: 36.027,
+        s3Best: 12.627,
+        lastLap: 69.805,    // 1'09.805
+        lastLapDelta: +1.040,
+        bestLap: 68.765     // 1'08.765
+      },
+
+      activeCornerRecord: null,
+      cornerHistory: [
+        { name: 'T16 PANASONIC', max: 138, bottom: 82.4, delta: '+1.8', isPositive: true },
+        { name: 'T13 THIRTEENTH', max: 152, bottom: 74.0, delta: '-0.5', isPositive: false },
+        { name: 'T10 DUNLOP', max: 185, bottom: 62.1, delta: '+2.1', isPositive: true }
+      ]
+    };
+
+    // --- Fuji Speedway Database & Map Coordinates ---
+    const FUJI_CIRCUIT_TOTAL_LENGTH = 4563;
+    const S1_END_DIST = 1540; // Sector 1 end at exit of T1
+    const S2_END_DIST = 3380; // Sector 2 end at exit of Hairpin
+    // S3 runs from 3380 to 4563 (Finish line)
+
+    const CORNERS_DATABASE = [
+      { id: 'T1', name: 'T1 FIRST CORNER', startDist: 1350, apexDist: 1540, exitDist: 1680, refEntry: 195, refBottom: 66.5 },
+      { id: 'T3', name: 'T3 COCA-COLA', startDist: 2150, apexDist: 2320, exitDist: 2450, refEntry: 168, refBottom: 112.0 },
+      { id: 'T4', name: 'T4-T5 100R', startDist: 2600, apexDist: 2850, exitDist: 3000, refEntry: 155, refBottom: 124.5 },
+      { id: 'T6', name: 'T6 HAIRPIN', startDist: 3120, apexDist: 3260, exitDist: 3380, refEntry: 158, refBottom: 58.2 },
+      { id: 'T10', name: 'T10 DUNLOP', startDist: 3620, apexDist: 3740, exitDist: 3860, refEntry: 188, refBottom: 61.0 },
+      { id: 'T13', name: 'T13 THIRTEENTH', startDist: 3950, apexDist: 4080, exitDist: 4180, refEntry: 150, refBottom: 73.5 },
+      { id: 'T16', name: 'T16 PANASONIC', startDist: 4320, apexDist: 4440, exitDist: 4540, refEntry: 142, refBottom: 81.2 }
+    ];
+
+    const TRACK_COORDINATES = [
+      { x: 0.12, y: 0.78, dist: 0 },
+      { x: 0.72, y: 0.78, dist: 1350 },
+      { x: 0.88, y: 0.75, dist: 1540 },
+      { x: 0.84, y: 0.58, dist: 1800 },
+      { x: 0.70, y: 0.42, dist: 2320 },
+      { x: 0.85, y: 0.28, dist: 2850 },
+      { x: 0.72, y: 0.15, dist: 3260 },
+      { x: 0.55, y: 0.22, dist: 3500 },
+      { x: 0.45, y: 0.35, dist: 3740 },
+      { x: 0.35, y: 0.38, dist: 4080 },
+      { x: 0.22, y: 0.48, dist: 4280 },
+      { x: 0.14, y: 0.62, dist: 4440 },
+      { x: 0.12, y: 0.78, dist: 4563 }
+    ];
+
+    // --- DOM Elements ---
+    const simCanvas = document.getElementById('simulatedTrackCanvas');
+    const simCtx = simCanvas.getContext('2d');
+    const waveCanvas = document.getElementById('pedalWaveformCanvas');
+    const waveCtx = waveCanvas.getContext('2d');
+    const frictionCanvas = document.getElementById('frictionCircleCanvas');
+    const frictionCtx = frictionCanvas.getContext('2d');
+    const gpsMapCanvas = document.getElementById('gpsMapCanvas');
+    const gpsMapCtx = gpsMapCanvas.getContext('2d');
+    const webcamVideo = document.getElementById('webcamVideo');
+
+    const valSpeed = document.getElementById('valSpeed');
+    const valRpm = document.getElementById('valRpm');
+    const valGear = document.getElementById('valGear');
+    const valSteer = document.getElementById('valSteer');
+    const valDistSector = document.getElementById('valDistSector');
+    const valThrottlePct = document.getElementById('valThrottlePct');
+    const valBrakePct = document.getElementById('valBrakePct');
+    const valClutchPct = document.getElementById('valClutchPct');
+    const valCurrentG = document.getElementById('valCurrentG');
+    const valLatG = document.getElementById('valLatG');
+    const valLonG = document.getElementById('valLonG');
+    const mapCornerLabel = document.getElementById('mapCornerLabel');
+
+    // Timing Delta Board DOM Elements
+    const timingS1Time = document.getElementById('timingS1Time');
+    const timingS1Delta = document.getElementById('timingS1Delta');
+    const timingS2Time = document.getElementById('timingS2Time');
+    const timingS2Delta = document.getElementById('timingS2Delta');
+    const timingS3Time = document.getElementById('timingS3Time');
+    const timingS3Delta = document.getElementById('timingS3Delta');
+    const timingLastLapTime = document.getElementById('timingLastLapTime');
+    const timingLastLapDelta = document.getElementById('timingLastLapDelta');
+    const timingBestLapTime = document.getElementById('timingBestLapTime');
+    const timingOptLapTime = document.getElementById('timingOptLapTime');
+    const valLapTime = document.getElementById('valLapTime');
+    const valCurrentSectorName = document.getElementById('valCurrentSectorName');
+
+    // Auto-dismiss Corner Exit Toast Elements
+    const cornerAlertCard = document.getElementById('cornerAlertCard');
+    const cornerAlertTimerBar = document.getElementById('cornerAlertTimerBar');
+    const alertCornerName = document.getElementById('alertCornerName');
+    const alertMaxSpeed = document.getElementById('alertMaxSpeed');
+    const alertBottomSpeed = document.getElementById('alertBottomSpeed');
+    const alertDeltaBottom = document.getElementById('alertDeltaBottom');
+    const cornerHistoryList = document.getElementById('cornerHistoryList');
+    const historyDrawer = document.getElementById('historyDrawer');
+    const btnToggleHistory = document.getElementById('btnToggleHistory');
+    const btnCloseHistory = document.getElementById('btnCloseHistory');
+
+    const barThrottle = document.getElementById('barThrottle');
+    const barBrake = document.getElementById('barBrake');
+    const barClutch = document.getElementById('barClutch');
+    const rpmLedsContainer = document.getElementById('rpmLedsContainer');
+    const btnPause = document.getElementById('btnPause');
+    const pauseBtnText = document.getElementById('pauseBtnText');
+    const btnInstantReplay = document.getElementById('btnInstantReplay');
+    const replayStatusBadge = document.getElementById('replayStatusBadge');
+    const btnPttRadio = document.getElementById('btnPttRadio');
+    const btnToggleSettings = document.getElementById('btnToggleSettings');
+    const settingsPanel = document.getElementById('settingsPanel');
+    const btnCloseSettings = document.getElementById('btnCloseSettings');
+    const modeSimAuto = document.getElementById('modeSimAuto');
+    const modeManual = document.getElementById('modeManual');
+    const manualControlsArea = document.getElementById('manualControlsArea');
+    const sliderThrottle = document.getElementById('sliderThrottle');
+    const sliderBrake = document.getElementById('sliderBrake');
+    const sliderLatG = document.getElementById('sliderLatG');
+    const btnToggleWebcam = document.getElementById('btnToggleWebcam');
+    const btnResetLayout = document.getElementById('btnResetLayout');
+    const hudOverlayArea = document.getElementById('hudOverlayArea');
+
+    // --- Drag & Drop Engine for all HUD Panels ---
+    const initialLayoutStyles = {};
+
+    function updatePanelScale(panel) {
+      const baseW = parseFloat(panel.dataset.baseW) || 150;
+      const curW = panel.getBoundingClientRect().width;
+      const scale = Math.max(0.65, Math.min(2.5, curW / baseW));
+      panel.style.setProperty('--ui-scale', scale.toFixed(3));
+    }
+
+    function initDraggablePanels() {
+      const draggables = document.querySelectorAll('.draggable-panel');
+
+      draggables.forEach(panel => {
+        // Save initial positions and dimensions for layout reset
+        initialLayoutStyles[panel.id] = {
+          left: panel.style.left,
+          top: panel.style.top,
+          right: panel.style.right,
+          bottom: panel.style.bottom,
+          width: panel.style.width,
+          height: panel.style.height
+        };
+
+        updatePanelScale(panel);
+
+        panel.addEventListener('pointerdown', (e) => {
+          // Ignore if clicking interactive inputs or resize handle inside the panel
+          if (['INPUT', 'BUTTON', 'A', 'SELECT', 'TEXTAREA'].includes(e.target.tagName) || e.target.closest('.panel-resize-handle')) return;
+
+          e.preventDefault();
+          panel.setPointerCapture(e.pointerId);
+          panel.classList.add('is-dragging');
+
+          const containerRect = hudOverlayArea.getBoundingClientRect();
+          const panelRect = panel.getBoundingClientRect();
+
+          const offsetX = e.clientX - panelRect.left;
+          const offsetY = e.clientY - panelRect.top;
+
+          // Convert current layout to absolute top/left px coordinates
+          const curLeft = panelRect.left - containerRect.left;
+          const curTop = panelRect.top - containerRect.top;
+
+          panel.style.right = 'auto';
+          panel.style.bottom = 'auto';
+          panel.style.width = `${panelRect.width}px`;
+          panel.style.left = `${curLeft}px`;
+          panel.style.top = `${curTop}px`;
+
+          function onPointerMove(moveEvent) {
+            let newX = moveEvent.clientX - containerRect.left - offsetX;
+            let newY = moveEvent.clientY - containerRect.top - offsetY;
+
+            // Constrain inside HUD boundary with small margin
+            const maxX = containerRect.width - panelRect.width;
+            const maxY = containerRect.height - panelRect.height;
+            newX = Math.max(0, Math.min(newX, maxX));
+            newY = Math.max(0, Math.min(newY, maxY));
+
+            panel.style.left = `${newX}px`;
+            panel.style.top = `${newY}px`;
+          }
+
+          function onPointerUp(upEvent) {
+            panel.classList.remove('is-dragging');
+            try {
+              panel.releasePointerCapture(upEvent.pointerId);
+            } catch (err) {}
+            window.removeEventListener('pointermove', onPointerMove);
+            window.removeEventListener('pointerup', onPointerUp);
+          }
+
+          window.addEventListener('pointermove', onPointerMove);
+          window.addEventListener('pointerup', onPointerUp);
+        });
+      });
+    }
+
+    // --- Interactive Mouse/Touch Resizing Engine with Dynamic Text Scaling ---
+    function initResizeHandles() {
+      const draggables = document.querySelectorAll('.draggable-panel');
+
+      draggables.forEach(panel => {
+        const handle = panel.querySelector('.panel-resize-handle');
+        if (!handle) return;
+
+        handle.addEventListener('pointerdown', (e) => {
+          e.stopPropagation(); // Prevent panel drag
+          e.preventDefault();
+          handle.setPointerCapture(e.pointerId);
+          handle.classList.add('is-resizing');
+          panel.classList.add('is-resizing-panel');
+
+          const containerRect = hudOverlayArea.getBoundingClientRect();
+          const panelRect = panel.getBoundingClientRect();
+
+          const startX = e.clientX;
+          const startY = e.clientY;
+          const startW = panelRect.width;
+          const startH = panelRect.height;
+
+          // Lock top/left position in px coordinates
+          const curLeft = panelRect.left - containerRect.left;
+          const curTop = panelRect.top - containerRect.top;
+          panel.style.right = 'auto';
+          panel.style.bottom = 'auto';
+          panel.style.left = `${curLeft}px`;
+          panel.style.top = `${curTop}px`;
+          panel.style.width = `${startW}px`;
+          panel.style.height = `${startH}px`;
+
+          function onPointerMove(moveEvent) {
+            const deltaX = moveEvent.clientX - startX;
+            const deltaY = moveEvent.clientY - startY;
+
+            const minW = parseInt(panel.dataset.minW || '120', 10);
+            const minH = parseInt(panel.dataset.minH || '40', 10);
+            const maxW = containerRect.width - curLeft - 4;
+            const maxH = containerRect.height - curTop - 4;
+
+            const newW = Math.max(minW, Math.min(startW + deltaX, maxW));
+            const newH = Math.max(minH, Math.min(startH + deltaY, maxH));
+
+            panel.style.width = `${newW}px`;
+            panel.style.height = `${newH}px`;
+
+            updatePanelScale(panel); // Dynamically scale font size
+            handleResize(); // dynamically resize internal canvas buffers
+          }
+
+          function onPointerUp(upEvent) {
+            handle.classList.remove('is-resizing');
+            panel.classList.remove('is-resizing-panel');
+            try {
+              handle.releasePointerCapture(upEvent.pointerId);
+            } catch (err) {}
+            window.removeEventListener('pointermove', onPointerMove);
+            window.removeEventListener('pointerup', onPointerUp);
+            updatePanelScale(panel);
+            handleResize();
+          }
+
+          window.addEventListener('pointermove', onPointerMove);
+          window.addEventListener('pointerup', onPointerUp);
+        });
+      });
+    }
+
+    // Reset Layout Button handler
+    btnResetLayout.addEventListener('click', () => {
+      Object.keys(initialLayoutStyles).forEach(id => {
+        const el = document.getElementById(id);
+        const original = initialLayoutStyles[id];
+        if (el && original) {
+          el.style.left = original.left;
+          el.style.top = original.top;
+          el.style.right = original.right;
+          el.style.bottom = original.bottom;
+          el.style.width = original.width;
+          el.style.height = original.height;
+          updatePanelScale(el);
+        }
+      });
+      handleResize();
+    });
+
+    // --- Corner History List UI ---
+    function renderCornerHistoryUI() {
+      cornerHistoryList.innerHTML = '';
+      state.cornerHistory.forEach(item => {
+        const row = document.createElement('div');
+        row.className = 'flex items-center justify-between bg-black/40 px-2 py-1 rounded border border-gray-800/80';
+        const deltaColor = item.isPositive ? 'text-emerald-400' : 'text-rose-400';
+        row.innerHTML = `
+          <span class="text-gray-300 font-bold">${item.name}</span>
+          <div class="flex items-center space-x-1.5">
+            <span class="text-cyan-400">${item.max}</span>
+            <span class="text-gray-500">→</span>
+            <span class="font-bold text-white">${item.bottom}</span>
+            <span class="${deltaColor} font-bold text-[9px]">(${item.delta})</span>
+          </div>
+        `;
+        cornerHistoryList.appendChild(row);
+      });
+    }
+    renderCornerHistoryUI();
+
+    // --- Ephemeral (Auto-Dismiss) Corner Exit Toast ---
+    let dismissTimer = null;
+    let timerBarInterval = null;
+
+    function triggerEphemeralCornerExit(corner, entryMax, bottomSpeed) {
+      const delta = (bottomSpeed - corner.refBottom).toFixed(1);
+      const isPositive = delta >= 0;
+
+      alertCornerName.textContent = `${corner.id} // ${corner.name}`;
+      alertMaxSpeed.textContent = Math.round(entryMax);
+      alertBottomSpeed.textContent = bottomSpeed.toFixed(1);
+      
+      alertDeltaBottom.className = isPositive 
+        ? 'text-xs font-bold text-emerald-400 bg-emerald-950/80 px-2 py-1 rounded border border-emerald-500/40 inline-block mt-0.5'
+        : 'text-xs font-bold text-rose-400 bg-rose-950/80 px-2 py-1 rounded border border-rose-500/40 inline-block mt-0.5';
+      alertDeltaBottom.textContent = `BOTTOM ${isPositive ? '+' : ''}${delta} km/h ${isPositive ? '▲' : '▼'}`;
+
+      // Reset timers
+      if (dismissTimer) clearTimeout(dismissTimer);
+      if (timerBarInterval) clearInterval(timerBarInterval);
+
+      // Slide & Fade in
+      cornerAlertCard.classList.remove('opacity-0');
+      cornerAlertCard.classList.add('opacity-100');
+
+      // 4.5 seconds countdown bar
+      const duration = 4500;
+      const startTime = Date.now();
+      cornerAlertTimerBar.style.width = '100%';
+
+      timerBarInterval = setInterval(() => {
+        const elapsed = Date.now() - startTime;
+        const remaining = Math.max(0, 1 - (elapsed / duration));
+        cornerAlertTimerBar.style.width = `${remaining * 100}%`;
+        if (remaining <= 0) {
+          clearInterval(timerBarInterval);
+        }
+      }, 50);
+
+      // Auto-fade out after 4.5s
+      dismissTimer = setTimeout(() => {
+        cornerAlertCard.classList.remove('opacity-100');
+        cornerAlertCard.classList.add('opacity-0');
+      }, duration);
+
+      // Save to background history
+      state.cornerHistory.unshift({
+        name: corner.name,
+        max: Math.round(entryMax),
+        bottom: bottomSpeed.toFixed(1),
+        delta: `${isPositive ? '+' : ''}${delta}`,
+        isPositive: isPositive
+      });
+      renderCornerHistoryUI();
+    }
+
+    // --- Corner Speed Tracking Logic ---
+    function processCornerSpeedTracking() {
+      const currentDist = state.telemetry.lapDistance;
+      const speed = state.telemetry.speed;
+
+      const activeCorner = CORNERS_DATABASE.find(c => currentDist >= c.startDist && currentDist <= c.exitDist);
+
+      if (activeCorner) {
+        mapCornerLabel.textContent = activeCorner.name;
+        if (!state.activeCornerRecord || state.activeCornerRecord.corner.id !== activeCorner.id) {
+          state.activeCornerRecord = {
+            corner: activeCorner,
+            entryMaxSpeed: speed,
+            bottomSpeed: speed,
+            hasPassedApex: false
+          };
+        } else {
+          if (!state.activeCornerRecord.hasPassedApex) {
+            if (speed > state.activeCornerRecord.entryMaxSpeed) {
+              state.activeCornerRecord.entryMaxSpeed = speed;
+            }
+            if (currentDist >= activeCorner.apexDist) {
+              state.activeCornerRecord.hasPassedApex = true;
+            }
+          }
+          if (speed < state.activeCornerRecord.bottomSpeed) {
+            state.activeCornerRecord.bottomSpeed = speed;
+          }
+        }
+      } else {
+        mapCornerLabel.textContent = 'STRAIGHT';
+        if (state.activeCornerRecord) {
+          // Exited corner - trigger ephemeral toast
+          triggerEphemeralCornerExit(
+            state.activeCornerRecord.corner,
+            state.activeCornerRecord.entryMaxSpeed,
+            state.activeCornerRecord.bottomSpeed
+          );
+          state.activeCornerRecord = null;
+        }
+      }
+    }
+
+    // --- Format helper for Lap / Sector time string (e.g., 0'21.151 or 1'08.765) ---
+    function formatTimeSec(seconds) {
+      if (isNaN(seconds) || seconds < 0) seconds = 0;
+      const m = Math.floor(seconds / 60);
+      const s = Math.floor(seconds % 60);
+      const ms = Math.floor((seconds % 1) * 1000);
+      return `${m}'${s.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`;
+    }
+
+    function formatDelta(delta) {
+      const sign = delta > 0 ? '+ ' : '- ';
+      return `${sign}${Math.abs(delta).toFixed(3)}`;
+    }
+
+    function updateTimingUI() {
+      // S1 UI
+      if (state.timing.currentSector === 1) {
+        timingS1Time.textContent = formatTimeSec(state.timing.s1Elapsed);
+        timingS1Time.className = 'flex-1 px-2.5 text-right font-black text-cyan-300 tracking-wider animate-pulse';
+        timingS1Delta.className = 'w-16 h-full bg-[#1f2937] text-gray-400 font-extrabold flex items-center justify-center text-[10px] shrink-0';
+        timingS1Delta.textContent = 'LIVE';
+      } else {
+        timingS1Time.textContent = formatTimeSec(state.timing.s1Completed);
+        timingS1Time.className = 'flex-1 px-2.5 text-right font-bold text-gray-100 tracking-wider';
+        const isBetter = state.timing.s1Delta <= 0;
+        timingS1Delta.className = `w-16 h-full ${isBetter ? 'bg-[#1b5fad]' : 'bg-[#b91c1c]'} text-white font-extrabold flex items-center justify-center text-[10px] shrink-0`;
+        timingS1Delta.textContent = formatDelta(state.timing.s1Delta);
+      }
+
+      // S2 UI
+      if (state.timing.currentSector === 2) {
+        timingS2Time.textContent = formatTimeSec(state.timing.s2Elapsed);
+        timingS2Time.className = 'flex-1 px-2.5 text-right font-black text-cyan-300 tracking-wider animate-pulse';
+        timingS2Delta.className = 'w-16 h-full bg-[#1f2937] text-gray-400 font-extrabold flex items-center justify-center text-[10px] shrink-0';
+        timingS2Delta.textContent = 'LIVE';
+      } else {
+        timingS2Time.textContent = formatTimeSec(state.timing.s2Completed);
+        timingS2Time.className = 'flex-1 px-2.5 text-right font-bold text-gray-100 tracking-wider';
+        const isBetter = state.timing.s2Delta <= 0;
+        timingS2Delta.className = `w-16 h-full ${isBetter ? 'bg-[#1b5fad]' : 'bg-[#b91c1c]'} text-white font-extrabold flex items-center justify-center text-[10px] shrink-0`;
+        timingS2Delta.textContent = formatDelta(state.timing.s2Delta);
+      }
+
+      // S3 UI
+      if (state.timing.currentSector === 3) {
+        timingS3Time.textContent = formatTimeSec(state.timing.s3Elapsed);
+        timingS3Time.className = 'flex-1 px-2.5 text-right font-black text-cyan-300 tracking-wider animate-pulse';
+        timingS3Delta.className = 'w-16 h-full bg-[#1f2937] text-gray-400 font-extrabold flex items-center justify-center text-[10px] shrink-0';
+        timingS3Delta.textContent = 'LIVE';
+      } else {
+        timingS3Time.textContent = formatTimeSec(state.timing.s3Completed);
+        timingS3Time.className = 'flex-1 px-2.5 text-right font-bold text-gray-100 tracking-wider';
+        const isBetter = state.timing.s3Delta <= 0;
+        timingS3Delta.className = `w-16 h-full ${isBetter ? 'bg-[#1b5fad]' : 'bg-[#b91c1c]'} text-white font-extrabold flex items-center justify-center text-[10px] shrink-0`;
+        timingS3Delta.textContent = formatDelta(state.timing.s3Delta);
+      }
+
+      // Last Lap
+      timingLastLapTime.textContent = formatTimeSec(state.timing.lastLap);
+      const isLastLapBetter = state.timing.lastLapDelta <= 0;
+      timingLastLapDelta.className = `w-16 h-full ${isLastLapBetter ? 'bg-[#1b5fad]' : 'bg-[#b91c1c]'} text-white font-extrabold flex items-center justify-center text-[10px] shrink-0`;
+      timingLastLapDelta.textContent = formatDelta(state.timing.lastLapDelta);
+
+      // Best Lap
+      timingBestLapTime.textContent = formatTimeSec(state.timing.bestLap);
+
+      // Optimal Lap = sum of S1, S2, S3 bests
+      const optLap = state.timing.s1Best + state.timing.s2Best + state.timing.s3Best;
+      timingOptLapTime.textContent = formatTimeSec(optLap);
+
+      // Current Lap Time
+      valLapTime.textContent = formatTimeSec(state.telemetry.lapTime);
+      valCurrentSectorName.textContent = `SECTOR ${state.timing.currentSector}`;
+    }
+
+    // --- Audio Feedback ---
+    let audioCtx = null;
+    function playRadioChime(start = true) {
+      try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        
+        if (start) {
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+          osc.frequency.setValueAtTime(1200, audioCtx.currentTime + 0.08);
+          gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.18);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.18);
+        } else {
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(600, audioCtx.currentTime);
+          gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.1);
+        }
+      } catch (e) {
+        console.warn("Audio unavailable:", e);
+      }
+    }
+
+    // --- RPM LED Bar (18 Segments) ---
+    const totalLeds = 18;
+    for (let i = 0; i < totalLeds; i++) {
+      const led = document.createElement('div');
+      led.className = 'flex-1 h-full rounded-sm transition-colors duration-75 bg-gray-800';
+      rpmLedsContainer.appendChild(led);
+    }
+
+    function updateRpmLeds(rpm) {
+      const minRpm = 2500;
+      const maxRpm = 7500;
+      const ratio = Math.max(0, Math.min(1, (rpm - minRpm) / (maxRpm - minRpm)));
+      const activeCount = Math.floor(ratio * totalLeds);
+
+      const leds = rpmLedsContainer.children;
+      for (let i = 0; i < totalLeds; i++) {
+        if (i < activeCount) {
+          if (i < 8) {
+            leds[i].className = 'flex-1 h-full rounded-sm bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.8)]';
+          } else if (i < 14) {
+            leds[i].className = 'flex-1 h-full rounded-sm bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.8)]';
+          } else {
+            leds[i].className = 'flex-1 h-full rounded-sm bg-red-600 animate-pulse shadow-[0_0_8px_rgba(239,68,68,1)]';
+          }
+        } else {
+          leds[i].className = 'flex-1 h-full rounded-sm bg-gray-800';
+        }
+      }
+    }
+
+    // --- Resize Canvas Handler ---
+    function handleResize() {
+      const dpr = window.devicePixelRatio || 1;
+      const rectSim = simCanvas.getBoundingClientRect();
+      if (rectSim.width > 0 && rectSim.height > 0) {
+        simCanvas.width = rectSim.width * dpr;
+        simCanvas.height = rectSim.height * dpr;
+        simCtx.setTransform(1, 0, 0, 1, 0, 0);
+        simCtx.scale(dpr, dpr);
+      }
+
+      const rectWave = waveCanvas.getBoundingClientRect();
+      if (rectWave.width > 0 && rectWave.height > 0) {
+        waveCanvas.width = rectWave.width * dpr;
+        waveCanvas.height = rectWave.height * dpr;
+        waveCtx.setTransform(1, 0, 0, 1, 0, 0);
+        waveCtx.scale(dpr, dpr);
+      }
+
+      if (gpsMapCanvas) {
+        const rectGps = gpsMapCanvas.getBoundingClientRect();
+        if (rectGps.width > 0 && rectGps.height > 0) {
+          gpsMapCanvas.width = rectGps.width * dpr;
+          gpsMapCanvas.height = rectGps.height * dpr;
+          gpsMapCtx.setTransform(1, 0, 0, 1, 0, 0);
+          gpsMapCtx.scale(dpr, dpr);
+        }
+      }
+
+      if (frictionCanvas) {
+        const rectFriction = frictionCanvas.getBoundingClientRect();
+        if (rectFriction.width > 0 && rectFriction.height > 0) {
+          frictionCanvas.width = rectFriction.width * dpr;
+          frictionCanvas.height = rectFriction.height * dpr;
+          frictionCtx.setTransform(1, 0, 0, 1, 0, 0);
+          frictionCtx.scale(dpr, dpr);
+        }
+      }
+    }
+    window.addEventListener('resize', handleResize);
+
+    // --- Track Simulation Model ---
+    let simTime = 0;
+    let prevLapDist = 0;
+
+    function runSimulationStep(dt) {
+      if (state.isFrozen) return;
+
+      if (state.mode === 'auto') {
+        simTime += dt;
+        state.telemetry.lapTime += dt;
+        const lapCycle = simTime % 18.0;
+
+        if (lapCycle < 5.0) {
+          // Main Straight
+          state.telemetry.throttle = 100;
+          state.telemetry.brake = 0;
+          state.telemetry.clutch = 0;
+          state.telemetry.steerAngle = Math.sin(simTime * 2) * 1.5;
+          state.telemetry.speed = Math.min(195, 120 + lapCycle * 15);
+          state.telemetry.gear = state.telemetry.speed > 165 ? 5 : 4;
+          state.telemetry.rpm = 4800 + (state.telemetry.speed % 40) * 65;
+          state.telemetry.lonG = 0.35;
+          state.telemetry.latG = Math.sin(simTime * 2) * 0.05;
+        } 
+        else if (lapCycle < 7.5) {
+          // Hard Braking into T1
+          const brakePhase = lapCycle - 5.0;
+          if (brakePhase < 0.25) {
+            state.telemetry.brake = (brakePhase / 0.25) * 95;
+          } else if (brakePhase < 1.4) {
+            state.telemetry.brake = 95 - (brakePhase - 0.25) * 5;
+          } else {
+            state.telemetry.brake = Math.max(15, 88 - (brakePhase - 1.4) * 65);
+          }
+          state.telemetry.throttle = 0;
+          state.telemetry.clutch = brakePhase > 1.2 && brakePhase < 1.6 ? 80 : 0;
+          state.telemetry.steerAngle = brakePhase > 1.2 ? (brakePhase - 1.2) * 28 : 0;
+          state.telemetry.speed = Math.max(66.5, 195 - brakePhase * 50);
+          state.telemetry.gear = state.telemetry.speed > 110 ? 3 : 2;
+          state.telemetry.rpm = 4000 + (state.telemetry.speed % 35) * 75;
+          state.telemetry.lonG = -((state.telemetry.brake / 100) * 1.25);
+          state.telemetry.latG = (state.telemetry.steerAngle / 35) * 0.8;
+        } 
+        else if (lapCycle < 11.0) {
+          // Corner Apex
+          const cornerPhase = lapCycle - 7.5;
+          state.telemetry.brake = Math.max(0, 20 - cornerPhase * 25);
+          state.telemetry.throttle = cornerPhase > 1.0 ? Math.min(75, (cornerPhase - 1.0) * 35) : 0;
+          state.telemetry.steerAngle = 35 + Math.sin(simTime * 4) * 2;
+          state.telemetry.speed = 66.5 + cornerPhase * 8;
+          state.telemetry.gear = 2;
+          state.telemetry.rpm = 4200 + cornerPhase * 600;
+          state.telemetry.latG = 1.15 + Math.sin(simTime * 3) * 0.08;
+          state.telemetry.lonG = (state.telemetry.throttle > 0 ? 0.3 : -0.15);
+        } 
+        else {
+          // Exit Acceleration
+          const exitPhase = lapCycle - 11.0;
+          state.telemetry.brake = 0;
+          state.telemetry.throttle = Math.min(100, 60 + exitPhase * 15);
+          state.telemetry.steerAngle = Math.max(0, 35 - exitPhase * 7);
+          state.telemetry.speed = 92 + exitPhase * 12;
+          state.telemetry.gear = state.telemetry.speed > 120 ? 3 : 2;
+          state.telemetry.rpm = 5000 + (state.telemetry.speed % 35) * 60;
+          state.telemetry.latG = Math.max(0.1, 1.1 - exitPhase * 0.18);
+          state.telemetry.lonG = 0.45;
+        }
+
+        state.telemetry.brakePressure = (state.telemetry.brake * 0.085);
+        const speedMps = (state.telemetry.speed * 1000) / 3600;
+        
+        prevLapDist = state.telemetry.lapDistance;
+        state.telemetry.lapDistance = (state.telemetry.lapDistance + speedMps * dt * 2.8) % FUJI_CIRCUIT_TOTAL_LENGTH;
+
+        // Sector transitions and timing updates
+        if (state.telemetry.lapDistance < prevLapDist) {
+          // Lap Completed (crossed finish line)
+          state.timing.s3Completed = state.timing.s3Elapsed;
+          state.timing.s3Delta = state.timing.s3Completed - state.timing.s3Best;
+          state.timing.lastLap = state.telemetry.lapTime;
+          state.timing.lastLapDelta = state.timing.lastLap - state.timing.bestLap;
+          state.telemetry.lapTime = 0;
+          state.timing.currentSector = 1;
+          state.timing.s1Elapsed = 0;
+        } 
+        else if (prevLapDist < S1_END_DIST && state.telemetry.lapDistance >= S1_END_DIST) {
+          // Completed Sector 1 -> Entering Sector 2
+          state.timing.s1Completed = state.timing.s1Elapsed;
+          state.timing.s1Delta = state.timing.s1Completed - state.timing.s1Best;
+          state.timing.currentSector = 2;
+          state.timing.s2Elapsed = 0;
+        } 
+        else if (prevLapDist < S2_END_DIST && state.telemetry.lapDistance >= S2_END_DIST) {
+          // Completed Sector 2 -> Entering Sector 3
+          state.timing.s2Completed = state.timing.s2Elapsed;
+          state.timing.s2Delta = state.timing.s2Completed - state.timing.s2Best;
+          state.timing.currentSector = 3;
+          state.timing.s3Elapsed = 0;
+        }
+
+        // Live elapsed in current sector
+        if (state.timing.currentSector === 1) state.timing.s1Elapsed += dt;
+        else if (state.timing.currentSector === 2) state.timing.s2Elapsed += dt;
+        else if (state.timing.currentSector === 3) state.timing.s3Elapsed += dt;
+      }
+
+      processCornerSpeedTracking();
+
+      state.historyBuffer.push({
+        throttle: state.telemetry.throttle,
+        brake: state.telemetry.brake,
+        speed: state.telemetry.speed
+      });
+      if (state.historyBuffer.length > state.maxBufferLength) {
+        state.historyBuffer.shift();
+      }
+
+      state.gTrail.push({
+        latG: state.telemetry.latG,
+        lonG: state.telemetry.lonG
+      });
+      if (state.gTrail.length > state.maxTrailLength) {
+        state.gTrail.shift();
+      }
+    }
+
+    // --- Draw Simulated Track Video ---
+    let roadCurve = 0;
+    let roadOffset = 0;
+    function renderSimulatedTrack() {
+      if (state.webcamActive) return;
+
+      const w = simCanvas.getBoundingClientRect().width;
+      const h = simCanvas.getBoundingClientRect().height;
+      
+      const skyGrad = simCtx.createLinearGradient(0, 0, 0, h * 0.48);
+      skyGrad.addColorStop(0, '#0a101d');
+      skyGrad.addColorStop(1, '#1b2a47');
+      simCtx.fillStyle = skyGrad;
+      simCtx.fillRect(0, 0, w, h * 0.5);
+
+      // Mount Fuji
+      simCtx.fillStyle = '#0f172a';
+      simCtx.beginPath();
+      simCtx.moveTo(w * 0.2, h * 0.5);
+      simCtx.lineTo(w * 0.35, h * 0.32);
+      simCtx.lineTo(w * 0.5, h * 0.5);
+      simCtx.fill();
+
+      // Ground
+      simCtx.fillStyle = '#161922';
+      simCtx.fillRect(0, h * 0.5, w, h * 0.5);
+
+      const targetCurve = -state.telemetry.steerAngle * 0.015;
+      roadCurve += (targetCurve - roadCurve) * 0.08;
+      roadOffset += state.telemetry.speed * 0.08;
+
+      const horizonY = h * 0.48;
+      const bottomW = w * 0.85;
+      const topW = w * 0.04;
+
+      simCtx.fillStyle = '#22252e';
+      simCtx.beginPath();
+      simCtx.moveTo(w * 0.5 - topW / 2 + roadCurve * 40, horizonY);
+      simCtx.lineTo(w * 0.5 + topW / 2 + roadCurve * 40, horizonY);
+      simCtx.lineTo(w * 0.5 + bottomW / 2, h);
+      simCtx.lineTo(w * 0.5 - bottomW / 2, h);
+      simCtx.closePath();
+      simCtx.fill();
+
+      // Curbs
+      const numStripes = 14;
+      for (let i = 0; i < numStripes; i++) {
+        const p = ((i + (roadOffset * 0.05) % 1) / numStripes);
+        const y = horizonY + Math.pow(p, 2.2) * (h - horizonY);
+        const nextY = horizonY + Math.pow(((i + 1) + (roadOffset * 0.05) % 1) / numStripes, 2.2) * (h - horizonY);
+        const currentTopW = topW + (bottomW - topW) * Math.pow(p, 2.2);
+        const curCenterX = (w * 0.5 + roadCurve * 40) + ((w * 0.5) - (w * 0.5 + roadCurve * 40)) * p;
+
+        simCtx.fillStyle = (i % 2 === 0) ? '#e11d48' : '#f8fafc';
+        simCtx.fillRect(curCenterX + currentTopW / 2, y, 18 * Math.pow(p, 2), Math.max(2, nextY - y));
+        simCtx.fillRect(curCenterX - currentTopW / 2 - 18 * Math.pow(p, 2), y, 18 * Math.pow(p, 2), Math.max(2, nextY - y));
+      }
+
+      // Center Dash Lines
+      simCtx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+      simCtx.lineWidth = 3;
+      simCtx.setLineDash([20, 25]);
+      simCtx.lineDashOffset = -roadOffset * 1.5;
+      simCtx.beginPath();
+      simCtx.moveTo(w * 0.5 + roadCurve * 40, horizonY);
+      simCtx.lineTo(w * 0.5, h);
+      simCtx.stroke();
+      simCtx.setLineDash([]);
+    }
+
+    // --- Draw Rolling Pedal Waveform Oscilloscope ---
+    function renderPedalWaveform() {
+      const w = waveCanvas.getBoundingClientRect().width;
+      const h = waveCanvas.getBoundingClientRect().height;
+      waveCtx.clearRect(0, 0, w, h);
+
+      waveCtx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+      waveCtx.lineWidth = 1;
+      for (let p = 0; p <= 1; p += 0.25) {
+        const y = h - p * (h - 8) - 4;
+        waveCtx.beginPath();
+        waveCtx.moveTo(0, y);
+        waveCtx.lineTo(w, y);
+        waveCtx.stroke();
+      }
+
+      if (state.historyBuffer.length < 2) return;
+
+      const bufferLen = state.historyBuffer.length;
+      const activeData = state.isReplay 
+        ? state.historyBuffer.slice(0, Math.max(10, bufferLen - 150))
+        : state.historyBuffer;
+
+      // Brake Trace (Red) - 2.5x Thicker Trace
+      waveCtx.beginPath();
+      for (let i = 0; i < activeData.length; i++) {
+        const x = (i / (state.maxBufferLength - 1)) * w;
+        const val = activeData[i].brake;
+        const y = h - (val / 100) * (h - 10) - 5;
+        if (i === 0) waveCtx.moveTo(x, y);
+        else waveCtx.lineTo(x, y);
+      }
+      waveCtx.strokeStyle = '#ef4444';
+      waveCtx.lineWidth = 5.5; // 2.5x thicker trace (was 2.2)
+      waveCtx.stroke();
+
+      // Throttle Trace (Green) - 2.5x Thicker Trace
+      waveCtx.beginPath();
+      for (let i = 0; i < activeData.length; i++) {
+        const x = (i / (state.maxBufferLength - 1)) * w;
+        const val = activeData[i].throttle;
+        const y = h - (val / 100) * (h - 10) - 5;
+        if (i === 0) waveCtx.moveTo(x, y);
+        else waveCtx.lineTo(x, y);
+      }
+      waveCtx.strokeStyle = '#10b981';
+      waveCtx.lineWidth = 5.5; // 2.5x thicker trace (was 2.2)
+      waveCtx.stroke();
+
+      // Current Time Vertical Cursor
+      const curX = (activeData.length / state.maxBufferLength) * w;
+      waveCtx.strokeStyle = '#00f0ff';
+      waveCtx.lineWidth = 1.5;
+      waveCtx.setLineDash([2, 3]);
+      waveCtx.beginPath();
+      waveCtx.moveTo(curX, 0);
+      waveCtx.lineTo(curX, h);
+      waveCtx.stroke();
+      waveCtx.setLineDash([]);
+    }
+
+    // --- Draw Friction Circle (G-Ball) ---
+    function renderFrictionCircle() {
+      const w = frictionCanvas.getBoundingClientRect().width || 70;
+      const h = frictionCanvas.getBoundingClientRect().height || 70;
+      const cx = w / 2;
+      const cy = h / 2;
+      const maxGScale = 1.6;
+      const radius = Math.min(w, h) / 2 - 8;
+
+      frictionCtx.clearRect(0, 0, w, h);
+
+      [0.5, 1.0, 1.5].forEach(g => {
+        const r = (g / maxGScale) * radius;
+        frictionCtx.strokeStyle = g === 1.0 ? 'rgba(0, 240, 255, 0.4)' : 'rgba(255, 255, 255, 0.12)';
+        frictionCtx.lineWidth = g === 1.0 ? 1.5 : 1;
+        frictionCtx.beginPath();
+        frictionCtx.arc(cx, cy, r, 0, Math.PI * 2);
+        frictionCtx.stroke();
+      });
+
+      frictionCtx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+      frictionCtx.lineWidth = 1;
+      frictionCtx.beginPath();
+      frictionCtx.moveTo(cx, 4);
+      frictionCtx.lineTo(cx, h - 4);
+      frictionCtx.moveTo(4, cy);
+      frictionCtx.lineTo(w - 4, cy);
+      frictionCtx.stroke();
+
+      // G-Trail
+      for (let i = 0; i < state.gTrail.length; i++) {
+        const pt = state.gTrail[i];
+        const alpha = (i / state.gTrail.length) * 0.7;
+        const tx = cx + (pt.latG / maxGScale) * radius;
+        const ty = cy - (pt.lonG / maxGScale) * radius;
+
+        frictionCtx.fillStyle = `rgba(245, 158, 11, ${alpha})`;
+        frictionCtx.beginPath();
+        frictionCtx.arc(tx, ty, 2, 0, Math.PI * 2);
+        frictionCtx.fill();
+      }
+
+      // Real-time Current G Point
+      const curX = cx + (state.telemetry.latG / maxGScale) * radius;
+      const curY = cy - (state.telemetry.lonG / maxGScale) * radius;
+
+      frictionCtx.fillStyle = '#f59e0b';
+      frictionCtx.beginPath();
+      frictionCtx.arc(curX, curY, 4, 0, Math.PI * 2);
+      frictionCtx.fill();
+
+      frictionCtx.fillStyle = '#ffffff';
+      frictionCtx.beginPath();
+      frictionCtx.arc(curX, curY, 2, 0, Math.PI * 2);
+      frictionCtx.fill();
+    }
+
+    // --- Draw GPS Circuit Track Map ---
+    function renderGpsTrackMap() {
+      const w = gpsMapCanvas.getBoundingClientRect().width || 100;
+      const h = gpsMapCanvas.getBoundingClientRect().height || 65;
+      gpsMapCtx.clearRect(0, 0, w, h);
+
+      // Draw Track Layout Line
+      gpsMapCtx.beginPath();
+      for (let i = 0; i < TRACK_COORDINATES.length; i++) {
+        const pt = TRACK_COORDINATES[i];
+        const px = pt.x * w;
+        const py = pt.y * h;
+        if (i === 0) gpsMapCtx.moveTo(px, py);
+        else gpsMapCtx.lineTo(px, py);
+      }
+      gpsMapCtx.closePath();
+      gpsMapCtx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+      gpsMapCtx.lineWidth = 2.5;
+      gpsMapCtx.lineCap = 'round';
+      gpsMapCtx.lineJoin = 'round';
+      gpsMapCtx.stroke();
+
+      // Highlight active corner if inside one
+      const currentDist = state.telemetry.lapDistance;
+      const activeCorner = CORNERS_DATABASE.find(c => currentDist >= c.startDist && currentDist <= c.exitDist);
+      if (activeCorner) {
+        gpsMapCtx.strokeStyle = 'rgba(0, 240, 255, 0.6)';
+        gpsMapCtx.lineWidth = 3.5;
+        gpsMapCtx.stroke();
+      }
+
+      // Calculate car position along track coordinates based on lapDistance
+      let carX = TRACK_COORDINATES[0].x * w;
+      let carY = TRACK_COORDINATES[0].y * h;
+      for (let i = 0; i < TRACK_COORDINATES.length - 1; i++) {
+        const p1 = TRACK_COORDINATES[i];
+        const p2 = TRACK_COORDINATES[i + 1];
+        if (currentDist >= p1.dist && currentDist <= p2.dist) {
+          const segRatio = (currentDist - p1.dist) / (p2.dist - p1.dist || 1);
+          carX = (p1.x + (p2.x - p1.x) * segRatio) * w;
+          carY = (p1.y + (p2.y - p1.y) * segRatio) * h;
+          break;
+        }
+      }
+
+      // Draw vehicle location marker with cyan glow
+      gpsMapCtx.shadowColor = '#00f0ff';
+      gpsMapCtx.shadowBlur = 8;
+      gpsMapCtx.fillStyle = '#00f0ff';
+      gpsMapCtx.beginPath();
+      gpsMapCtx.arc(carX, carY, 3.5, 0, Math.PI * 2);
+      gpsMapCtx.fill();
+
+      // Center white dot
+      gpsMapCtx.shadowBlur = 0;
+      gpsMapCtx.fillStyle = '#ffffff';
+      gpsMapCtx.beginPath();
+      gpsMapCtx.arc(carX, carY, 1.5, 0, Math.PI * 2);
+      gpsMapCtx.fill();
+    }
+
+    // --- Update Text & Bar DOM Elements ---
+    function updateDOMReadouts() {
+      valSpeed.textContent = Math.round(state.telemetry.speed);
+      valRpm.textContent = Math.round(state.telemetry.rpm).toLocaleString();
+      valGear.textContent = state.telemetry.gear;
+      valSteer.textContent = `${state.telemetry.steerAngle > 0 ? '+' : ''}${state.telemetry.steerAngle.toFixed(1)}°`;
+
+      const dist = Math.round(state.telemetry.lapDistance);
+      const sector = dist < 1450 ? 'S1' : dist < 3200 ? 'S2' : 'S3';
+      valDistSector.textContent = `${dist.toLocaleString()}m [${sector}]`;
+
+      const totalG = Math.sqrt(Math.pow(state.telemetry.latG, 2) + Math.pow(state.telemetry.lonG, 2));
+      valCurrentG.textContent = `${totalG.toFixed(2)}G`;
+      valLatG.textContent = `${state.telemetry.latG > 0 ? '+' : ''}${state.telemetry.latG.toFixed(2)}`;
+      valLonG.textContent = `${state.telemetry.lonG > 0 ? '+' : ''}${state.telemetry.lonG.toFixed(2)}`;
+
+      barThrottle.style.height = `${state.telemetry.throttle}%`;
+      barBrake.style.height = `${state.telemetry.brake}%`;
+      barClutch.style.height = `${state.telemetry.clutch}%`;
+
+      valThrottlePct.textContent = `${Math.round(state.telemetry.throttle)}%`;
+      valBrakePct.textContent = `${Math.round(state.telemetry.brake)}% (${state.telemetry.brakePressure.toFixed(1)} MPa)`;
+      valClutchPct.textContent = `${Math.round(state.telemetry.clutch)}%`;
+
+      updateRpmLeds(state.telemetry.rpm);
+    }
+
+    // --- Main Animation & Telemetry Loop (60fps) ---
+    let lastTimestamp = performance.now();
+    function appLoop(timestamp) {
+      const dt = Math.min(0.1, (timestamp - lastTimestamp) / 1000);
+      lastTimestamp = timestamp;
+
+      runSimulationStep(dt);
+
+      renderSimulatedTrack();
+      renderPedalWaveform();
+      renderFrictionCircle();
+      renderGpsTrackMap();
+      updateDOMReadouts();
+      updateTimingUI();
+
+      requestAnimationFrame(appLoop);
+    }
+
+    // --- Event Listeners & Interaction ---
+    btnPause.addEventListener('click', () => {
+      state.isFrozen = !state.isFrozen;
+      if (state.isFrozen) {
+        btnPause.classList.add('bg-amber-600', 'text-white');
+        pauseBtnText.textContent = 'RESUME';
+      } else {
+        btnPause.classList.remove('bg-amber-600', 'text-white');
+        pauseBtnText.textContent = 'FREEZE';
+      }
+    });
+
+    btnInstantReplay.addEventListener('click', () => {
+      state.isReplay = !state.isReplay;
+      if (state.isReplay) {
+        replayStatusBadge.classList.remove('hidden');
+        replayStatusBadge.classList.add('flex');
+        btnInstantReplay.classList.add('bg-amber-600', 'text-white');
+      } else {
+        replayStatusBadge.classList.add('hidden');
+        replayStatusBadge.classList.remove('flex');
+        btnInstantReplay.classList.remove('bg-amber-600', 'text-white');
+      }
+    });
+
+    function triggerPttDown() {
+      playRadioChime(true);
+      btnPttRadio.classList.add('bg-red-600', 'ring-4', 'ring-red-400');
+    }
+    function triggerPttUp() {
+      playRadioChime(false);
+      btnPttRadio.classList.remove('bg-red-600', 'ring-4', 'ring-red-400');
+    }
+
+    btnPttRadio.addEventListener('pointerdown', triggerPttDown);
+    btnPttRadio.addEventListener('pointerup', triggerPttUp);
+    btnPttRadio.addEventListener('pointerleave', triggerPttUp);
+
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space' && !e.repeat && document.activeElement.tagName !== 'INPUT') {
+        e.preventDefault();
+        triggerPttDown();
+      }
+    });
+    window.addEventListener('keyup', (e) => {
+      if (e.code === 'Space' && document.activeElement.tagName !== 'INPUT') {
+        e.preventDefault();
+        triggerPttUp();
+      }
+    });
+
+    // History & Settings Drawers
+    btnToggleHistory.addEventListener('click', () => {
+      historyDrawer.classList.toggle('hidden');
+      settingsPanel.classList.add('hidden');
+    });
+    btnCloseHistory.addEventListener('click', () => {
+      historyDrawer.classList.add('hidden');
+    });
+
+    btnToggleSettings.addEventListener('click', () => {
+      settingsPanel.classList.toggle('hidden');
+      historyDrawer.classList.add('hidden');
+    });
+    btnCloseSettings.addEventListener('click', () => {
+      settingsPanel.classList.add('hidden');
+    });
+
+    modeSimAuto.addEventListener('click', () => {
+      state.mode = 'auto';
+      modeSimAuto.className = 'py-1.5 px-2 rounded-sm bg-cyan-600 font-bold text-white text-center transition';
+      modeManual.className = 'py-1.5 px-2 rounded-sm bg-white/5 text-gray-300 hover:bg-white/10 border border-white/10 text-center transition font-bold';
+      manualControlsArea.classList.add('opacity-50', 'pointer-events-none');
+    });
+
+    modeManual.addEventListener('click', () => {
+      state.mode = 'manual';
+      modeManual.className = 'py-1.5 px-2 rounded-sm bg-cyan-600 font-bold text-white text-center transition';
+      modeSimAuto.className = 'py-1.5 px-2 rounded-sm bg-white/5 text-gray-300 hover:bg-white/10 border border-white/10 text-center transition font-bold';
+      manualControlsArea.classList.remove('opacity-50', 'pointer-events-none');
+    });
+
+    sliderThrottle.addEventListener('input', (e) => {
+      const val = parseFloat(e.target.value);
+      document.getElementById('sliderValThr').textContent = `${val}%`;
+      if (state.mode === 'manual') {
+        state.telemetry.throttle = val;
+        state.telemetry.speed = Math.round(60 + val * 1.3);
+        state.telemetry.rpm = Math.round(3000 + val * 42);
+        state.telemetry.lonG = (val / 100) * 0.45;
+      }
+    });
+
+    sliderBrake.addEventListener('input', (e) => {
+      const val = parseFloat(e.target.value);
+      document.getElementById('sliderValBrk').textContent = `${val}%`;
+      if (state.mode === 'manual') {
+        state.telemetry.brake = val;
+        state.telemetry.brakePressure = val * 0.085;
+        state.telemetry.lonG = -(val / 100) * 1.25;
+      }
+    });
+
+    sliderLatG.addEventListener('input', (e) => {
+      const val = parseFloat(e.target.value) / 10;
+      document.getElementById('sliderValLat').textContent = `${val.toFixed(1)} G`;
+      if (state.mode === 'manual') {
+        state.telemetry.latG = val;
+        state.telemetry.steerAngle = val * 25;
+      }
+    });
+
+    // --- Real WebRTC P2P Receiver (Connects to incar_transmitter.html) ---
+    const pitRoomIdInput = document.getElementById('pitRoomIdInput');
+    const btnConnectInCar = document.getElementById('btnConnectInCar');
+    const liveBadgeText = document.getElementById('liveBadgeText');
+    const valPingLatency = document.getElementById('valPingLatency');
+    let pitPeer = null;
+
+    btnConnectInCar.addEventListener('click', () => {
+      const roomCode = pitRoomIdInput.value.trim().toUpperCase().replace(/[^A-Z0-9-]/g, '');
+      if (!roomCode) return;
+
+      if (pitPeer) pitPeer.destroy();
+      pitPeer = new Peer();
+
+      btnConnectInCar.textContent = 'LINKING...';
+
+      pitPeer.on('open', () => {
+        const targetPeerId = `RACE-COACH-${roomCode}`;
+        // Establish low-latency DataChannel
+        const conn = pitPeer.connect(targetPeerId, { reliable: false });
+
+        conn.on('open', () => {
+          state.mode = 'webrtc';
+          btnConnectInCar.textContent = 'LINKED ✅';
+          btnConnectInCar.classList.replace('bg-cyan-600', 'bg-emerald-600');
+          liveBadgeText.textContent = `LIVE // CAR ${roomCode}`;
+        });
+
+        conn.on('data', (dataStr) => {
+          try {
+            const pkt = typeof dataStr === 'string' ? JSON.parse(dataStr) : dataStr;
+            state.telemetry.speed = pkt.spd ?? state.telemetry.speed;
+            state.telemetry.rpm = pkt.rpm ?? state.telemetry.rpm;
+            state.telemetry.gear = pkt.gr ?? state.telemetry.gear;
+            state.telemetry.throttle = pkt.thr ?? state.telemetry.throttle;
+            state.telemetry.brake = pkt.brk ?? state.telemetry.brake;
+            state.telemetry.brakePressure = state.telemetry.brake * 0.085;
+            state.telemetry.latG = pkt.gx ?? state.telemetry.latG;
+            state.telemetry.lonG = pkt.gy ?? state.telemetry.lonG;
+
+            if (pkt.t) {
+              const latency = Math.max(12, Math.min(999, Date.now() - pkt.t));
+              valPingLatency.textContent = `${latency}ms`;
+            }
+          } catch (e) {}
+        });
+      });
+
+      // Receive live camera stream from In-Car Smartphone
+      pitPeer.on('call', (call) => {
+        call.answer();
+        call.on('stream', (remoteStream) => {
+          webcamVideo.srcObject = remoteStream;
+          webcamVideo.classList.remove('hidden');
+          simCanvas.classList.add('hidden');
+          state.webcamActive = true;
+        });
+      });
+    });
+
+    btnToggleWebcam.addEventListener('click', async () => {
+      if (!state.webcamActive) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: { width: 1280, height: 720, frameRate: 60 },
+            audio: false
+          });
+          webcamVideo.srcObject = stream;
+          webcamVideo.classList.remove('hidden');
+          simCanvas.classList.add('hidden');
+          state.webcamActive = true;
+          btnToggleWebcam.textContent = 'Switch to Track Sim';
+          btnToggleWebcam.classList.add('bg-cyan-600', 'text-white');
+        } catch (err) {
+          console.error('Camera access error:', err);
+        }
+      } else {
+        if (webcamVideo.srcObject) {
+          webcamVideo.srcObject.getTracks().forEach(track => track.stop());
+        }
+        webcamVideo.classList.add('hidden');
+        simCanvas.classList.remove('hidden');
+        state.webcamActive = false;
+        btnToggleWebcam.textContent = 'Enable Webcam';
+        btnToggleWebcam.classList.remove('bg-cyan-600', 'text-white');
+      }
+    });
+
+    window.addEventListener('load', () => {
+      handleResize();
+      initDraggablePanels();
+      initResizeHandles();
+      requestAnimationFrame(appLoop);
+    });
+  </script>
+</body>
+</html>
