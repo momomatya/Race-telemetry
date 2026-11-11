@@ -19,6 +19,23 @@
     }
     .mono { font-family: 'JetBrains Mono', monospace; }
     .oswald { font-family: 'Oswald', sans-serif; }
+    .hud-box {
+      background: linear-gradient(135deg, rgba(8, 12, 22, 0.88) 0%, rgba(3, 7, 18, 0.94) 100%);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      touch-action: none;
+    }
+    .hud-box:hover {
+      border-color: rgba(56, 189, 248, 0.35);
+    }
+    .hud-handle {
+      cursor: grab;
+    }
+    .hud-handle:active {
+      cursor: grabbing;
+    }
     .resize-handle {
       position: absolute;
       right: 2px;
@@ -32,6 +49,7 @@
       line-height: 14px;
       text-align: center;
       transition: color 0.15s ease;
+      touch-action: none;
     }
     .resize-handle:hover {
       color: #38bdf8;
@@ -50,30 +68,40 @@
   <canvas id="simCanvas" class="absolute inset-0 w-full h-full object-cover z-0"></canvas>
 
   <!-- 上部ステータスバー -->
-  <header class="relative z-30 flex items-center justify-between px-3 py-1.5 bg-slate-950/80 backdrop-blur-md border-b border-white/10 text-xs font-bold tracking-wider">
+  <header class="relative z-30 flex items-center justify-between px-3 py-1 bg-slate-950/85 backdrop-blur-md border-b border-white/10 text-xs font-bold tracking-wider">
     <div class="flex items-center gap-3">
       <span class="flex items-center gap-1.5 text-rose-500 animate-pulse font-black">
-        <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span> LIVE
+        <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span> LIVE // CAR #27
       </span>
-      <span class="text-slate-300">CAR: #27 (ROADSTER)</span>
+      <span class="text-slate-300 font-extrabold tracking-wide">CH 01 // ND-ROADSTER #27</span>
       <span id="statLatency" class="mono text-cyan-400 bg-cyan-950/50 px-2 py-0.5 rounded border border-cyan-800/40">---ms</span>
+      <span class="mono text-slate-400">720p 60FPS</span>
       <span id="statRate" class="mono text-emerald-400 bg-emerald-950/50 px-2 py-0.5 rounded border border-emerald-800/40">25Hz (AiM EXP)</span>
     </div>
 
-    <!-- WebRTC 接続コントロール -->
+    <!-- WebRTC 接続＆コントロール -->
     <div class="flex items-center gap-2">
-      <div class="flex items-center bg-slate-900 border border-white/20 rounded px-2 py-0.5">
+      <div class="flex items-center bg-slate-900/90 border border-white/20 rounded px-2 py-0.5">
         <span class="text-[10px] text-slate-400 mr-1.5 font-bold">ROOM:</span>
         <input id="inputRoomCode" type="text" value="ND-27" class="bg-transparent text-cyan-400 font-bold mono text-xs w-16 focus:outline-none uppercase" />
       </div>
-      <button id="btnConnectCar" class="px-3 py-1 bg-cyan-600 hover:bg-cyan-500 active:bg-cyan-700 text-white font-extrabold text-xs rounded tracking-wider shadow">
+      <button id="btnConnectCar" class="px-2.5 py-1 bg-cyan-600 hover:bg-cyan-500 active:bg-cyan-700 text-white font-extrabold text-xs rounded tracking-wider shadow">
         📡 LINK CAR
+      </button>
+      <button id="btnReplay" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded border border-white/10 flex items-center gap-1">
+        ⏪ REPLAY 5s
+      </button>
+      <button id="btnFreeze" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded border border-white/10 flex items-center gap-1">
+        ⏸ FREEZE
       </button>
       <button id="btnPtt" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-extrabold text-xs rounded tracking-wider shadow flex items-center gap-1">
         🎙 RADIO PTT <span class="text-[10px] opacity-75">[SPACE]</span>
       </button>
-      <button id="btnResetHud" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded border border-white/10">
-        RESET HUD
+      <button id="btnResetHud" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded border border-white/10 flex items-center gap-1">
+        🔄 RESET HUD
+      </button>
+      <button id="btnLog" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded border border-white/10">
+        LOG
       </button>
       <button id="btnToggleSim" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-400 text-xs rounded border border-white/10">
         ⚙ SIM
@@ -86,119 +114,142 @@
 
     <!-- 1. スピードメーター / ギア / 回転数 パネル -->
     <div id="panelSpeedo" data-base-w="170" data-base-h="90" data-min-w="130" data-min-h="70"
-         class="absolute pointer-events-auto bg-slate-950/80 backdrop-blur-md border border-white/15 rounded p-2.5 shadow-2xl flex flex-col justify-between"
+         class="absolute pointer-events-auto hud-box rounded p-2 shadow-2xl flex flex-col justify-between"
          style="top: 15px; left: 15px; width: 170px; height: 90px; --ui-scale: 1;">
-      <div class="flex items-start justify-between">
+      <div class="hud-handle flex items-start justify-between border-b border-white/10 pb-1">
         <div>
-          <div class="text-[calc(0.65rem*var(--ui-scale))] font-bold text-slate-400 tracking-wider">SPEED</div>
+          <div class="text-[calc(0.55rem*var(--ui-scale))] font-bold text-slate-400 tracking-wider">ENGINE SPEED</div>
           <div class="flex items-baseline gap-1">
-            <span id="hudSpeed" class="text-[calc(2.2rem*var(--ui-scale))] font-black italic oswald text-white leading-none">0</span>
-            <span class="text-[calc(0.65rem*var(--ui-scale))] text-slate-400 font-bold">km/h</span>
+            <span id="hudSpeed" class="text-[calc(2.2rem*var(--ui-scale))] font-black italic oswald text-white leading-none">92</span>
+            <span class="text-[calc(0.6rem*var(--ui-scale))] text-slate-400 font-bold">km/h</span>
           </div>
         </div>
         <div class="text-right">
-          <div class="text-[calc(0.65rem*var(--ui-scale))] font-bold text-slate-400">GEAR</div>
-          <span id="hudGear" class="text-[calc(2.0rem*var(--ui-scale))] font-black italic oswald text-cyan-400 leading-none">N</span>
+          <div class="text-[calc(0.55rem*var(--ui-scale))] font-bold text-slate-400">GEAR</div>
+          <span id="hudGear" class="text-[calc(2.0rem*var(--ui-scale))] font-black italic oswald text-amber-400 leading-none">4</span>
         </div>
       </div>
       <div>
-        <div class="flex justify-between text-[calc(0.6rem*var(--ui-scale))] mono text-slate-400 mb-0.5">
-          <span>RPM</span>
-          <span id="hudRpm" class="text-white font-bold">0</span>
+        <div class="flex justify-between text-[calc(0.55rem*var(--ui-scale))] mono text-slate-400 mb-0.5">
+          <span>STEER: <span id="hudSteer" class="text-white">-1.2°</span></span>
+          <span>LAP DIST: <span class="text-white">1,637m [S1]</span></span>
         </div>
-        <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
-          <div id="hudRpmBar" class="bg-gradient-to-r from-cyan-400 via-amber-400 to-rose-500 h-full w-0 transition-all duration-75"></div>
+        <div class="w-full bg-slate-800/80 h-1.5 rounded-full overflow-hidden">
+          <div id="hudRpmBar" class="bg-gradient-to-r from-cyan-400 via-amber-400 to-rose-500 h-full w-[65%] transition-all duration-75"></div>
         </div>
       </div>
       <div class="resize-handle">⤡</div>
     </div>
 
     <!-- 2. セクタータイム差分ボード (GT7風) -->
-    <div id="panelTimingBoard" data-base-w="150" data-base-h="90" data-min-w="120" data-min-h="70"
-         class="absolute pointer-events-auto bg-slate-950/80 backdrop-blur-md border border-white/15 rounded p-2 shadow-2xl flex flex-col justify-between"
-         style="top: 15px; left: 195px; width: 150px; height: 90px; --ui-scale: 1;">
-      <div class="text-[calc(0.6rem*var(--ui-scale))] font-bold text-slate-400 tracking-wider border-b border-white/10 pb-0.5 flex justify-between">
+    <div id="panelTimingBoard" data-base-w="155" data-base-h="95" data-min-w="120" data-min-h="70"
+         class="absolute pointer-events-auto hud-box rounded p-2 shadow-2xl flex flex-col justify-between"
+         style="top: 15px; left: 195px; width: 155px; height: 95px; --ui-scale: 1;">
+      <div class="hud-handle text-[calc(0.55rem*var(--ui-scale))] font-bold text-slate-400 tracking-wider border-b border-white/10 pb-0.5 flex justify-between">
         <span>SECTOR DELTA</span>
-        <span class="text-cyan-400">BEST REF</span>
+        <span class="text-cyan-400">REF: BEST</span>
       </div>
-      <div class="space-y-0.5 text-[calc(0.65rem*var(--ui-scale))] mono font-bold">
+      <div class="space-y-0.5 text-[calc(0.6rem*var(--ui-scale))] mono font-bold">
         <div class="flex justify-between items-center">
-          <span class="text-slate-400">S1</span>
-          <span class="text-slate-300">24.810</span>
-          <span id="deltaS1" class="text-emerald-400">-0.245</span>
+          <span class="text-slate-400">3</span>
+          <span class="text-slate-200">0'10.549</span>
+          <span class="px-1 rounded bg-cyan-900/60 text-cyan-300 font-extrabold">-3.077</span>
         </div>
         <div class="flex justify-between items-center">
-          <span class="text-slate-400">S2</span>
-          <span class="text-slate-300">38.120</span>
-          <span id="deltaS2" class="text-rose-400">+0.115</span>
+          <span class="text-slate-400">2</span>
+          <span class="text-slate-200">0'18.183</span>
+          <span class="px-1 rounded bg-cyan-900/60 text-cyan-300 font-extrabold">-17.844</span>
         </div>
         <div class="flex justify-between items-center">
-          <span class="text-slate-400">S3</span>
-          <span class="text-slate-300">21.450</span>
-          <span id="deltaS3" class="text-slate-500">--.---</span>
+          <span class="text-slate-400">1</span>
+          <span class="text-white font-extrabold">0'10.699</span>
+          <span class="px-1 rounded bg-slate-800 text-slate-300">LIVE</span>
+        </div>
+        <div class="flex justify-between items-center pt-0.5 border-t border-white/10">
+          <span class="text-slate-400">LAST</span>
+          <span class="text-slate-300">1'15.016</span>
+          <span class="text-rose-400">+1.891</span>
+        </div>
+        <div class="flex justify-between items-center">
+          <span class="text-slate-400">BEST</span>
+          <span class="text-emerald-400">1'00.785</span>
+          <span class="text-[0.55rem] text-slate-500">77</span>
+        </div>
+        <div class="flex justify-between items-center">
+          <span class="text-slate-400">OPT.</span>
+          <span class="text-amber-400">1'07.447</span>
+          <span class="text-[0.55rem] text-slate-500">IDEAL</span>
         </div>
       </div>
       <div class="resize-handle">⤡</div>
     </div>
 
     <!-- 3. ラップタイマー (中央上部) -->
-    <div id="panelLap" data-base-w="230" data-base-h="46" data-min-w="170" data-min-h="38"
-         class="absolute pointer-events-auto bg-slate-950/80 backdrop-blur-md border border-white/15 rounded px-3 py-1.5 shadow-2xl flex items-center justify-between"
-         style="top: 15px; left: 50%; transform: translateX(-50%); width: 230px; height: 46px; --ui-scale: 1;">
-      <div>
-        <div class="text-[calc(0.55rem*var(--ui-scale))] font-bold text-slate-400">LAP 04</div>
-        <div id="hudLapTime" class="text-[calc(1.15rem*var(--ui-scale))] font-black mono text-white leading-none">1'02.480</div>
+    <div id="panelLap" data-base-w="220" data-base-h="42" data-min-w="160" data-min-h="36"
+         class="absolute pointer-events-auto hud-box rounded px-3 py-1 shadow-2xl flex items-center justify-between"
+         style="top: 15px; left: 50%; transform: translateX(-50%); width: 220px; height: 42px; --ui-scale: 1;">
+      <div class="hud-handle">
+        <div class="text-[calc(0.5rem*var(--ui-scale))] font-bold text-slate-400">LIVE LAP / SECTOR 1</div>
+        <div id="hudLapTime" class="text-[calc(1.15rem*var(--ui-scale))] font-black mono text-white leading-none">0'10.883</div>
       </div>
       <div class="text-right">
-        <div class="text-[calc(0.55rem*var(--ui-scale))] font-bold text-slate-400">DELTA</div>
-        <div id="hudLapDelta" class="text-[calc(1.05rem*var(--ui-scale))] font-black mono text-emerald-400 leading-none">-0.320</div>
+        <span class="px-1 py-0.5 rounded bg-cyan-900/60 text-cyan-300 mono text-[calc(0.65rem*var(--ui-scale))] font-bold border border-cyan-500/40">LIVE</span>
       </div>
       <div class="resize-handle">⤡</div>
     </div>
 
     <!-- 4. GPS サーキットマップ -->
-    <div id="panelGpsMap" data-base-w="120" data-base-h="100" data-min-w="80" data-min-h="70"
-         class="absolute pointer-events-auto bg-slate-950/80 backdrop-blur-md border border-white/15 rounded p-1.5 shadow-2xl flex flex-col items-center justify-between"
-         style="top: 15px; right: 115px; width: 120px; height: 100px; --ui-scale: 1;">
-      <div class="w-full text-left text-[calc(0.55rem*var(--ui-scale))] font-bold text-slate-400">GPS TRACK</div>
+    <div id="panelGpsMap" data-base-w="110" data-base-h="85" data-min-w="80" data-min-h="65"
+         class="absolute pointer-events-auto hud-box rounded p-1.5 shadow-2xl flex flex-col justify-between"
+         style="top: 15px; right: 110px; width: 110px; height: 85px; --ui-scale: 1;">
+      <div class="hud-handle flex justify-between items-center text-[calc(0.5rem*var(--ui-scale))] font-bold text-slate-400">
+        <span class="text-cyan-400 flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span> GPS</span>
+        <span class="text-slate-300">STRAIGHT</span>
+      </div>
       <canvas id="gpsCanvas" class="w-full flex-1"></canvas>
       <div class="resize-handle">⤡</div>
     </div>
 
     <!-- 5. Gボール (摩擦円 / フリクションサークル) -->
-    <div id="panelGBall" data-base-w="90" data-base-h="100" data-min-w="70" data-min-h="70"
-         class="absolute pointer-events-auto bg-slate-950/80 backdrop-blur-md border border-white/15 rounded p-1.5 shadow-2xl flex flex-col items-center justify-between"
-         style="top: 15px; right: 15px; width: 90px; height: 100px; --ui-scale: 1;">
-      <div class="w-full text-left text-[calc(0.55rem*var(--ui-scale))] font-bold text-slate-400">G-FORCE</div>
+    <div id="panelGBall" data-base-w="90" data-base-h="85" data-min-w="75" data-min-h="65"
+         class="absolute pointer-events-auto hud-box rounded p-1.5 shadow-2xl flex flex-col justify-between"
+         style="top: 15px; right: 15px; width: 90px; height: 85px; --ui-scale: 1;">
+      <div class="hud-handle flex justify-between items-center text-[calc(0.5rem*var(--ui-scale))] font-bold text-slate-400">
+        <span>G-BALL</span>
+        <span class="mono text-amber-400 font-bold">1.14G</span>
+      </div>
       <canvas id="gCanvas" class="w-full flex-1"></canvas>
+      <div class="text-[calc(0.5rem*var(--ui-scale))] mono text-center text-slate-400">
+        LAT: <span class="text-cyan-300">-0.71</span> LON: <span class="text-rose-400">-0.15</span>
+      </div>
       <div class="resize-handle">⤡</div>
     </div>
 
     <!-- 6. コーナー脱出速度トースト -->
-    <div id="toastSpeed" data-base-w="260" data-base-h="46" data-min-w="200" data-min-h="38"
-         class="absolute pointer-events-auto bg-slate-950/90 backdrop-blur-md border border-cyan-500/50 rounded px-3 py-1.5 shadow-2xl flex items-center justify-between"
-         style="top: 70px; left: 50%; transform: translateX(-50%); width: 260px; height: 46px; --ui-scale: 1;">
-      <div class="flex items-center gap-2">
+    <div id="toastSpeed" data-base-w="260" data-base-h="42" data-min-w="200" data-min-h="36"
+         class="absolute pointer-events-auto hud-box rounded px-3 py-1 shadow-2xl flex items-center justify-between border-cyan-500/50"
+         style="top: 65px; left: 50%; transform: translateX(-50%); width: 260px; height: 42px; --ui-scale: 1;">
+      <div class="hud-handle flex items-center gap-2">
         <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
-        <span class="text-[calc(0.75rem*var(--ui-scale))] font-bold tracking-wider text-slate-200">T1 EXIT MIN-SPD</span>
+        <span class="text-[calc(0.7rem*var(--ui-scale))] font-bold tracking-wider text-slate-200">T1 EXIT MIN-SPD</span>
       </div>
-      <div class="mono font-black text-[calc(0.95rem*var(--ui-scale))] text-cyan-300">
-        84.2 <span class="text-[calc(0.6rem*var(--ui-scale))] text-slate-400">km/h</span> <span class="text-emerald-400 text-[calc(0.7rem*var(--ui-scale))]">(+2.4)</span>
+      <div class="mono font-black text-[calc(0.9rem*var(--ui-scale))] text-cyan-300">
+        84.2 <span class="text-[calc(0.55rem*var(--ui-scale))] text-slate-400">km/h</span> <span class="text-emerald-400 text-[calc(0.65rem*var(--ui-scale))]">(+2.4)</span>
       </div>
       <div class="resize-handle">⤡</div>
     </div>
 
     <!-- 7. ペダルバー ＆ オシロスコープ (下部・太さ2.5倍仕様) -->
-    <div id="panelPedals" data-base-w="800" data-base-h="85" data-min-w="450" data-min-h="60"
-         class="absolute pointer-events-auto bg-slate-950/85 backdrop-blur-md border border-white/15 rounded p-2 shadow-2xl flex gap-3 items-center"
-         style="bottom: 12px; left: 50%; transform: translateX(-50%); width: 800px; height: 85px; --ui-scale: 1;">
+    <div id="panelPedals" data-base-w="800" data-base-h="80" data-min-w="450" data-min-h="60"
+         class="absolute pointer-events-auto hud-box rounded p-2 shadow-2xl flex gap-3 items-center"
+         style="bottom: 12px; left: 50%; transform: translateX(-50%); width: 800px; height: 80px; --ui-scale: 1;">
 
       <!-- 縦型ペダルバー (幅40px / 2.5倍拡大) -->
-      <div class="flex gap-2 h-full items-end pb-1 border-r border-white/10 pr-3">
+      <div class="flex gap-2 h-full items-end pb-0.5 border-r border-white/10 pr-3">
         <!-- スロットル -->
         <div class="flex flex-col items-center h-full justify-end">
           <div id="valThrBar" class="text-[calc(0.6rem*var(--ui-scale))] mono font-bold text-emerald-400 mb-0.5">0%</div>
-          <div class="w-10 bg-slate-800 rounded-sm overflow-hidden flex flex-col justify-end border border-white/10" style="height: calc(100% - 1.2rem);">
+          <div class="w-10 bg-slate-800/80 rounded-sm overflow-hidden flex flex-col justify-end border border-white/10" style="height: calc(100% - 1.2rem);">
             <div id="barThr" class="w-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.7)]" style="height: 0%;"></div>
           </div>
           <div class="text-[calc(0.65rem*var(--ui-scale))] font-extrabold text-emerald-400 mt-0.5">THR</div>
@@ -206,9 +257,9 @@
 
         <!-- ブレーキ -->
         <div class="flex flex-col items-center h-full justify-end">
-          <div id="valBrkBar" class="text-[calc(0.6rem*var(--ui-scale))] mono font-bold text-rose-500 mb-0.5">0%</div>
-          <div class="w-10 bg-slate-800 rounded-sm overflow-hidden flex flex-col justify-end border border-white/10" style="height: calc(100% - 1.2rem);">
-            <div id="barBrk" class="w-full bg-rose-600 shadow-[0_0_12px_rgba(225,29,72,0.9)]" style="height: 0%;"></div>
+          <div id="valBrkBar" class="text-[calc(0.6rem*var(--ui-scale))] mono font-bold text-rose-500 mb-0.5">59%</div>
+          <div class="w-10 bg-slate-800/80 rounded-sm overflow-hidden flex flex-col justify-end border border-white/10" style="height: calc(100% - 1.2rem);">
+            <div id="barBrk" class="w-full bg-rose-600 shadow-[0_0_12px_rgba(225,29,72,0.9)]" style="height: 59%;"></div>
           </div>
           <div class="text-[calc(0.65rem*var(--ui-scale))] font-extrabold text-rose-500 mt-0.5">BRK</div>
         </div>
@@ -216,7 +267,7 @@
         <!-- クラッチ -->
         <div class="flex flex-col items-center h-full justify-end">
           <div id="valCltBar" class="text-[calc(0.6rem*var(--ui-scale))] mono font-bold text-cyan-400 mb-0.5">0%</div>
-          <div class="w-8 bg-slate-800 rounded-sm overflow-hidden flex flex-col justify-end border border-white/10" style="height: calc(100% - 1.2rem);">
+          <div class="w-8 bg-slate-800/80 rounded-sm overflow-hidden flex flex-col justify-end border border-white/10" style="height: calc(100% - 1.2rem);">
             <div id="barClt" class="w-full bg-cyan-500" style="height: 0%;"></div>
           </div>
           <div class="text-[calc(0.65rem*var(--ui-scale))] font-bold text-cyan-400 mt-0.5">CLT</div>
@@ -225,22 +276,23 @@
 
       <!-- ペダル波形オシロスコープ (線幅5.5px / 2.5倍仕様) -->
       <div class="flex-1 h-full flex flex-col justify-between">
-        <div class="flex justify-between items-center text-[calc(0.6rem*var(--ui-scale))] font-bold text-slate-400">
+        <div class="hud-handle flex justify-between items-center text-[calc(0.55rem*var(--ui-scale))] font-bold text-slate-400">
           <span class="flex items-center gap-2">
-            <span>PEDAL TRACE (LAST 6s)</span>
-            <span class="text-emerald-400 font-extrabold">■ THR</span>
-            <span class="text-rose-500 font-extrabold">■ BRK</span>
+            <span class="text-cyan-400">■■ PEDAL APPLICATION TRACE (LAST 6s)</span>
+            <span>THR: <span id="labelThr" class="text-emerald-400">0%</span></span>
+            <span>BRK: <span id="labelBrk" class="text-rose-500">59% (5.0 MPa)</span></span>
+            <span>CLT: <span class="text-cyan-400">0%</span></span>
           </span>
-          <span class="text-slate-500">TRAIL BRAKE RELEASE GRADIENT</span>
+          <span class="text-slate-400 tracking-wider">TRAIL BRAKE RELEASE GRADIENT</span>
         </div>
         <div class="relative flex-1 w-full bg-slate-900/60 rounded border border-white/10 overflow-hidden my-0.5">
           <canvas id="oscilloCanvas" class="w-full h-full"></canvas>
         </div>
-        <div class="flex justify-between text-[calc(0.55rem*var(--ui-scale))] mono text-slate-500">
-          <span>-6.0s</span>
-          <span>-4.0s</span>
-          <span>-2.0s</span>
-          <span class="text-cyan-400 font-bold">0.0s (NOW)</span>
+        <div class="flex justify-between text-[calc(0.5rem*var(--ui-scale))] mono text-slate-500">
+          <span>-6s</span>
+          <span>-4s</span>
+          <span>-2s</span>
+          <span class="text-cyan-400 font-bold">0s (NOW)</span>
         </div>
       </div>
       <div class="resize-handle">⤡</div>
@@ -248,8 +300,8 @@
 
   </main>
 
-  <!-- シミュレーション・デバッグ設定ドロワー -->
-  <div id="drawerSim" class="fixed top-12 right-0 bottom-0 w-80 bg-slate-950/95 border-l border-white/15 p-4 z-40 transform translate-x-full transition-transform duration-200 overflow-y-auto space-y-4">
+  <!-- 右側設定ドロワー -->
+  <div id="drawerSim" class="fixed top-10 right-0 bottom-0 w-80 bg-slate-950/95 border-l border-white/15 p-4 z-40 transform translate-x-full transition-transform duration-200 overflow-y-auto space-y-4">
     <div class="flex items-center justify-between border-b border-white/10 pb-2">
       <h3 class="font-bold text-sm text-cyan-400">TELEMETRY SIMULATOR</h3>
       <button id="btnCloseSim" class="text-slate-400 hover:text-white">✕</button>
@@ -266,10 +318,6 @@
       <div>
         <label class="block text-slate-400 font-bold mb-1">BRAKE (%)</label>
         <input id="sliderBrk" type="range" min="0" max="100" value="0" class="w-full" />
-      </div>
-      <div>
-        <label class="block text-slate-400 font-bold mb-1">LATERAL G</label>
-        <input id="sliderG" type="range" min="-15" max="15" value="0" class="w-full" />
       </div>
       <div class="pt-2">
         <label class="flex items-center gap-2 cursor-pointer">
@@ -295,15 +343,14 @@
 
     let peer = null;
     let dataConn = null;
-    let mediaCall = null;
     let isAutoSim = true;
 
     let telem = {
-      spd: 124, rpm: 5600, gear: 3, thr: 85, brk: 0, clt: 0, gx: 0.1, gy: 0.3, steer: 0
+      spd: 92, rpm: 4800, gear: 4, thr: 0, brk: 59, clt: 0, gx: -0.15, gy: -0.71, steer: -1.2
     };
 
     const oscilloHistory = [];
-    const MAX_HISTORY = 180; // 60fps * 3s
+    const MAX_HISTORY = 180;
     for (let i = 0; i < MAX_HISTORY; i++) {
       oscilloHistory.push({ thr: 0, brk: 0 });
     }
@@ -324,20 +371,18 @@
       const targetCarPeerId = 'RACE-CAR-' + room;
 
       btnConnectCar.textContent = 'CONNECTING...';
-      btnConnectCar.className = 'px-3 py-1 bg-amber-600 text-white font-extrabold text-xs rounded tracking-wider shadow';
+      btnConnectCar.className = 'px-2.5 py-1 bg-amber-600 text-white font-extrabold text-xs rounded tracking-wider shadow';
 
       peer = new Peer(pitPeerId, PEER_CONFIG);
 
       peer.on('open', () => {
-        // 1. まずスマホ側へ DataChannel を接続しに行く
         dataConn = peer.connect(targetCarPeerId, { reliable: false });
 
         dataConn.on('open', () => {
           btnConnectCar.textContent = 'LINKED (受信中)';
-          btnConnectCar.className = 'px-3 py-1 bg-emerald-600 text-white font-extrabold text-xs rounded tracking-wider shadow';
+          btnConnectCar.className = 'px-2.5 py-1 bg-emerald-600 text-white font-extrabold text-xs rounded tracking-wider shadow';
           isAutoSim = false;
           document.getElementById('chkAutoSim').checked = false;
-          // スマホ側へ映像を要求
           dataConn.send({ type: 'REQUEST_VIDEO' });
         });
 
@@ -353,26 +398,24 @@
 
         dataConn.on('close', () => {
           btnConnectCar.textContent = 'DISCONNECTED';
-          btnConnectCar.className = 'px-3 py-1 bg-rose-700 text-white font-extrabold text-xs rounded';
+          btnConnectCar.className = 'px-2.5 py-1 bg-rose-700 text-white font-extrabold text-xs rounded';
         });
       });
 
-      // 2. スマホから逆発信された映像コールを受信して画面に投影する
       peer.on('call', (call) => {
-        mediaCall = call;
-        call.answer(); // 受信許可
+        call.answer();
         call.on('stream', (stream) => {
           remoteVideo.srcObject = stream;
           remoteVideo.style.opacity = '1';
           remoteVideo.play().catch(() => {});
-          simCanvas.style.opacity = '0'; // 背景シミュレーションを非表示にしてカメラ映像を映す
+          simCanvas.style.opacity = '0';
         });
       });
 
       peer.on('error', (err) => {
         console.error('PeerJS Error:', err);
         btnConnectCar.textContent = 'RETRY LINK';
-        btnConnectCar.className = 'px-3 py-1 bg-rose-600 text-white font-extrabold text-xs rounded';
+        btnConnectCar.className = 'px-2.5 py-1 bg-rose-600 text-white font-extrabold text-xs rounded';
       });
     });
 
@@ -390,7 +433,6 @@
     panels.forEach(panel => {
       updateScale(panel);
 
-      // 移動ドラッグ
       let isDragging = false;
       let startX, startY, startLeft, startTop;
 
@@ -403,14 +445,13 @@
         const containerRect = hudContainer.getBoundingClientRect();
         startLeft = rect.left - containerRect.left;
         startTop = rect.top - containerRect.top;
-        panel.style.transform = 'none'; // 中央揃え等のtransformを解除して絶対座標化
+        panel.style.transform = 'none';
         panel.style.left = startLeft + 'px';
         panel.style.top = startTop + 'px';
         panel.style.right = 'auto';
         panel.style.bottom = 'auto';
       });
 
-      // リサイズドラッグ
       let isResizing = false;
       let initW, initH;
       const handle = panel.querySelector('.resize-handle');
@@ -491,7 +532,6 @@
     function animate() {
       requestAnimationFrame(animate);
 
-      // 自動シミュレーションモード
       if (isAutoSim) {
         simPhase += 0.025;
         const wave = Math.sin(simPhase);
@@ -511,10 +551,10 @@
         };
       }
 
-      // 数値表示反映
+      // 数値反映
       document.getElementById('hudSpeed').textContent = telem.spd;
       document.getElementById('hudGear').textContent = telem.gear;
-      document.getElementById('hudRpm').textContent = telem.rpm;
+      document.getElementById('hudSteer').textContent = `${telem.steer}°`;
       document.getElementById('hudRpmBar').style.width = Math.min(100, (telem.rpm / 7500) * 100) + '%';
 
       // ペダルバー反映
@@ -524,6 +564,8 @@
       document.getElementById('valBrkBar').textContent = telem.brk + '%';
       document.getElementById('barClt').style.height = telem.clt + '%';
       document.getElementById('valCltBar').textContent = telem.clt + '%';
+      document.getElementById('labelThr').textContent = telem.thr + '%';
+      document.getElementById('labelBrk').textContent = `${telem.brk}% (${(telem.brk * 0.085).toFixed(1)} MPa)`;
 
       // 履歴更新
       oscilloHistory.shift();
@@ -537,7 +579,6 @@
 
       oscCtx.clearRect(0, 0, w, h);
 
-      // グリッド線
       oscCtx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
       oscCtx.lineWidth = 1;
       for (let y = 0.25; y < 1; y += 0.25) {
@@ -547,7 +588,7 @@
         oscCtx.stroke();
       }
 
-      // スロットル波形 (緑)
+      // スロットル波形 (緑・太さ5.5px)
       oscCtx.strokeStyle = '#10b981';
       oscCtx.lineWidth = 5.5;
       oscCtx.lineCap = 'round';
@@ -560,7 +601,7 @@
       }
       oscCtx.stroke();
 
-      // ブレーキ波形 (赤)
+      // ブレーキ波形 (赤・太さ5.5px)
       oscCtx.strokeStyle = '#f43f5e';
       oscCtx.lineWidth = 5.5;
       oscCtx.lineCap = 'round';
@@ -586,7 +627,6 @@
       gCtx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
       gCtx.lineWidth = 1;
 
-      // 摩擦円ターゲット
       gCtx.beginPath();
       gCtx.arc(cx, cy, radius * 0.66, 0, Math.PI * 2);
       gCtx.stroke();
@@ -594,13 +634,11 @@
       gCtx.arc(cx, cy, radius, 0, Math.PI * 2);
       gCtx.stroke();
 
-      // 十字線
       gCtx.beginPath();
       gCtx.moveTo(cx, 2); gCtx.lineTo(cx, gh - 2);
       gCtx.moveTo(2, cy); gCtx.lineTo(gw - 2, cy);
       gCtx.stroke();
 
-      // Gボール本体
       const bx = cx + (telem.gy / 1.5) * radius;
       const by = cy - (telem.gx / 1.5) * radius;
       gCtx.fillStyle = '#38bdf8';
@@ -624,12 +662,11 @@
       gpsCtx.ellipse(pw * 0.5, ph * 0.52, pw * 0.38, ph * 0.32, -0.2, 0, Math.PI * 2);
       gpsCtx.stroke();
 
-      // 自車位置プロット
       const carAngle = simPhase * 0.5;
       const cpx = pw * 0.5 + Math.cos(carAngle) * pw * 0.38;
       const cpy = ph * 0.52 + Math.sin(carAngle) * ph * 0.32;
-      gpsCtx.fillStyle = '#f43f5e';
-      gpsCtx.shadowColor = '#f43f5e';
+      gpsCtx.fillStyle = '#38bdf8';
+      gpsCtx.shadowColor = '#38bdf8';
       gpsCtx.shadowBlur = 6;
       gpsCtx.beginPath();
       gpsCtx.arc(cpx, cpy, 4, 0, Math.PI * 2);
@@ -642,10 +679,9 @@
         sCanvas.height = sCanvas.offsetHeight;
         const sw = sCanvas.width;
         const sh = sCanvas.height;
-        sCtx.fillStyle = '#090d16';
+        sCtx.fillStyle = '#080c16';
         sCtx.fillRect(0, 0, sw, sh);
 
-        // 疑似ロード
         sCtx.fillStyle = '#1e293b';
         sCtx.beginPath();
         sCtx.moveTo(sw * 0.45, sh * 0.45);
