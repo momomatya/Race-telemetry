@@ -57,16 +57,16 @@
 </head>
 <body class="w-screen h-screen flex flex-col justify-between overflow-hidden relative bg-black select-none">
 
-  <!-- 16:9 背景ビデオ（左半分が黒くならないよう全画面中央フィットを強制） -->
+  <!-- 背景ビデオ（初期値 contain でカメラの上下左右の画角を一切クロップせず100%広く表示） -->
   <video id="remoteVideo" 
-         style="position: absolute !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important; width: 100vw !important; height: 100vh !important; object-fit: cover !important; object-position: center center !important; z-index: 1 !important;" 
+         style="position: absolute !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important; width: 100vw !important; height: 100vh !important; object-fit: contain !important; object-position: center center !important; z-index: 1 !important; background: #000;" 
          class="pointer-events-none opacity-0" 
          autoplay playsinline muted></video>
 
   <!-- カメラ未接続時の背景Canvas -->
   <canvas id="simCanvas" class="absolute inset-0 w-full h-full object-cover z-0"></canvas>
 
-  <!-- 上部ヘッダーバー（スクショ完全一致） -->
+  <!-- 上部ヘッダーバー -->
   <header class="relative z-30 flex items-center justify-between px-2.5 py-1 bg-[#070a12]/95 border-b border-white/15 text-[11px] font-bold tracking-wider">
     <div class="flex items-center gap-2.5">
       <span class="flex items-center gap-1.5 px-2 py-0.5 rounded bg-rose-950/90 border border-rose-500/50 text-rose-400 font-extrabold">
@@ -88,6 +88,9 @@
       </div>
       <button id="btnConnectCar" class="px-2.5 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-[11px] rounded tracking-wider shadow">
         LINKED 📡
+      </button>
+      <button id="btnFovMode" class="px-2 py-0.5 bg-[#161f33] hover:bg-slate-700 text-cyan-300 text-[11px] font-bold rounded border border-cyan-500/30" title="映像の表示比率切替">
+        📐 FOV: FULL-WIDE
       </button>
       <button id="btnReplay" class="px-2 py-0.5 bg-[#161f33] hover:bg-slate-700 text-amber-400 text-[11px] font-bold rounded border border-white/10">
         ⏪ REPLAY 5s
@@ -113,11 +116,10 @@
   <!-- HUDメイン領域 -->
   <main id="hudContainer" class="relative flex-1 w-full h-full overflow-hidden z-20 pointer-events-none">
 
-    <!-- 1. 左上：スピード＆ギアパネル（下部にSTEER / LAP DIST外付けラベル付き） -->
+    <!-- 1. 左上：スピード＆ギアパネル -->
     <div id="panelSpeedo" data-base-w="115" data-base-h="82" data-min-w="95" data-min-h="65"
          class="absolute pointer-events-auto gt-panel rounded-sm p-2 flex flex-col justify-between"
          style="top: 14px; left: 88px; width: 115px; height: 82px; --ui-scale: 1;">
-      <!-- 上部 ENGINE SPEED & RPMバー -->
       <div>
         <div class="hud-handle flex justify-between items-center text-[calc(0.5rem*var(--ui-scale))] font-bold text-slate-400 tracking-wider mb-0.5">
           <span>⠿ ENGINE SPEED</span>
@@ -128,7 +130,6 @@
         </div>
       </div>
 
-      <!-- 中央 車速 ＆ ギア -->
       <div class="flex items-end justify-between pt-1">
         <div>
           <div class="flex items-baseline gap-0.5">
@@ -142,7 +143,6 @@
         </div>
       </div>
 
-      <!-- パネル直下の枠外ラベル（STEER / LAP DIST） -->
       <div class="absolute left-0 right-0 -bottom-7 flex justify-between text-[calc(0.52rem*var(--ui-scale))] mono text-slate-300 pointer-events-none">
         <div>
           <div class="text-[calc(0.42rem*var(--ui-scale))] text-slate-400 font-bold">STEER</div>
@@ -157,7 +157,7 @@
       <div class="resize-handle">⤡</div>
     </div>
 
-    <!-- 2. 左上隣：GT7風 セクタータイム＆デルタボード（青/赤ベタ塗りバッジ仕様） -->
+    <!-- 2. 左上隣：GT7風 セクタータイム＆デルタボード -->
     <div id="panelTimingBoard" data-base-w="115" data-base-h="96" data-min-w="95" data-min-h="75"
          class="absolute pointer-events-auto gt-panel rounded-sm p-1.5 flex flex-col justify-between"
          style="top: 14px; left: 204px; width: 115px; height: 96px; --ui-scale: 1;">
@@ -196,7 +196,7 @@
       <div class="resize-handle">⤡</div>
     </div>
 
-    <!-- 3. 中央上：スリムLIVE LAPタイマー（スクショ完全一致） -->
+    <!-- 3. 中央上：スリムLIVE LAPタイマー -->
     <div id="panelLap" data-base-w="135" data-base-h="32" data-min-w="110" data-min-h="26"
          class="absolute pointer-events-auto gt-panel rounded-sm px-2.5 py-1 flex items-center justify-between"
          style="top: 14px; left: 50%; transform: translateX(-50%); width: 135px; height: 32px; --ui-scale: 1;">
@@ -209,7 +209,7 @@
       <div class="resize-handle">⤡</div>
     </div>
 
-    <!-- 4. 右上：GPS サーキットマップ（富士スピードウェイ形状） -->
+    <!-- 4. 右上：GPS サーキットマップ -->
     <div id="panelGpsMap" data-base-w="88" data-base-h="68" data-min-w="70" data-min-h="55"
          class="absolute pointer-events-auto gt-panel rounded-sm p-1.5 flex flex-col justify-between"
          style="top: 14px; right: 162px; width: 88px; height: 68px; --ui-scale: 1;">
@@ -221,7 +221,7 @@
       <div class="resize-handle">⤡</div>
     </div>
 
-    <!-- 5. 右上端：G-BALL（摩擦円・下部外付けLAT/LON数値付き） -->
+    <!-- 5. 右上端：G-BALL -->
     <div id="panelGBall" data-base-w="68" data-base-h="68" data-min-w="55" data-min-h="55"
          class="absolute pointer-events-auto gt-panel rounded-sm p-1.5 flex flex-col justify-between"
          style="top: 14px; right: 88px; width: 68px; height: 68px; --ui-scale: 1;">
@@ -230,19 +230,17 @@
         <span id="hudGTotal" class="mono text-amber-400 font-extrabold">1.14G</span>
       </div>
       <canvas id="gCanvas" class="w-full flex-1"></canvas>
-      <!-- 枠外下部のLAT/LON表示 -->
       <div class="absolute left-0 right-0 -bottom-4 text-[calc(0.42rem*var(--ui-scale))] mono text-center text-slate-300 whitespace-nowrap pointer-events-none">
         LAT:<span id="hudGLat" class="text-cyan-300 font-bold">-0.71</span> LON:<span id="hudGLon" class="text-rose-400 font-bold">-0.15</span>
       </div>
       <div class="resize-handle">⤡</div>
     </div>
 
-    <!-- 6. 下部：ペダルアプリケーション・トレース（スクショ完全一致・太線オシロスコープ） -->
+    <!-- 6. 下部：ペダルアプリケーション・トレース -->
     <div id="panelPedals" data-base-w="880" data-base-h="66" data-min-w="420" data-min-h="50"
          class="absolute pointer-events-auto gt-panel rounded-sm px-3 py-1.5 flex flex-col justify-between"
          style="bottom: 10px; left: 50%; transform: translateX(-50%); width: 880px; height: 66px; --ui-scale: 1;">
 
-      <!-- 上段タイトル ＆ ライブ数値バー -->
       <div class="hud-handle flex justify-between items-center text-[calc(0.68rem*var(--ui-scale))] font-extrabold tracking-wide">
         <div class="flex items-center gap-3">
           <span class="text-white flex items-center gap-1"><span class="text-cyan-400">⠿</span>•PEDAL APPLICATION TRACE (LAST 6s)</span>
@@ -253,9 +251,7 @@
         <span class="text-slate-400 text-[calc(0.6rem*var(--ui-scale))] tracking-widest">TRAIL BRAKE RELEASE GRADIENT</span>
       </div>
 
-      <!-- 下段：左端ミニバー＋ラベル ＆ 横幅いっぱいオシロスコープ -->
       <div class="flex items-end gap-2.5 flex-1 pt-1 overflow-hidden">
-        <!-- 左端 THR / BRK / CLT ミニインジケータ -->
         <div class="flex items-end gap-1.5 h-full pb-0.5 shrink-0">
           <div class="flex flex-col items-center h-full justify-end">
             <div class="w-4 flex-1 bg-slate-800/90 rounded-sm overflow-hidden flex flex-col justify-end border border-white/10">
@@ -277,7 +273,6 @@
           </div>
         </div>
 
-        <!-- 波形オシロスコープ本体（内部に -6s -4s -2s 0s(NOW) をオーバーレイ） -->
         <div class="relative flex-1 h-full bg-[#060911]/90 rounded-sm border border-white/10 overflow-hidden">
           <canvas id="oscilloCanvas" class="w-full h-full block"></canvas>
           <div class="absolute inset-x-2 bottom-0.5 flex justify-between text-[calc(0.55rem*var(--ui-scale))] mono font-bold text-slate-400 pointer-events-none">
@@ -321,6 +316,7 @@
     let peer = null;
     let dataConn = null;
     let isAutoSim = true;
+    let isWideContain = true; // true: クロップなし(全画角), false: 画面埋め(cover)
 
     let telem = {
       spd: 92, rpm: 4580, gear: 4, thr: 0, brk: 59, clt: 0, gx: -0.15, gy: -0.71, steer: -1.2
@@ -336,11 +332,18 @@
       oscilloHistory.push({ thr: t, brk: b });
     }
 
-    // --- WebRTC 受信処理 ---
     const btnConnectCar = document.getElementById('btnConnectCar');
     const inputRoomCode = document.getElementById('inputRoomCode');
     const remoteVideo = document.getElementById('remoteVideo');
     const simCanvas = document.getElementById('simCanvas');
+    const btnFovMode = document.getElementById('btnFovMode');
+
+    // 画角モード切替（クロップなし全画角 vs 画面いっぱい）
+    btnFovMode.addEventListener('click', () => {
+      isWideContain = !isWideContain;
+      remoteVideo.style.setProperty('object-fit', isWideContain ? 'contain' : 'cover', 'important');
+      btnFovMode.textContent = isWideContain ? '📐 FOV: FULL-WIDE' : '📐 FOV: ZOOM-FILL';
+    });
 
     function attachStreamToFullScreen(stream) {
       remoteVideo.srcObject = stream;
@@ -392,7 +395,7 @@
       });
     });
 
-    // --- ドラッグ移動 ＆ リサイズ（文字スケール自動追従） ---
+    // --- ドラッグ移動 ＆ リサイズ ---
     const hudContainer = document.getElementById('hudContainer');
     const panels = document.querySelectorAll('#hudContainer > div');
 
@@ -461,7 +464,6 @@
     document.getElementById('btnCloseSim').addEventListener('click', () => drawerSim.classList.add('translate-x-full'));
     document.getElementById('chkAutoSim').addEventListener('change', (e) => isAutoSim = e.target.checked);
 
-    // --- 60fps 描画ループ ---
     let simPhase = 4.2;
     const oscilloCanvas = document.getElementById('oscilloCanvas');
     const oscCtx = oscilloCanvas.getContext('2d');
@@ -470,7 +472,6 @@
     const gpsCanvas = document.getElementById('gpsCanvas');
     const gpsCtx = gpsCanvas.getContext('2d');
 
-    // FSW風コース座標
     const fswTrack = [
       [0.12, 0.25], [0.85, 0.25], [0.90, 0.35], [0.78, 0.48],
       [0.62, 0.42], [0.52, 0.55], [0.60, 0.75], [0.42, 0.82],
@@ -499,7 +500,6 @@
         };
       }
 
-      // 数値更新
       document.getElementById('hudSpeed').textContent = Math.round(telem.spd);
       document.getElementById('hudGear').textContent = telem.gear;
       document.getElementById('hudRpm').textContent = Math.round(telem.rpm).toLocaleString();
@@ -520,16 +520,12 @@
       oscilloHistory.shift();
       oscilloHistory.push({ thr: telem.thr, brk: telem.brk });
 
-      // 1. オシロスコープ描画（塗りつぶし＋5.5px太線）
       oscilloCanvas.width = oscilloCanvas.offsetWidth;
       oscilloCanvas.height = oscilloCanvas.offsetHeight;
-      const w = oscilloCanvas.width;
-      const h = oscilloCanvas.height;
+      const w = oscilloCanvas.width, h = oscilloCanvas.height;
       oscCtx.clearRect(0, 0, w, h);
 
-      // スロットル波形 (緑)
       oscCtx.strokeStyle = '#10b981';
-      oscCtx.fillStyle = 'rgba(16, 185, 129, 0.15)';
       oscCtx.lineWidth = 4.5;
       oscCtx.beginPath();
       for (let i = 0; i < oscilloHistory.length; i++) {
@@ -539,7 +535,6 @@
       }
       oscCtx.stroke();
 
-      // ブレーキ波形 (赤)
       oscCtx.strokeStyle = '#f43f5e';
       oscCtx.lineWidth = 4.5;
       oscCtx.beginPath();
@@ -550,7 +545,6 @@
       }
       oscCtx.stroke();
 
-      // 2. G-BALL描画
       gCanvas.width = gCanvas.offsetWidth;
       gCanvas.height = gCanvas.offsetHeight;
       const gw = gCanvas.width, gh = gCanvas.height;
@@ -569,7 +563,6 @@
       gCtx.arc(Math.max(3, Math.min(gw - 3, bx)), Math.max(3, Math.min(gh - 3, by)), 3.5, 0, Math.PI * 2);
       gCtx.fill();
 
-      // 3. FSWコースマップ描画
       gpsCanvas.width = gpsCanvas.offsetWidth;
       gpsCanvas.height = gpsCanvas.offsetHeight;
       const pw = gpsCanvas.width, ph = gpsCanvas.height;
@@ -584,7 +577,6 @@
       });
       gpsCtx.stroke();
 
-      // 自車ドット
       const idx = Math.floor((simPhase * 1.5) % (fswTrack.length - 1));
       const dotX = fswTrack[idx][0] * pw;
       const dotY = fswTrack[idx][1] * ph;
