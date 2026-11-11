@@ -3,383 +3,346 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <!-- PWA / Home Screen Fullscreen App Meta Tags -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="RaceTX">
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="theme-color" content="#05070a">
-  <title>In-Car Transmitter // WebRTC + BLE Bridge</title>
-  <!-- Tailwind CSS -->
+  <title>IN-CAR TELEMETRY TX</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- PeerJS for Zero-Config WebRTC P2P Video + DataChannel -->
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-  <!-- Google Fonts -->
-  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,700;0,900;1,700;1,900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
-
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,800;1,700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
   <style>
     body {
       font-family: 'Barlow Condensed', sans-serif;
       background-color: #05070a;
-      color: #f3f4f6;
-      user-select: none;
+      color: #f1f5f9;
+      overflow: hidden;
       touch-action: manipulation;
     }
-    .font-mono-num {
-      font-family: 'JetBrains Mono', monospace;
-      font-variant-numeric: tabular-nums;
-    }
-    .glass-panel {
-      background: rgba(12, 16, 24, 0.78);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      border: 1px solid rgba(255, 255, 255, 0.14);
-    }
+    .mono { font-family: 'JetBrains Mono', monospace; }
   </style>
 </head>
-<body class="h-screen w-screen overflow-hidden flex flex-col justify-between relative bg-black">
+<body class="h-screen w-screen flex flex-col justify-between select-none">
 
-  <!-- FULLSCREEN CAMERA PREVIEW BACKGROUND -->
-  <video id="cameraPreview" autoplay playsinline muted class="absolute inset-0 w-full h-full object-cover opacity-80"></video>
+  <!-- カメラプレビュー背景 -->
+  <div class="relative flex-1 bg-black overflow-hidden flex items-center justify-center">
+    <video id="cameraPreview" class="w-full h-full object-cover" autoplay playsinline muted></video>
 
-  <!-- TOP BAR: STATUS & ROOM ID -->
-  <header class="relative z-10 glass-panel m-2 p-2.5 px-3.5 rounded flex items-center justify-between shadow-lg">
-    <div class="flex items-center space-x-2.5">
-      <div id="webrtcBadge" class="flex items-center space-x-1.5 bg-amber-500/20 border border-amber-400/50 px-2 py-0.5 rounded text-xs font-black italic text-amber-300">
-        <span id="webrtcDot" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
-        <span id="webrtcStatusText">STANDBY</span>
+    <!-- 上部ステータスオーバーレイ -->
+    <div class="absolute top-3 left-3 right-3 flex flex-wrap items-center justify-between gap-2 bg-slate-950/80 backdrop-blur-md border border-white/15 px-3 py-2 rounded">
+      <div class="flex items-center gap-2">
+        <span id="txDot" class="w-3 h-3 rounded-full bg-slate-500"></span>
+        <span id="txStatus" class="text-sm font-bold tracking-wider uppercase">STANDBY</span>
+      </div>
+      <div class="flex items-center gap-3 text-xs mono">
+        <span id="bleBadge" class="px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-white/10">M5 BLE: OFF</span>
+        <span id="pitBadge" class="px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-white/10">PIT PC: 0</span>
+      </div>
+    </div>
+
+    <!-- 中央ライブ数値モニター（確認用） -->
+    <div class="absolute bottom-3 left-3 right-3 bg-slate-950/85 backdrop-blur-md border border-white/10 p-2.5 rounded grid grid-cols-5 gap-2 text-center">
+      <div>
+        <div class="text-[10px] text-slate-400">SPEED</div>
+        <div id="valSpd" class="text-xl font-extrabold italic text-white mono">0</div>
       </div>
       <div>
-        <span class="text-[10px] text-gray-400 block leading-none font-bold">ROOM ID (PIT CONNECT KEY)</span>
-        <div class="flex items-center space-x-1.5">
-          <input id="roomIdInput" type="text" value="ND-27" class="bg-black/60 border border-cyan-500/40 rounded px-2 py-0.5 text-base font-mono-num font-bold text-cyan-300 w-24 uppercase focus:outline-none focus:border-cyan-400" />
-          <button id="btnStartStream" class="bg-cyan-600 hover:bg-cyan-500 active:scale-95 text-white font-black italic px-3 py-1 rounded text-xs tracking-wider shadow transition">
-            START TX
-          </button>
-        </div>
+        <div class="text-[10px] text-slate-400">RPM</div>
+        <div id="valRpm" class="text-xl font-extrabold italic text-cyan-400 mono">0</div>
+      </div>
+      <div>
+        <div class="text-[10px] text-slate-400">THR %</div>
+        <div id="valThr" class="text-xl font-extrabold italic text-emerald-400 mono">0</div>
+      </div>
+      <div>
+        <div class="text-[10px] text-slate-400">BRK %</div>
+        <div id="valBrk" class="text-xl font-extrabold italic text-rose-500 mono">0</div>
+      </div>
+      <div>
+        <div class="text-[10px] text-slate-400">G (X/Y)</div>
+        <div id="valG" class="text-sm font-bold text-amber-400 mono mt-1">0.0/0.0</div>
       </div>
     </div>
+  </div>
 
-    <!-- Right Controls: Camera & BLE -->
-    <div class="flex items-center space-x-2">
-      <button id="btnBleConnect" class="px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-black italic text-xs border border-indigo-400/40 flex items-center gap-1.5 shadow">
-        <span>🦷</span>
-        <span id="bleBtnText">CONNECT M5 BLE</span>
+  <!-- 下部コントロールパネル -->
+  <div class="bg-slate-900 border-t border-white/15 p-3 space-y-2.5">
+    <div class="flex items-center gap-2">
+      <div class="flex items-center bg-slate-950 border border-white/15 rounded px-2.5 py-1.5 flex-1">
+        <span class="text-xs text-slate-400 mr-2 font-bold">ROOM ID:</span>
+        <input id="roomInput" type="text" value="ND-27" class="bg-transparent text-cyan-400 font-bold mono text-base w-full focus:outline-none uppercase" />
+      </div>
+      <button id="btnCamToggle" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-bold rounded border border-white/10">
+        🔄 CAM切替
       </button>
-
-      <button id="btnSimToggle" class="px-2.5 py-1.5 rounded bg-white/10 hover:bg-white/15 active:scale-95 text-amber-300 font-bold text-xs border border-amber-400/30">
-        DEMO DATA: OFF
-      </button>
-
-      <button id="btnSwitchCam" title="カメラ前後切替" class="p-1.5 px-2.5 rounded bg-white/10 hover:bg-white/20 text-white text-xs font-bold border border-white/15">
-        🔄 CAM
+      <button id="btnDemo" class="px-3 py-2 bg-amber-500/20 border border-amber-400/50 text-amber-300 text-xs font-bold rounded">
+        DEMO: ON
       </button>
     </div>
-  </header>
 
-  <!-- CENTER DIAGNOSTIC HUD (MINI TELEMETRY MONITOR FOR DRIVER/MECHANIC) -->
-  <main class="relative z-10 flex-1 flex flex-col justify-end p-2 pointer-events-none">
-    
-    <!-- Alert / Notification Banner -->
-    <div id="statusToast" class="self-center mb-auto mt-2 glass-panel px-4 py-1.5 rounded-full text-xs font-bold tracking-wider text-cyan-300 border border-cyan-500/30 shadow-lg">
-      1. ルームIDを確認して「START TX」をタップ ➔ 2. ピットPC側で同じIDに接続
+    <div class="grid grid-cols-2 gap-2">
+      <button id="btnBle" class="py-3 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-bold text-sm rounded tracking-wider shadow">
+        1. CONNECT M5 BLE
+      </button>
+      <button id="btnStartTx" class="py-3 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-extrabold text-base rounded tracking-wider shadow-lg">
+        2. START TX (配信開始)
+      </button>
     </div>
-
-    <!-- Bottom Telemetry Live Readout Bar -->
-    <div class="glass-panel rounded p-2.5 pointer-events-auto grid grid-cols-4 sm:grid-cols-6 gap-2 items-center font-mono-num text-center">
-      <div class="bg-black/50 p-1.5 rounded border border-white/10">
-        <span class="text-[10px] text-gray-400 block font-sans font-bold">SPEED (km/h)</span>
-        <span id="txSpeed" class="text-xl font-bold text-white">0</span>
-      </div>
-      <div class="bg-black/50 p-1.5 rounded border border-white/10">
-        <span class="text-[10px] text-gray-400 block font-sans font-bold">ENGINE RPM</span>
-        <span id="txRpm" class="text-xl font-bold text-cyan-400">0</span>
-      </div>
-      <div class="bg-black/50 p-1.5 rounded border border-white/10">
-        <span class="text-[10px] text-gray-400 block font-sans font-bold">THROTTLE</span>
-        <span id="txThr" class="text-xl font-bold text-emerald-400">0%</span>
-      </div>
-      <div class="bg-black/50 p-1.5 rounded border border-white/10">
-        <span class="text-[10px] text-gray-400 block font-sans font-bold">BRAKE</span>
-        <span id="txBrk" class="text-xl font-bold text-red-400">0%</span>
-      </div>
-      <div class="hidden sm:block bg-black/50 p-1.5 rounded border border-white/10">
-        <span class="text-[10px] text-gray-400 block font-sans font-bold">G-FORCE (X/Y)</span>
-        <span id="txG" class="text-sm font-bold text-amber-300">0.00 / 0.00</span>
-      </div>
-      <div class="hidden sm:block bg-black/50 p-1.5 rounded border border-white/10">
-        <span class="text-[10px] text-gray-400 block font-sans font-bold">TX RATE</span>
-        <span id="txRate" class="text-sm font-bold text-emerald-400">25 Hz</span>
-      </div>
-    </div>
-
-  </main>
+    <div id="logBox" class="text-[11px] mono text-slate-400 truncate">Ready. カメラを許可して「2. START TX」を押してください。</div>
+  </div>
 
   <script>
-    /* ============================================================================
-     *  IN-CAR WEBRTC TRANSMITTER & M5STACK WEB BLUETOOTH BRIDGE
-     * ============================================================================ */
+    const NUS_SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
+    const NUS_TX_CHAR_UUID = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
 
-    // --- Nordic UART Service UUIDs (Matches M5Stack Basic Firmware) ---
-    const BLE_SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
-    const BLE_CHAR_TX_UUID = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
-
-    // --- State ---
-    let localStream = null;
-    let facingMode = 'environment'; // Rear camera default for windshield mount
-    let peer = null;
-    let activeDataConnections = [];
-    let bleDevice = null;
-    let demoInterval = null;
-    let isDemoActive = false;
-    let wakeLock = null;
-
-    // --- Screen Wake Lock (Prevent smartphone screen from sleeping while driving) ---
-    async function requestWakeLock() {
-      if ('wakeLock' in navigator) {
-        try {
-          wakeLock = await navigator.wakeLock.request('screen');
-        } catch (err) {
-          console.warn('WakeLock notice:', err.message);
-        }
+    const PEER_CONFIG = {
+      debug: 2,
+      config: {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:stun2.l.google.com:19302' }
+        ]
       }
-    }
-    document.addEventListener('visibilitychange', () => {
-      if (wakeLock !== null && document.visibilityState === 'visible') {
-        requestWakeLock();
-      }
-    });
-
-    const currentTelemetry = {
-      spd: 0,
-      rpm: 0,
-      gr: 1,
-      thr: 0,
-      brk: 0,
-      gx: 0.0,
-      gy: 0.0,
-      t: Date.now()
     };
 
-    // --- DOM Elements ---
-    const cameraPreview = document.getElementById('cameraPreview');
-    const roomIdInput = document.getElementById('roomIdInput');
-    const btnStartStream = document.getElementById('btnStartStream');
-    const btnBleConnect = document.getElementById('btnBleConnect');
-    const bleBtnText = document.getElementById('bleBtnText');
-    const btnSimToggle = document.getElementById('btnSimToggle');
-    const btnSwitchCam = document.getElementById('btnSwitchCam');
-    const webrtcBadge = document.getElementById('webrtcBadge');
-    const webrtcDot = document.getElementById('webrtcDot');
-    const webrtcStatusText = document.getElementById('webrtcStatusText');
-    const statusToast = document.getElementById('statusToast');
+    let localStream = null;
+    let facingMode = 'environment'; // 外カメラ優先
+    let peer = null;
+    let activeDataConns = [];
+    let activeMediaCalls = [];
+    let isDemoMode = true;
+    let bleConnected = false;
+    let demoPhase = 0;
 
-    const txSpeed = document.getElementById('txSpeed');
-    const txRpm = document.getElementById('txRpm');
-    const txThr = document.getElementById('txThr');
-    const txBrk = document.getElementById('txBrk');
-    const txG = document.getElementById('txG');
+    let latestTelemetry = {
+      spd: 0, rpm: 1000, gear: 1, thr: 0, brk: 0, gx: 0, gy: 0, steer: 0
+    };
 
-    function setToast(msg) {
-      statusToast.textContent = msg;
+    function logMsg(msg) {
+      console.log(msg);
+      document.getElementById('logBox').textContent = msg;
     }
 
-    // --- 1. Initialize Camera (720p 60fps optimal for low-latency WebRTC) ---
-    async function initCamera() {
+    // 1. カメラ起動
+    async function startCamera() {
+      if (localStream) {
+        localStream.getTracks().forEach(t => t.stop());
+      }
       try {
-        if (localStream) {
-          localStream.getTracks().forEach(track => track.stop());
-        }
         localStream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: { ideal: facingMode },
             width: { ideal: 1280 },
             height: { ideal: 720 },
-            frameRate: { ideal: 30, max: 60 }
+            frameRate: { ideal: 30 }
           },
-          audio: false // Audio handled via dedicated coach radio or optional
+          audio: false
         });
-        cameraPreview.srcObject = localStream;
+        const videoEl = document.getElementById('cameraPreview');
+        videoEl.srcObject = localStream;
+        await videoEl.play().catch(() => {});
+        logMsg(`Camera Ready (${facingMode}).`);
+        return true;
       } catch (err) {
-        console.warn('Camera fallback:', err);
-        setToast('カメラの権限を許可してください（カメラ無しでもデータ送信は可能）');
+        logMsg('Camera Error: ' + err.message);
+        return false;
       }
     }
 
-    btnSwitchCam.addEventListener('click', () => {
-      facingMode = facingMode === 'environment' ? 'user' : 'environment';
-      initCamera();
-    });
-
-    // --- 2. Web Bluetooth API Connection to M5Stack Basic ---
-    btnBleConnect.addEventListener('click', async () => {
-      if (!navigator.bluetooth) {
-        setToast('⚠️ このブラウザはWeb Bluetoothに非対応です（Chrome/EdgeまたはBluefyを使用してください）');
-        return;
-      }
-
-      try {
-        setToast('M5-TELEMETRY-ND を検索中...');
-        bleDevice = await navigator.bluetooth.requestDevice({
-          filters: [{ namePrefix: 'M5-' }],
-          optionalServices: [BLE_SERVICE_UUID]
-        });
-
-        bleDevice.addEventListener('gattserverdisconnected', () => {
-          bleBtnText.textContent = 'RECONNECT M5 BLE';
-          btnBleConnect.classList.replace('bg-emerald-600', 'bg-indigo-600');
-          setToast('⚠️ M5Stack BLEが切断されました');
-        });
-
-        const server = await bleDevice.gatt.connect();
-        const service = await server.getPrimaryService(BLE_SERVICE_UUID);
-        const characteristic = await service.getCharacteristic(BLE_CHAR_TX_UUID);
-
-        await characteristic.startNotifications();
-        characteristic.addEventListener('characteristicvaluechanged', (event) => {
-          const rawStr = new TextDecoder().decode(event.target.value);
-          try {
-            const parsed = JSON.parse(rawStr);
-            Object.assign(currentTelemetry, parsed);
-            currentTelemetry.t = Date.now();
-            updateLocalMonitorAndForward();
-          } catch (e) {
-            // Ignore partial BLE MTU fragments
-          }
-        });
-
-        bleBtnText.textContent = 'M5 BLE CONNECTED';
-        btnBleConnect.classList.replace('bg-indigo-600', 'bg-emerald-600');
-        setToast('✅ M5Stack Basic とBluetooth接続完了！25Hz受信中');
-      } catch (err) {
-        console.error('BLE Error:', err);
-        setToast('BLE接続がキャンセルまたは失敗しました');
-      }
-    });
-
-    // --- 3. Demo Telemetry Generator (For testing Smartphone -> PC without M5Stack) ---
-    btnSimToggle.addEventListener('click', () => {
-      isDemoActive = !isDemoActive;
-      if (isDemoActive) {
-        btnSimToggle.textContent = 'DEMO DATA: ON (25Hz)';
-        btnSimToggle.classList.replace('bg-white/10', 'bg-amber-600');
-        btnSimToggle.classList.replace('text-amber-300', 'text-white');
-        setToast('🧪 スマホ単体テスト用デモテレメトリ送信を開始しました');
-
-        let t = 0;
-        demoInterval = setInterval(() => {
-          t += 0.04;
-          const cycle = t % 14;
-          if (cycle < 5) {
-            currentTelemetry.thr = 100;
-            currentTelemetry.brk = 0;
-            currentTelemetry.spd = Math.min(192, 110 + cycle * 16);
-            currentTelemetry.rpm = Math.round(4800 + cycle * 450);
-            currentTelemetry.gr = currentTelemetry.spd > 160 ? 5 : 4;
-            currentTelemetry.gx = Math.sin(t * 3) * 0.06;
-            currentTelemetry.gy = 0.38;
-          } else if (cycle < 8.5) {
-            const p = cycle - 5;
-            currentTelemetry.thr = 0;
-            currentTelemetry.brk = Math.max(0, 95 - p * 26);
-            currentTelemetry.spd = Math.max(66, 192 - p * 36);
-            currentTelemetry.rpm = Math.round(4100 + p * 200);
-            currentTelemetry.gr = 2;
-            currentTelemetry.gx = Math.min(1.25, p * 0.45);
-            currentTelemetry.gy = -(currentTelemetry.brk / 100) * 1.25;
-          } else {
-            const p = cycle - 8.5;
-            currentTelemetry.brk = 0;
-            currentTelemetry.thr = Math.min(100, p * 24);
-            currentTelemetry.spd = 66 + p * 14;
-            currentTelemetry.rpm = Math.round(4400 + p * 500);
-            currentTelemetry.gr = 3;
-            currentTelemetry.gx = Math.max(0, 1.15 - p * 0.22);
-            currentTelemetry.gy = 0.42;
-          }
-          currentTelemetry.t = Date.now();
-          updateLocalMonitorAndForward();
-        }, 40); // 25Hz
-      } else {
-        clearInterval(demoInterval);
-        btnSimToggle.textContent = 'DEMO DATA: OFF';
-        btnSimToggle.classList.replace('bg-amber-600', 'bg-white/10');
-        btnSimToggle.classList.replace('text-white', 'text-amber-300');
-      }
-    });
-
-    // --- 4. Update Local UI & Broadcast via WebRTC DataChannel ---
-    function updateLocalMonitorAndForward() {
-      txSpeed.textContent = Math.round(currentTelemetry.spd);
-      txRpm.textContent = Math.round(currentTelemetry.rpm);
-      txThr.textContent = `${Math.round(currentTelemetry.thr)}%`;
-      txBrk.textContent = `${Math.round(currentTelemetry.brk)}%`;
-      txG.textContent = `${currentTelemetry.gx.toFixed(2)} / ${currentTelemetry.gy.toFixed(2)}`;
-
-      // Forward over all connected Pit PC DataChannels
-      const packetStr = JSON.stringify(currentTelemetry);
-      activeDataConnections.forEach(conn => {
-        if (conn && conn.open) {
-          conn.send(packetStr);
+    document.getElementById('btnCamToggle').addEventListener('click', async () => {
+      facingMode = (facingMode === 'environment') ? 'user' : 'environment';
+      await startCamera();
+      // 既に接続中のピットPCがあれば新しいカメラ映像を送り直す
+      activeDataConns.forEach(conn => {
+        if (conn.open && localStream) {
+          peer.call(conn.peer, localStream);
         }
       });
-    }
+    });
 
-    // --- 5. Start WebRTC P2P Host (Video + Unordered Low-Latency DataChannel) ---
-    btnStartStream.addEventListener('click', () => {
-      requestWakeLock(); // Keep screen awake during track session
-      const cleanId = roomIdInput.value.trim().toUpperCase().replace(/[^A-Z0-9-]/g, '');
-      if (!cleanId) {
-        setToast('ルームIDを入力してください');
+    // 2. DEMOモード切替
+    const btnDemo = document.getElementById('btnDemo');
+    btnDemo.addEventListener('click', () => {
+      isDemoMode = !isDemoMode;
+      btnDemo.textContent = isDemoMode ? 'DEMO: ON' : 'DEMO: OFF';
+      btnDemo.className = isDemoMode
+        ? 'px-3 py-2 bg-amber-500/20 border border-amber-400/50 text-amber-300 text-xs font-bold rounded'
+        : 'px-3 py-2 bg-slate-800 border border-white/10 text-slate-400 text-xs font-bold rounded';
+    });
+
+    // 3. M5Stack BLE接続
+    document.getElementById('btnBle').addEventListener('click', async () => {
+      if (!navigator.bluetooth) {
+        logMsg('このブラウザはWeb Bluetooth非対応です（Android ChromeまたはBluefyを使用）');
         return;
       }
+      try {
+        logMsg('M5Stackを検索中...');
+        const device = await navigator.bluetooth.requestDevice({
+          filters: [{ namePrefix: 'M5' }],
+          optionalServices: [NUS_SERVICE_UUID]
+        });
+        const server = await device.gatt.connect();
+        const service = await server.getPrimaryService(NUS_SERVICE_UUID);
+        const char = await service.getCharacteristic(NUS_TX_CHAR_UUID);
+        await char.startNotifications();
 
-      if (peer) {
-        peer.destroy();
+        bleConnected = true;
+        isDemoMode = false;
+        btnDemo.textContent = 'DEMO: OFF';
+        document.getElementById('bleBadge').textContent = 'M5 BLE: LINKED';
+        document.getElementById('bleBadge').className = 'px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/40';
+        logMsg('M5Stack BLE Connected!');
+
+        let buffer = '';
+        char.addEventListener('characteristicvaluechanged', (e) => {
+          const chunk = new TextDecoder().decode(e.target.value);
+          buffer += chunk;
+          let lines = buffer.split('\n');
+          buffer = lines.pop();
+          for (let line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const d = JSON.parse(line);
+              latestTelemetry = {
+                spd: d.spd ?? 0,
+                rpm: d.rpm ?? 0,
+                gear: d.gear ?? 1,
+                thr: d.thr ?? 0,
+                brk: d.brk ?? 0,
+                gx: d.gx ?? 0,
+                gy: d.gy ?? 0,
+                steer: d.steer ?? 0
+              };
+            } catch (err) {}
+          }
+        });
+      } catch (err) {
+        logMsg('BLE Error: ' + err.message);
+      }
+    });
+
+    // 4. WebRTC 配信開始 (ここが重要！PCからの接続を受けたらスマホ側から映像を逆コールする)
+    document.getElementById('btnStartTx').addEventListener('click', async () => {
+      const roomCode = document.getElementById('roomInput').value.trim().toUpperCase();
+      if (!roomCode) return;
+
+      if (!localStream) {
+        const ok = await startCamera();
+        if (!ok) return;
       }
 
-      const fullPeerId = `RACE-COACH-${cleanId}`;
-      setToast(`ルーム [${cleanId}] を開設中...`);
+      if (peer) peer.destroy();
+      activeDataConns = [];
 
-      peer = new Peer(fullPeerId);
+      const peerId = 'RACE-CAR-' + roomCode;
+      logMsg(`Connecting signaling server as [${peerId}]...`);
+
+      peer = new Peer(peerId, PEER_CONFIG);
 
       peer.on('open', (id) => {
-        webrtcStatusText.textContent = `WAITING PIT (${cleanId})`;
-        webrtcBadge.className = 'flex items-center space-x-1.5 bg-cyan-500/20 border border-cyan-400/50 px-2 py-0.5 rounded text-xs font-black italic text-cyan-300';
-        webrtcDot.className = 'w-2 h-2 rounded-full bg-cyan-400 animate-ping';
-        btnStartStream.textContent = 'ACTIVE';
-        setToast(`✅ 待機中！ピットPC側の「📡 WEBRTC LIVE」でルームID【${cleanId}】に接続してください`);
+        document.getElementById('txDot').className = 'w-3 h-3 rounded-full bg-emerald-400 animate-ping';
+        document.getElementById('txStatus').textContent = 'ON AIR: ' + roomCode;
+        document.getElementById('btnStartTx').textContent = 'TRANSMITTING (配信中)';
+        document.getElementById('btnStartTx').className = 'py-3 bg-cyan-600 text-white font-extrabold text-base rounded tracking-wider shadow-lg';
+        logMsg(`待機中！PC側で ROOM [${roomCode}] にして「LINK CAR」を押してください。`);
       });
 
-      // When Pit PC connects for Telemetry DataChannel
-      peer.on('connection', (dataConn) => {
-        activeDataConnections.push(dataConn);
+      // ★キモ1：ピットPCからDataChannel接続が来たら、即座にスマホ側から映像ストリームをCall（逆発信）する！
+      peer.on('connection', (conn) => {
+        logMsg(`Pit PC Linked (${conn.peer})! カメラ映像を送信中...`);
+        activeDataConns.push(conn);
+        updatePitCount();
 
-        dataConn.on('open', () => {
-          webrtcStatusText.textContent = 'LIVE // PIT LINKED';
-          webrtcBadge.className = 'flex items-center space-x-1.5 bg-emerald-500/20 border border-emerald-400/50 px-2 py-0.5 rounded text-xs font-black italic text-emerald-300';
-          webrtcDot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-ping';
-          setToast('🟢 ピットPCと接続完了！映像＆テレメトリをリアルタイム伝送中');
-
-          // Immediately call the Pit PC back with our Camera Video Stream
+        conn.on('open', () => {
           if (localStream) {
-            peer.call(dataConn.peer, localStream);
+            logMsg(`Pushing camera stream to Pit PC...`);
+            const mediaCall = peer.call(conn.peer, localStream);
+            activeMediaCalls.push(mediaCall);
           }
         });
 
-        dataConn.on('close', () => {
-          activeDataConnections = activeDataConnections.filter(c => c !== dataConn);
+        conn.on('data', (data) => {
+          // PCから再リクエストが来た場合もカメラ映像をコールする
+          if (data && data.type === 'REQUEST_VIDEO' && localStream) {
+            peer.call(conn.peer, localStream);
+          }
         });
+
+        conn.on('close', () => {
+          activeDataConns = activeDataConns.filter(c => c !== conn);
+          updatePitCount();
+        });
+      });
+
+      // ★キモ2：もしPC側から直接callが来た場合も両方対応して応答する
+      peer.on('call', (call) => {
+        if (localStream) {
+          call.answer(localStream);
+          logMsg('Answered direct video call from Pit PC!');
+        }
       });
 
       peer.on('error', (err) => {
-        console.error('PeerJS error:', err);
-        setToast(`通信エラー: ${err.type} (別のルームIDを試してください)`);
+        logMsg('Peer Error: ' + err.type + ' - ' + err.message);
       });
+
+      // スリープ防止
+      if ('wakeLock' in navigator) {
+        navigator.wakeLock.request('screen').catch(() => {});
+      }
     });
 
+    function updatePitCount() {
+      const count = activeDataConns.filter(c => c.open).length;
+      const badge = document.getElementById('pitBadge');
+      badge.textContent = `PIT PC: ${count}`;
+      badge.className = count > 0
+        ? 'px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-400/50 font-bold'
+        : 'px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-white/10';
+    }
+
+    // 5. 25Hz (40ms) テレメトリ送信ループ
+    setInterval(() => {
+      if (isDemoMode && !bleConnected) {
+        demoPhase += 0.05;
+        const wave = Math.sin(demoPhase);
+        const brkZone = wave < -0.25 ? Math.min(100, Math.round((-wave - 0.25) * 145)) : 0;
+        const thrZone = brkZone === 0 ? Math.min(100, Math.max(0, Math.round((wave + 0.3) * 90))) : 0;
+        const spd = Math.round(135 + wave * 65);
+        latestTelemetry = {
+          spd: spd,
+          rpm: Math.round(3800 + (spd % 45) * 80),
+          gear: spd > 175 ? 5 : spd > 135 ? 4 : spd > 95 ? 3 : 2,
+          thr: thrZone,
+          brk: brkZone,
+          gx: Number((brkZone > 0 ? -brkZone * 0.012 : thrZone * 0.004).toFixed(2)),
+          gy: Number((Math.cos(demoPhase * 0.8) * 1.15).toFixed(2)),
+          steer: Math.round(Math.cos(demoPhase * 0.8) * 95)
+        };
+      }
+
+      // 画面表示更新
+      document.getElementById('valSpd').textContent = Math.round(latestTelemetry.spd);
+      document.getElementById('valRpm').textContent = Math.round(latestTelemetry.rpm);
+      document.getElementById('valThr').textContent = Math.round(latestTelemetry.thr);
+      document.getElementById('valBrk').textContent = Math.round(latestTelemetry.brk);
+      document.getElementById('valG').textContent = `${latestTelemetry.gx.toFixed(1)}/${latestTelemetry.gy.toFixed(1)}`;
+
+      // ピットPCへ送信
+      const payload = {
+        t: Date.now(),
+        ...latestTelemetry
+      };
+      activeDataConns.forEach(conn => {
+        if (conn.open) {
+          conn.send(payload);
+        }
+      });
+    }, 40);
+
+    // 起動時にカメラ初期化
     window.addEventListener('load', () => {
-      initCamera();
+      startCamera();
     });
   </script>
 </body>
