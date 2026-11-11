@@ -22,9 +22,9 @@
 </head>
 <body class="h-screen w-screen flex flex-col justify-between select-none">
 
-  <!-- カメラプレビュー背景 (スマホ上での確認用) -->
+  <!-- カメラプレビュー背景 (スマホ上でもトリミングせず全画角を確認できるよう contain 指定) -->
   <div class="relative flex-1 bg-black overflow-hidden flex items-center justify-center">
-    <video id="cameraPreview" class="w-full h-full object-cover" autoplay playsinline muted></video>
+    <video id="cameraPreview" class="w-full h-full object-contain" autoplay playsinline muted></video>
 
     <!-- 上部ステータスオーバーレイ -->
     <div class="absolute top-3 left-3 right-3 flex flex-wrap items-center justify-between gap-2 bg-slate-950/80 backdrop-blur-md border border-white/15 px-3 py-2 rounded">
@@ -32,14 +32,15 @@
         <span id="txDot" class="w-3 h-3 rounded-full bg-slate-500"></span>
         <span id="txStatus" class="text-sm font-bold tracking-wider uppercase">STANDBY</span>
       </div>
-      <div class="flex items-center gap-3 text-xs mono">
+      <div class="flex items-center gap-2 text-xs mono">
+        <span id="lensBadge" class="px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-500/30">LENS: AUTO</span>
         <span id="bleBadge" class="px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-white/10">M5 BLE: OFF</span>
         <span id="pitBadge" class="px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-white/10">PIT PC: 0</span>
       </div>
     </div>
 
-    <!-- 中央ライブ数値モニター（確認用） -->
-    <div class="absolute bottom-3 left-3 right-3 bg-slate-950/85 backdrop-blur-md border border-white/10 p-2.5 rounded grid grid-cols-5 gap-2 text-center">
+    <!-- 中央ライブ数値モニター -->
+    <div class="absolute bottom-3 left-3 right-3 bg-slate-950/85 backdrop-blur-md border border-white/10 p-2 rounded grid grid-cols-5 gap-2 text-center">
       <div>
         <div class="text-[10px] text-slate-400">SPEED</div>
         <div id="valSpd" class="text-xl font-extrabold italic text-white mono">0</div>
@@ -64,29 +65,29 @@
   </div>
 
   <!-- 下部コントロールパネル -->
-  <div class="bg-slate-900 border-t border-white/15 p-3 space-y-2.5">
-    <div class="flex items-center gap-2">
-      <div class="flex items-center bg-slate-950 border border-white/15 rounded px-2.5 py-1.5 flex-1">
-        <span class="text-xs text-slate-400 mr-2 font-bold">ROOM ID:</span>
+  <div class="bg-slate-900 border-t border-white/15 p-3 space-y-2">
+    <div class="flex items-center gap-1.5">
+      <div class="flex items-center bg-slate-950 border border-white/15 rounded px-2 py-1.5 flex-1">
+        <span class="text-xs text-slate-400 mr-1.5 font-bold">ROOM:</span>
         <input id="roomInput" type="text" value="ND-27" class="bg-transparent text-cyan-400 font-bold mono text-base w-full focus:outline-none uppercase" />
       </div>
-      <button id="btnCamToggle" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-bold rounded border border-white/10">
-        🔄 CAM切替
+      <button id="btnWideLens" class="px-2.5 py-2 bg-cyan-700 hover:bg-cyan-600 active:bg-cyan-800 text-white text-xs font-extrabold rounded border border-cyan-400/40 shadow">
+        📐 広角レンズ切替
       </button>
-      <button id="btnDemo" class="px-3 py-2 bg-amber-500/20 border border-amber-400/50 text-amber-300 text-xs font-bold rounded">
+      <button id="btnDemo" class="px-2.5 py-2 bg-amber-500/20 border border-amber-400/50 text-amber-300 text-xs font-bold rounded">
         DEMO: ON
       </button>
     </div>
 
     <div class="grid grid-cols-2 gap-2">
-      <button id="btnBle" class="py-3 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-bold text-sm rounded tracking-wider shadow">
+      <button id="btnBle" class="py-2.5 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-bold text-sm rounded tracking-wider shadow">
         1. CONNECT M5 BLE
       </button>
-      <button id="btnStartTx" class="py-3 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-extrabold text-base rounded tracking-wider shadow-lg">
+      <button id="btnStartTx" class="py-2.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-extrabold text-base rounded tracking-wider shadow-lg">
         2. START TX (配信開始)
       </button>
     </div>
-    <div id="logBox" class="text-[11px] mono text-slate-400 truncate">Ready. スマホを横向きにして「2. START TX」を押してください。</div>
+    <div id="logBox" class="text-[11px] mono text-slate-400 truncate">「📐 広角レンズ切替」で超広角(0.5x)カメラを選択できます。</div>
   </div>
 
   <script>
@@ -105,7 +106,8 @@
     };
 
     let localStream = null;
-    let facingMode = 'environment'; // 外カメラ優先
+    let videoDevices = [];
+    let currentDeviceIndex = -1;
     let peer = null;
     let activeDataConns = [];
     let isDemoMode = true;
@@ -121,29 +123,88 @@
       document.getElementById('logBox').textContent = msg;
     }
 
-    // 1. カメラ起動 (iPhone横向き16:9強制対応)
-    async function startCamera() {
+    // 背面カメラ一覧を取得し、超広角(Ultra Wide)があれば優先リスト化する
+    async function loadVideoDevices() {
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const allCams = devices.filter(d => d.kind === 'videoinput');
+        // 背面カメラっぽいものを優先しつつ全カメラを保持
+        const backCams = allCams.filter(d => !d.label.toLowerCase().includes('front') && !d.label.toLowerCase().includes('前面'));
+        videoDevices = backCams.length > 0 ? backCams : allCams;
+
+        // ラベルに ultra wide や 超広角 や 0.5 が含まれるものがあれば初期インデックスにする
+        const ultraIdx = videoDevices.findIndex(d => {
+          const l = d.label.toLowerCase();
+          return l.includes('ultra') || l.includes('超広角') || l.includes('0.5') || l.includes('wide');
+        });
+        if (ultraIdx !== -1 && currentDeviceIndex === -1) {
+          currentDeviceIndex = ultraIdx;
+        } else if (currentDeviceIndex === -1 && videoDevices.length > 0) {
+          currentDeviceIndex = 0;
+        }
+      } catch (e) {
+        console.warn(e);
+      }
+    }
+
+    // 1. カメラ起動 (超広角＆最小ズームアウト自動適用)
+    async function startCamera(specificDeviceId = null) {
       if (localStream) {
         localStream.getTracks().forEach(t => t.stop());
       }
       try {
-        const isLandscape = window.innerWidth > window.innerHeight;
-        const idealW = isLandscape ? 1280 : 720;
-        const idealH = isLandscape ? 720 : 1280;
+        const videoConstraints = {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          frameRate: { ideal: 30 }
+        };
+
+        if (specificDeviceId) {
+          videoConstraints.deviceId = { exact: specificDeviceId };
+        } else {
+          videoConstraints.facingMode = { ideal: 'environment' };
+        }
 
         localStream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { ideal: facingMode },
-            width: { ideal: idealW },
-            height: { ideal: idealH },
-            aspectRatio: { ideal: 1.7777777778 }
-          },
+          video: videoConstraints,
           audio: false
         });
+
+        // 初回許可後にデバイス一覧を取得
+        if (videoDevices.length === 0) {
+          await loadVideoDevices();
+        }
+
+        const videoTrack = localStream.getVideoTracks()[0];
+        if (videoTrack) {
+          const label = videoTrack.label || `CAM #${currentDeviceIndex + 1}`;
+          document.getElementById('lensBadge').textContent = label.substring(0, 18);
+
+          // ブラウザがハードウェアズーム制御に対応していれば最小値(最広角)に引き下げる
+          if (videoTrack.getCapabilities) {
+            const caps = videoTrack.getCapabilities();
+            if (caps.zoom && typeof caps.zoom.min === 'number') {
+              await videoTrack.applyConstraints({
+                advanced: [{ zoom: caps.zoom.min }]
+              }).catch(() => {});
+              logMsg(`Wide Zoom Applied (${caps.zoom.min}x) - ${label}`);
+            } else {
+              logMsg(`Active Lens: ${label}`);
+            }
+          }
+        }
+
         const videoEl = document.getElementById('cameraPreview');
         videoEl.srcObject = localStream;
         await videoEl.play().catch(() => {});
-        logMsg(`Camera Ready (${facingMode} / ${isLandscape ? 'Landscape' : 'Portrait'}).`);
+
+        // 接続中のピットPCへ新しい広角ストリームを即時プッシュ
+        activeDataConns.forEach(conn => {
+          if (conn.open && peer) {
+            peer.call(conn.peer, localStream);
+          }
+        });
+
         return true;
       } catch (err) {
         logMsg('Camera Error: ' + err.message);
@@ -151,28 +212,26 @@
       }
     }
 
-    // 向き変更時の自動リスタート
-    window.addEventListener('orientationchange', () => {
-      setTimeout(() => {
-        startCamera().then(() => {
-          activeDataConns.forEach(conn => {
-            if (conn.open && localStream && peer) {
-              peer.call(conn.peer, localStream);
-            }
-          });
-        });
-      }, 300);
+    // 「📐 広角レンズ切替」ボタン：スマホの複数レンズ（標準 ➔ 超広角0.5x ➔ 望遠）を順番に切り替える
+    document.getElementById('btnWideLens').addEventListener('click', async () => {
+      await loadVideoDevices();
+      if (videoDevices.length <= 1) {
+        logMsg('切替可能な別レンズが見つかりません。最小ズームを再適用します。');
+        await startCamera();
+        return;
+      }
+      currentDeviceIndex = (currentDeviceIndex + 1) % videoDevices.length;
+      const targetCam = videoDevices[currentDeviceIndex];
+      logMsg(`レンズ切替中 (${currentDeviceIndex + 1}/${videoDevices.length}): ${targetCam.label || 'Lens'}`);
+      await startCamera(targetCam.deviceId);
     });
 
-    // カメラ切替
-    document.getElementById('btnCamToggle').addEventListener('click', async () => {
-      facingMode = (facingMode === 'environment') ? 'user' : 'environment';
-      await startCamera();
-      activeDataConns.forEach(conn => {
-        if (conn.open && localStream && peer) {
-          peer.call(conn.peer, localStream);
-        }
-      });
+    // 向き変更時
+    window.addEventListener('orientationchange', () => {
+      setTimeout(() => {
+        const devId = (videoDevices[currentDeviceIndex]) ? videoDevices[currentDeviceIndex].deviceId : null;
+        startCamera(devId);
+      }, 300);
     });
 
     // 2. DEMOモード切替
@@ -181,8 +240,8 @@
       isDemoMode = !isDemoMode;
       btnDemo.textContent = isDemoMode ? 'DEMO: ON' : 'DEMO: OFF';
       btnDemo.className = isDemoMode
-        ? 'px-3 py-2 bg-amber-500/20 border border-amber-400/50 text-amber-300 text-xs font-bold rounded'
-        : 'px-3 py-2 bg-slate-800 border border-white/10 text-slate-400 text-xs font-bold rounded';
+        ? 'px-2.5 py-2 bg-amber-500/20 border border-amber-400/50 text-amber-300 text-xs font-bold rounded'
+        : 'px-2.5 py-2 bg-slate-800 border border-white/10 text-slate-400 text-xs font-bold rounded';
     });
 
     // 3. M5Stack BLE接続
@@ -255,24 +314,21 @@
 
       peer = new Peer(peerId, PEER_CONFIG);
 
-      peer.on('open', (id) => {
+      peer.on('open', () => {
         document.getElementById('txDot').className = 'w-3 h-3 rounded-full bg-emerald-400 animate-ping';
         document.getElementById('txStatus').textContent = 'ON AIR: ' + roomCode;
         document.getElementById('btnStartTx').textContent = 'TRANSMITTING (配信中)';
-        document.getElementById('btnStartTx').className = 'py-3 bg-cyan-600 text-white font-extrabold text-base rounded tracking-wider shadow-lg';
-        logMsg(`待機中！PC側で ROOM [${roomCode}] にして「LINK CAR」を押してください。`);
+        document.getElementById('btnStartTx').className = 'py-2.5 bg-cyan-600 text-white font-extrabold text-base rounded tracking-wider shadow-lg';
+        logMsg(`配信待機中！PC側で ROOM [${roomCode}] の「LINK CAR」を押してください。`);
       });
 
-      // ピットPCからの接続を待ち受ける
       peer.on('connection', (conn) => {
         logMsg(`Pit PC Linked (${conn.peer})!`);
         activeDataConns.push(conn);
         updatePitCount();
 
-        // 接続直後、スマホ側から映像を相手へプッシュ（Call）する
         conn.on('open', () => {
           if (localStream) {
-            logMsg(`Pushing camera stream to Pit PC...`);
             peer.call(conn.peer, localStream);
           }
         });
@@ -289,11 +345,9 @@
         });
       });
 
-      // PC側から直接Callが届いた場合も応答
       peer.on('call', (call) => {
         if (localStream) {
           call.answer(localStream);
-          logMsg('Answered direct video call from Pit PC!');
         }
       });
 
@@ -301,7 +355,6 @@
         logMsg('Peer Error: ' + err.type + ' - ' + err.message);
       });
 
-      // スリープ防止
       if ('wakeLock' in navigator) {
         navigator.wakeLock.request('screen').catch(() => {});
       }
@@ -353,8 +406,13 @@
       });
     }, 40);
 
-    window.addEventListener('load', () => {
-      startCamera();
+    window.addEventListener('load', async () => {
+      await startCamera();
+      // 初回許可後に超広角レンズが見つかっていれば自動的に切り替える
+      await loadVideoDevices();
+      if (currentDeviceIndex > 0 && videoDevices[currentDeviceIndex]) {
+        await startCamera(videoDevices[currentDeviceIndex].deviceId);
+      }
     });
   </script>
 </body>
