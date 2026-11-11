@@ -22,7 +22,7 @@
 </head>
 <body class="h-screen w-screen flex flex-col justify-between select-none">
 
-  <!-- カメラプレビュー背景 -->
+  <!-- カメラプレビュー背景 (スマホ上での確認用) -->
   <div class="relative flex-1 bg-black overflow-hidden flex items-center justify-center">
     <video id="cameraPreview" class="w-full h-full object-cover" autoplay playsinline muted></video>
 
@@ -86,7 +86,7 @@
         2. START TX (配信開始)
       </button>
     </div>
-    <div id="logBox" class="text-[11px] mono text-slate-400 truncate">Ready. カメラを許可して「2. START TX」を押してください。</div>
+    <div id="logBox" class="text-[11px] mono text-slate-400 truncate">Ready. スマホを横向きにして「2. START TX」を押してください。</div>
   </div>
 
   <script>
@@ -94,7 +94,7 @@
     const NUS_TX_CHAR_UUID = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
 
     const PEER_CONFIG = {
-      debug: 2,
+      debug: 1,
       config: {
         iceServers: [
           { urls: 'stun:stun.l.google.com:19302' },
@@ -108,7 +108,6 @@
     let facingMode = 'environment'; // 外カメラ優先
     let peer = null;
     let activeDataConns = [];
-    let activeMediaCalls = [];
     let isDemoMode = true;
     let bleConnected = false;
     let demoPhase = 0;
@@ -122,25 +121,29 @@
       document.getElementById('logBox').textContent = msg;
     }
 
-    // 1. カメラ起動
+    // 1. カメラ起動 (iPhone横向き16:9強制対応)
     async function startCamera() {
       if (localStream) {
         localStream.getTracks().forEach(t => t.stop());
       }
       try {
+        const isLandscape = window.innerWidth > window.innerHeight;
+        const idealW = isLandscape ? 1280 : 720;
+        const idealH = isLandscape ? 720 : 1280;
+
         localStream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: { ideal: facingMode },
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-            frameRate: { ideal: 30 }
+            width: { ideal: idealW },
+            height: { ideal: idealH },
+            aspectRatio: { ideal: 1.7777777778 }
           },
           audio: false
         });
         const videoEl = document.getElementById('cameraPreview');
         videoEl.srcObject = localStream;
         await videoEl.play().catch(() => {});
-        logMsg(`Camera Ready (${facingMode}).`);
+        logMsg(`Camera Ready (${facingMode} / ${isLandscape ? 'Landscape' : 'Portrait'}).`);
         return true;
       } catch (err) {
         logMsg('Camera Error: ' + err.message);
@@ -148,12 +151,25 @@
       }
     }
 
+    // 向き変更時の自動リスタート
+    window.addEventListener('orientationchange', () => {
+      setTimeout(() => {
+        startCamera().then(() => {
+          activeDataConns.forEach(conn => {
+            if (conn.open && localStream && peer) {
+              peer.call(conn.peer, localStream);
+            }
+          });
+        });
+      }, 300);
+    });
+
+    // カメラ切替
     document.getElementById('btnCamToggle').addEventListener('click', async () => {
       facingMode = (facingMode === 'environment') ? 'user' : 'environment';
       await startCamera();
-      // 既に接続中のピットPCがあれば新しいカメラ映像を送り直す
       activeDataConns.forEach(conn => {
-        if (conn.open && localStream) {
+        if (conn.open && localStream && peer) {
           peer.call(conn.peer, localStream);
         }
       });
@@ -172,7 +188,7 @@
     // 3. M5Stack BLE接続
     document.getElementById('btnBle').addEventListener('click', async () => {
       if (!navigator.bluetooth) {
-        logMsg('このブラウザはWeb Bluetooth非対応です（Android ChromeまたはBluefyを使用）');
+        logMsg('このブラウザはWeb Bluetooth非対応です（BluefyまたはAndroid Chrome推奨）');
         return;
       }
       try {
@@ -190,7 +206,7 @@
         isDemoMode = false;
         btnDemo.textContent = 'DEMO: OFF';
         document.getElementById('bleBadge').textContent = 'M5 BLE: LINKED';
-        document.getElementById('bleBadge').className = 'px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/40';
+        document.getElementById('bleBadge').className = 'px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 font-bold';
         logMsg('M5Stack BLE Connected!');
 
         let buffer = '';
@@ -221,7 +237,7 @@
       }
     });
 
-    // 4. WebRTC 配信開始 (ここが重要！PCからの接続を受けたらスマホ側から映像を逆コールする)
+    // 4. WebRTC 配信開始
     document.getElementById('btnStartTx').addEventListener('click', async () => {
       const roomCode = document.getElementById('roomInput').value.trim().toUpperCase();
       if (!roomCode) return;
@@ -235,7 +251,7 @@
       activeDataConns = [];
 
       const peerId = 'RACE-CAR-' + roomCode;
-      logMsg(`Connecting signaling server as [${peerId}]...`);
+      logMsg(`Signaling connecting as [${peerId}]...`);
 
       peer = new Peer(peerId, PEER_CONFIG);
 
@@ -247,22 +263,21 @@
         logMsg(`待機中！PC側で ROOM [${roomCode}] にして「LINK CAR」を押してください。`);
       });
 
-      // ★キモ1：ピットPCからDataChannel接続が来たら、即座にスマホ側から映像ストリームをCall（逆発信）する！
+      // ピットPCからの接続を待ち受ける
       peer.on('connection', (conn) => {
-        logMsg(`Pit PC Linked (${conn.peer})! カメラ映像を送信中...`);
+        logMsg(`Pit PC Linked (${conn.peer})!`);
         activeDataConns.push(conn);
         updatePitCount();
 
+        // 接続直後、スマホ側から映像を相手へプッシュ（Call）する
         conn.on('open', () => {
           if (localStream) {
             logMsg(`Pushing camera stream to Pit PC...`);
-            const mediaCall = peer.call(conn.peer, localStream);
-            activeMediaCalls.push(mediaCall);
+            peer.call(conn.peer, localStream);
           }
         });
 
         conn.on('data', (data) => {
-          // PCから再リクエストが来た場合もカメラ映像をコールする
           if (data && data.type === 'REQUEST_VIDEO' && localStream) {
             peer.call(conn.peer, localStream);
           }
@@ -274,7 +289,7 @@
         });
       });
 
-      // ★キモ2：もしPC側から直接callが来た場合も両方対応して応答する
+      // PC側から直接Callが届いた場合も応答
       peer.on('call', (call) => {
         if (localStream) {
           call.answer(localStream);
@@ -301,7 +316,7 @@
         : 'px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-white/10';
     }
 
-    // 5. 25Hz (40ms) テレメトリ送信ループ
+    // 5. 25Hz テレメトリ送信ループ
     setInterval(() => {
       if (isDemoMode && !bleConnected) {
         demoPhase += 0.05;
@@ -321,14 +336,12 @@
         };
       }
 
-      // 画面表示更新
       document.getElementById('valSpd').textContent = Math.round(latestTelemetry.spd);
       document.getElementById('valRpm').textContent = Math.round(latestTelemetry.rpm);
       document.getElementById('valThr').textContent = Math.round(latestTelemetry.thr);
       document.getElementById('valBrk').textContent = Math.round(latestTelemetry.brk);
       document.getElementById('valG').textContent = `${latestTelemetry.gx.toFixed(1)}/${latestTelemetry.gy.toFixed(1)}`;
 
-      // ピットPCへ送信
       const payload = {
         t: Date.now(),
         ...latestTelemetry
@@ -340,7 +353,6 @@
       });
     }, 40);
 
-    // 起動時にカメラ初期化
     window.addEventListener('load', () => {
       startCamera();
     });
