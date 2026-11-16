@@ -2,98 +2,329 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>IN-CAR TELEMETRY TX</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PIT TELEMETRY & STRATEGY HUD</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,800;1,700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,500;0,600;0,700;0,800;0,900;1,700;1,800;1,900&family=JetBrains+Mono:wght@500;600;700;800&family=Oswald:ital,wght@0,600;0,700;1,700&display=swap" rel="stylesheet">
   <style>
     body {
       font-family: 'Barlow Condensed', sans-serif;
-      background-color: #05070a;
-      color: #f1f5f9;
+      background-color: #030712;
+      color: #f8fafc;
       overflow: hidden;
-      touch-action: manipulation;
+      user-select: none;
     }
     .mono { font-family: 'JetBrains Mono', monospace; }
+    .oswald { font-family: 'Oswald', sans-serif; }
+    .gt-panel {
+      background: rgba(10, 14, 23, 0.88);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.75);
+      touch-action: none;
+    }
+    .gt-panel:hover {
+      border-color: rgba(56, 189, 248, 0.4);
+    }
+    .hud-handle {
+      cursor: grab;
+    }
+    .hud-handle:active {
+      cursor: grabbing;
+    }
+    .resize-handle {
+      position: absolute;
+      right: 1px;
+      bottom: 1px;
+      width: 12px;
+      height: 12px;
+      cursor: se-resize;
+      z-index: 50;
+      color: rgba(148, 163, 184, 0.5);
+      font-size: 9px;
+      line-height: 12px;
+      text-align: center;
+      touch-action: none;
+    }
+    .resize-handle:hover {
+      color: #38bdf8;
+    }
   </style>
 </head>
-<body class="h-screen w-screen flex flex-col justify-between select-none">
+<body class="w-screen h-screen flex flex-col justify-between overflow-hidden relative bg-black select-none">
 
-  <!-- カメラプレビュー背景 (スマホ上でもトリミングせず全画角を確認できるよう contain 指定) -->
-  <div class="relative flex-1 bg-black overflow-hidden flex items-center justify-center">
-    <video id="cameraPreview" class="w-full h-full object-contain" autoplay playsinline muted></video>
+  <!-- 背景ビデオ（ライブ受信 ＆ 録画レビュー再生共用） -->
+  <video id="remoteVideo" 
+         style="position: absolute !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important; width: 100vw !important; height: 100vh !important; object-fit: contain !important; object-position: center center !important; z-index: 1 !important; background: #000;" 
+         class="pointer-events-none opacity-0" 
+         autoplay playsinline muted></video>
 
-    <!-- 上部ステータスオーバーレイ -->
-    <div class="absolute top-3 left-3 right-3 flex flex-wrap items-center justify-between gap-2 bg-slate-950/80 backdrop-blur-md border border-white/15 px-3 py-2 rounded">
-      <div class="flex items-center gap-2">
-        <span id="txDot" class="w-3 h-3 rounded-full bg-slate-500"></span>
-        <span id="txStatus" class="text-sm font-bold tracking-wider uppercase">STANDBY</span>
-      </div>
-      <div class="flex items-center gap-2 text-xs mono">
-        <span id="lensBadge" class="px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-500/30">LENS: AUTO</span>
-        <span id="bleBadge" class="px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-white/10">M5 BLE: OFF</span>
-        <span id="pitBadge" class="px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-white/10">PIT PC: 0</span>
-      </div>
+  <!-- カメラ未接続時の背景Canvas -->
+  <canvas id="simCanvas" class="absolute inset-0 w-full h-full object-cover z-0"></canvas>
+
+  <!-- 上部ヘッダーバー -->
+  <header class="relative z-30 flex items-center justify-between px-2.5 py-1 bg-[#070a12]/95 border-b border-white/15 text-[11px] font-bold tracking-wider">
+    <div class="flex items-center gap-2.5">
+      <span id="statusBadge" class="flex items-center gap-1.5 px-2 py-0.5 rounded bg-rose-950/90 border border-rose-500/50 text-rose-400 font-extrabold">
+        <span class="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span> LIVE // CAR ND-27
+      </span>
+      <span class="text-white font-extrabold tracking-wide">CH 01 // ND-ROADSTER #27</span>
+      <span class="text-slate-600">|</span>
+      <span id="statLatency" class="mono text-cyan-400 font-bold">244ms</span>
+      <span class="text-slate-600">|</span>
+      <span id="recTimerBadge" class="mono text-slate-300">720p 60FPS</span>
+      <span class="text-slate-600">|</span>
+      <span id="statRate" class="mono text-amber-400 font-bold">25Hz (AiM EXP)</span>
     </div>
 
-    <!-- 中央ライブ数値モニター -->
-    <div class="absolute bottom-3 left-3 right-3 bg-slate-950/85 backdrop-blur-md border border-white/10 p-2 rounded grid grid-cols-5 gap-2 text-center">
-      <div>
-        <div class="text-[10px] text-slate-400">SPEED</div>
-        <div id="valSpd" class="text-xl font-extrabold italic text-white mono">0</div>
+    <div class="flex items-center gap-1.5">
+      <div class="flex items-center bg-[#0d1322] border border-white/15 rounded px-2 py-0.5">
+        <span class="text-[10px] text-slate-400 mr-1 font-bold">ROOM</span>
+        <input id="inputRoomCode" type="text" value="ND-27" class="bg-transparent text-white font-bold mono text-[11px] w-12 focus:outline-none uppercase" />
       </div>
-      <div>
-        <div class="text-[10px] text-slate-400">RPM</div>
-        <div id="valRpm" class="text-xl font-extrabold italic text-cyan-400 mono">0</div>
-      </div>
-      <div>
-        <div class="text-[10px] text-slate-400">THR %</div>
-        <div id="valThr" class="text-xl font-extrabold italic text-emerald-400 mono">0</div>
-      </div>
-      <div>
-        <div class="text-[10px] text-slate-400">BRK %</div>
-        <div id="valBrk" class="text-xl font-extrabold italic text-rose-500 mono">0</div>
-      </div>
-      <div>
-        <div class="text-[10px] text-slate-400">G (X/Y)</div>
-        <div id="valG" class="text-sm font-bold text-amber-400 mono mt-1">0.0/0.0</div>
-      </div>
+      <button id="btnConnectCar" class="px-2.5 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-[11px] rounded tracking-wider shadow">
+        LINKED 📡
+      </button>
+      <button id="btnRec" class="px-2.5 py-0.5 bg-rose-700 hover:bg-rose-600 text-white font-extrabold text-[11px] rounded tracking-wider border border-rose-400/40 shadow">
+        ⏺ REC
+      </button>
+      <button id="btnReviewMode" class="px-2 py-0.5 bg-[#161f33] hover:bg-slate-700 text-amber-300 text-[11px] font-bold rounded border border-amber-500/30">
+        🎬 REVIEW
+      </button>
+      <button id="btnFovMode" class="px-2 py-0.5 bg-[#161f33] hover:bg-slate-700 text-cyan-300 text-[11px] font-bold rounded border border-cyan-500/30" title="映像の表示比率切替">
+        📐 FOV: FULL-WIDE
+      </button>
+      <button id="btnPtt" class="px-2.5 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-[11px] rounded tracking-wider shadow">
+        🎙 RADIO PTT [SPACE]
+      </button>
+      <button id="btnResetHud" class="px-2 py-0.5 bg-[#161f33] hover:bg-slate-700 text-cyan-300 text-[11px] font-bold rounded border border-cyan-500/30">
+        ↺ RESET HUD
+      </button>
+      <button id="btnToggleSim" class="px-2 py-0.5 bg-[#161f33] hover:bg-slate-700 text-slate-300 text-[11px] font-bold rounded border border-white/10">
+        ⚙ SIM
+      </button>
     </div>
+  </header>
+
+  <!-- Data-Movies風 走行後レビュー・シークコントロールバー（初期非表示・REVIEWボタンで開閉） -->
+  <div id="reviewBar" class="hidden relative z-30 bg-slate-950/95 border-b border-amber-500/40 px-3 py-1.5 flex items-center gap-3 text-xs">
+    <span class="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-400/50 text-amber-300 font-extrabold tracking-wider">
+      🎬 DATA-MOVIE REVIEW
+    </span>
+    <button id="btnRevPlay" class="px-2.5 py-0.5 bg-cyan-600 hover:bg-cyan-500 text-white font-extrabold rounded">
+      ⏸ PAUSE
+    </button>
+    <input id="revSeek" type="range" min="0" max="1000" value="0" class="flex-1 accent-amber-400 cursor-pointer" />
+    <span id="revTimeLabel" class="mono text-white font-bold w-28 text-right">00:00.0 / 00:00.0</span>
+    <select id="revSpeed" class="bg-slate-900 border border-white/20 rounded px-1.5 py-0.5 text-cyan-300 mono font-bold text-[11px]">
+      <option value="1">1.0x</option>
+      <option value="0.5">0.5x (SLOW)</option>
+      <option value="0.25">0.25x (ANALYZE)</option>
+    </select>
+    <label class="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded border border-white/15 cursor-pointer font-bold">
+      📂 動画読込 <input id="inputLoadVideo" type="file" accept="video/*" class="hidden" />
+    </label>
+    <label class="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded border border-white/15 cursor-pointer font-bold">
+      📊 ログ読込(.json) <input id="inputLoadJson" type="file" accept=".json" class="hidden" />
+    </label>
+    <button id="btnExitReview" class="px-2 py-0.5 bg-rose-800 hover:bg-rose-700 text-white font-bold rounded">
+      ✕ LIVEへ戻る
+    </button>
   </div>
 
-  <!-- 下部コントロールパネル -->
-  <div class="bg-slate-900 border-t border-white/15 p-3 space-y-2">
-    <div class="flex items-center gap-1.5">
-      <div class="flex items-center bg-slate-950 border border-white/15 rounded px-2 py-1.5 flex-1">
-        <span class="text-xs text-slate-400 mr-1.5 font-bold">ROOM:</span>
-        <input id="roomInput" type="text" value="ND-27" class="bg-transparent text-cyan-400 font-bold mono text-base w-full focus:outline-none uppercase" />
+  <!-- HUDメイン領域 -->
+  <main id="hudContainer" class="relative flex-1 w-full h-full overflow-hidden z-20 pointer-events-none">
+
+    <!-- 1. 左上：スピード＆ギアパネル -->
+    <div id="panelSpeedo" data-base-w="115" data-base-h="82" data-min-w="95" data-min-h="65"
+         class="absolute pointer-events-auto gt-panel rounded-sm p-2 flex flex-col justify-between"
+         style="top: 14px; left: 88px; width: 115px; height: 82px; --ui-scale: 1;">
+      <div>
+        <div class="hud-handle flex justify-between items-center text-[calc(0.5rem*var(--ui-scale))] font-bold text-slate-400 tracking-wider mb-0.5">
+          <span>⠿ ENGINE SPEED</span>
+          <span id="hudRpm" class="mono text-slate-200">4,580</span>
+        </div>
+        <div class="w-full bg-slate-800 h-1.5 rounded-sm overflow-hidden">
+          <div id="hudRpmBar" class="bg-gradient-to-r from-cyan-400 via-blue-500 to-rose-500 h-full w-[62%] transition-all duration-75"></div>
+        </div>
       </div>
-      <button id="btnWideLens" class="px-2.5 py-2 bg-cyan-700 hover:bg-cyan-600 active:bg-cyan-800 text-white text-xs font-extrabold rounded border border-cyan-400/40 shadow">
-        📐 広角レンズ切替
-      </button>
-      <button id="btnDemo" class="px-2.5 py-2 bg-amber-500/20 border border-amber-400/50 text-amber-300 text-xs font-bold rounded">
-        DEMO: ON
-      </button>
+
+      <div class="flex items-end justify-between pt-1">
+        <div>
+          <div class="flex items-baseline gap-0.5">
+            <span id="hudSpeed" class="text-[calc(2.1rem*var(--ui-scale))] font-black italic oswald text-white leading-none tracking-tight">92</span>
+            <span class="text-[calc(0.5rem*var(--ui-scale))] text-slate-400 font-bold">KM/H</span>
+          </div>
+        </div>
+        <div class="text-right leading-none">
+          <div class="text-[calc(0.45rem*var(--ui-scale))] font-bold text-slate-400">GEAR</div>
+          <span id="hudGear" class="text-[calc(1.75rem*var(--ui-scale))] font-black oswald text-amber-400 leading-none">4</span>
+        </div>
+      </div>
+
+      <div class="absolute left-0 right-0 -bottom-7 flex justify-between text-[calc(0.52rem*var(--ui-scale))] mono text-slate-300 pointer-events-none">
+        <div>
+          <div class="text-[calc(0.42rem*var(--ui-scale))] text-slate-400 font-bold">STEER</div>
+          <div id="hudSteer" class="font-bold text-white">-1.2°</div>
+        </div>
+        <div class="text-right">
+          <div class="text-[calc(0.42rem*var(--ui-scale))] text-slate-400 font-bold">LAP DIST</div>
+          <div class="font-bold text-white">1,637m [S1]</div>
+        </div>
+      </div>
+
+      <div class="resize-handle">⤡</div>
     </div>
 
-    <div class="grid grid-cols-2 gap-2">
-      <button id="btnBle" class="py-2.5 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-bold text-sm rounded tracking-wider shadow">
-        1. CONNECT M5 BLE
-      </button>
-      <button id="btnStartTx" class="py-2.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-extrabold text-base rounded tracking-wider shadow-lg">
-        2. START TX (配信開始)
-      </button>
+    <!-- 2. 左上隣：GT7風 セクタータイム＆デルタボード -->
+    <div id="panelTimingBoard" data-base-w="115" data-base-h="96" data-min-w="95" data-min-h="75"
+         class="absolute pointer-events-auto gt-panel rounded-sm p-1.5 flex flex-col justify-between"
+         style="top: 14px; left: 204px; width: 115px; height: 96px; --ui-scale: 1;">
+      <div class="hud-handle space-y-[2px] text-[calc(0.58rem*var(--ui-scale))] mono font-bold leading-tight">
+        <div class="grid grid-cols-12 items-center">
+          <span class="col-span-2 text-slate-400 text-center bg-slate-800/80 rounded-sm text-[calc(0.5rem*var(--ui-scale))]">3</span>
+          <span class="col-span-6 text-right pr-1.5 text-slate-100">0'10.549</span>
+          <span class="col-span-4 text-center bg-blue-600 text-white rounded-sm py-[1px] text-[calc(0.52rem*var(--ui-scale))]">-3.077</span>
+        </div>
+        <div class="grid grid-cols-12 items-center">
+          <span class="col-span-2 text-slate-400 text-center bg-slate-800/80 rounded-sm text-[calc(0.5rem*var(--ui-scale))]">2</span>
+          <span class="col-span-6 text-right pr-1.5 text-slate-100">0'18.183</span>
+          <span class="col-span-4 text-center bg-blue-600 text-white rounded-sm py-[1px] text-[calc(0.52rem*var(--ui-scale))]">-17.844</span>
+        </div>
+        <div class="grid grid-cols-12 items-center">
+          <span class="col-span-2 text-slate-200 text-center bg-slate-700 rounded-sm text-[calc(0.5rem*var(--ui-scale))]">1</span>
+          <span class="col-span-6 text-right pr-1.5 text-white font-extrabold">0'10.699</span>
+          <span class="col-span-4 text-center bg-slate-700/80 text-slate-300 rounded-sm py-[1px] text-[calc(0.5rem*var(--ui-scale))]">LIVE</span>
+        </div>
+        <div class="grid grid-cols-12 items-center pt-0.5 border-t border-white/10">
+          <span class="col-span-3 text-slate-400 text-[calc(0.48rem*var(--ui-scale))]">LAST</span>
+          <span class="col-span-5 text-right pr-1 text-slate-300 text-[calc(0.52rem*var(--ui-scale))]">1'15.016</span>
+          <span class="col-span-4 text-center bg-rose-600 text-white rounded-sm py-[1px] text-[calc(0.52rem*var(--ui-scale))]">+1.891</span>
+        </div>
+        <div class="grid grid-cols-12 items-center">
+          <span class="col-span-3 text-emerald-400 text-[calc(0.48rem*var(--ui-scale))]">BEST</span>
+          <span class="col-span-6 text-right pr-1 text-emerald-400 text-[calc(0.52rem*var(--ui-scale))]">1'00.785</span>
+          <span class="col-span-3 text-right text-slate-500 text-[calc(0.45rem*var(--ui-scale))]">P1</span>
+        </div>
+        <div class="grid grid-cols-12 items-center">
+          <span class="col-span-3 text-amber-400 text-[calc(0.48rem*var(--ui-scale))]">OPT.</span>
+          <span class="col-span-6 text-right pr-1 text-amber-400 text-[calc(0.52rem*var(--ui-scale))]">1'07.447</span>
+          <span class="col-span-3 text-right text-slate-500 text-[calc(0.45rem*var(--ui-scale))]">IDEAL</span>
+        </div>
+      </div>
+      <div class="resize-handle">⤡</div>
     </div>
-    <div id="logBox" class="text-[11px] mono text-slate-400 truncate">「📐 広角レンズ切替」で超広角(0.5x)カメラを選択できます。</div>
+
+    <!-- 3. 中央上：スリムLIVE LAPタイマー -->
+    <div id="panelLap" data-base-w="135" data-base-h="32" data-min-w="110" data-min-h="26"
+         class="absolute pointer-events-auto gt-panel rounded-sm px-2.5 py-1 flex items-center justify-between"
+         style="top: 14px; left: 50%; transform: translateX(-50%); width: 135px; height: 32px; --ui-scale: 1;">
+      <div class="hud-handle leading-none">
+        <div class="text-[calc(0.42rem*var(--ui-scale))] font-bold text-slate-400">LIVE LAP</div>
+        <div class="text-[calc(0.45rem*var(--ui-scale))] font-extrabold text-cyan-400">SECTOR 1</div>
+      </div>
+      <div id="hudLapTime" class="text-[calc(1.05rem*var(--ui-scale))] font-black mono text-white leading-none tracking-tight">0'10.883</div>
+      <span class="px-1 py-[1px] rounded-sm bg-cyan-950 text-cyan-300 mono text-[calc(0.45rem*var(--ui-scale))] font-bold border border-cyan-500/40">LIVE</span>
+      <div class="resize-handle">⤡</div>
+    </div>
+
+    <!-- 4. 右上：GPS サーキットマップ -->
+    <div id="panelGpsMap" data-base-w="88" data-base-h="68" data-min-w="70" data-min-h="55"
+         class="absolute pointer-events-auto gt-panel rounded-sm p-1.5 flex flex-col justify-between"
+         style="top: 14px; right: 162px; width: 88px; height: 68px; --ui-scale: 1;">
+      <div class="hud-handle flex justify-between items-center text-[calc(0.45rem*var(--ui-scale))] font-bold">
+        <span class="text-cyan-400">● GPS</span>
+        <span class="text-slate-200">STRAIGHT</span>
+      </div>
+      <canvas id="gpsCanvas" class="w-full flex-1"></canvas>
+      <div class="resize-handle">⤡</div>
+    </div>
+
+    <!-- 5. 右上端：G-BALL -->
+    <div id="panelGBall" data-base-w="68" data-base-h="68" data-min-w="55" data-min-h="55"
+         class="absolute pointer-events-auto gt-panel rounded-sm p-1.5 flex flex-col justify-between"
+         style="top: 14px; right: 88px; width: 68px; height: 68px; --ui-scale: 1;">
+      <div class="hud-handle flex justify-between items-center text-[calc(0.45rem*var(--ui-scale))] font-bold">
+        <span class="text-slate-300">⠿ G-BALL</span>
+        <span id="hudGTotal" class="mono text-amber-400 font-extrabold">1.14G</span>
+      </div>
+      <canvas id="gCanvas" class="w-full flex-1"></canvas>
+      <div class="absolute left-0 right-0 -bottom-4 text-[calc(0.42rem*var(--ui-scale))] mono text-center text-slate-300 whitespace-nowrap pointer-events-none">
+        LAT:<span id="hudGLat" class="text-cyan-300 font-bold">-0.71</span> LON:<span id="hudGLon" class="text-rose-400 font-bold">-0.15</span>
+      </div>
+      <div class="resize-handle">⤡</div>
+    </div>
+
+    <!-- 6. 下部：ペダルアプリケーション・トレース -->
+    <div id="panelPedals" data-base-w="880" data-base-h="66" data-min-w="420" data-min-h="50"
+         class="absolute pointer-events-auto gt-panel rounded-sm px-3 py-1.5 flex flex-col justify-between"
+         style="bottom: 10px; left: 50%; transform: translateX(-50%); width: 880px; height: 66px; --ui-scale: 1;">
+
+      <div class="hud-handle flex justify-between items-center text-[calc(0.68rem*var(--ui-scale))] font-extrabold tracking-wide">
+        <div class="flex items-center gap-3">
+          <span class="text-white flex items-center gap-1"><span class="text-cyan-400">⠿</span>•PEDAL APPLICATION TRACE (LAST 6s)</span>
+          <span class="text-emerald-400">THR: <span id="labelThr">0%</span></span>
+          <span class="text-rose-400">BRK: <span id="labelBrk">59% (5.0 MPa)</span></span>
+          <span class="text-slate-300">CLT: <span id="labelClt">0%</span></span>
+        </div>
+        <span class="text-slate-400 text-[calc(0.6rem*var(--ui-scale))] tracking-widest">TRAIL BRAKE RELEASE GRADIENT</span>
+      </div>
+
+      <div class="flex items-end gap-2.5 flex-1 pt-1 overflow-hidden">
+        <div class="flex items-end gap-1.5 h-full pb-0.5 shrink-0">
+          <div class="flex flex-col items-center h-full justify-end">
+            <div class="w-4 flex-1 bg-slate-800/90 rounded-sm overflow-hidden flex flex-col justify-end border border-white/10">
+              <div id="barThr" class="w-full bg-emerald-400" style="height: 0%;"></div>
+            </div>
+            <span class="text-[calc(0.55rem*var(--ui-scale))] font-black text-emerald-400 leading-none mt-0.5">THR</span>
+          </div>
+          <div class="flex flex-col items-center h-full justify-end">
+            <div class="w-4 flex-1 bg-slate-800/90 rounded-sm overflow-hidden flex flex-col justify-end border border-white/10">
+              <div id="barBrk" class="w-full bg-rose-500" style="height: 59%;"></div>
+            </div>
+            <span class="text-[calc(0.55rem*var(--ui-scale))] font-black text-rose-500 leading-none mt-0.5">BRK</span>
+          </div>
+          <div class="flex flex-col items-center h-full justify-end">
+            <div class="w-4 flex-1 bg-slate-800/90 rounded-sm overflow-hidden flex flex-col justify-end border border-white/10">
+              <div id="barClt" class="w-full bg-cyan-400" style="height: 0%;"></div>
+            </div>
+            <span class="text-[calc(0.55rem*var(--ui-scale))] font-black text-cyan-400 leading-none mt-0.5">CLT</span>
+          </div>
+        </div>
+
+        <div class="relative flex-1 h-full bg-[#060911]/90 rounded-sm border border-white/10 overflow-hidden">
+          <canvas id="oscilloCanvas" class="w-full h-full block"></canvas>
+          <div class="absolute inset-x-2 bottom-0.5 flex justify-between text-[calc(0.55rem*var(--ui-scale))] mono font-bold text-slate-400 pointer-events-none">
+            <span>-6s</span>
+            <span>-4s</span>
+            <span>-2s</span>
+            <span class="text-cyan-400 font-extrabold">0s (NOW)</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="resize-handle">⤡</div>
+    </div>
+
+  </main>
+
+  <!-- 右側シミュレーション設定ドロワー -->
+  <div id="drawerSim" class="fixed top-9 right-0 bottom-0 w-72 bg-slate-950/95 border-l border-white/15 p-4 z-40 transform translate-x-full transition-transform duration-200 space-y-4 text-xs">
+    <div class="flex items-center justify-between border-b border-white/10 pb-2">
+      <h3 class="font-bold text-cyan-400">TELEMETRY SIMULATOR</h3>
+      <button id="btnCloseSim" class="text-slate-400 hover:text-white">✕</button>
+    </div>
+    <label class="flex items-center gap-2 cursor-pointer">
+      <input id="chkAutoSim" type="checkbox" checked class="rounded" />
+      <span class="font-bold text-slate-200">AUTO DEMO WAVEFORM</span>
+    </label>
   </div>
 
   <script>
-    const NUS_SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
-    const NUS_TX_CHAR_UUID = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
-
     const PEER_CONFIG = {
       debug: 1,
       config: {
@@ -105,315 +336,543 @@
       }
     };
 
-    let localStream = null;
-    let videoDevices = [];
-    let currentDeviceIndex = -1;
     let peer = null;
-    let activeDataConns = [];
-    let isDemoMode = true;
-    let bleConnected = false;
-    let demoPhase = 0;
+    let dataConn = null;
+    let liveStream = null;
+    let isAutoSim = true;
+    let isWideContain = true;
+    let isReviewMode = false;
 
-    let latestTelemetry = {
-      spd: 0, rpm: 1000, gear: 1, thr: 0, brk: 0, gx: 0, gy: 0, steer: 0
+    // --- 録画 & ログ保存用変数 ---
+    let isRecording = false;
+    let mediaRecorder = null;
+    let recordedChunks = [];
+    let recordedTelemetryLog = [];
+    let recStartTime = 0;
+
+    let telem = {
+      spd: 92, rpm: 4580, gear: 4, thr: 0, brk: 59, clt: 0, gx: -0.15, gy: -0.71, steer: -1.2
     };
 
-    function logMsg(msg) {
-      console.log(msg);
-      document.getElementById('logBox').textContent = msg;
+    const oscilloHistory = [];
+    const MAX_HISTORY = 240;
+    for (let i = 0; i < MAX_HISTORY; i++) {
+      const p = i * 0.06;
+      const w = Math.sin(p);
+      const b = w < -0.2 ? Math.min(100, Math.round((-w - 0.2) * 130)) : 0;
+      const t = b === 0 ? Math.min(100, Math.max(0, Math.round((w + 0.25) * 85))) : 0;
+      oscilloHistory.push({ thr: t, brk: b });
     }
 
-    // 背面カメラ一覧を取得し、超広角(Ultra Wide)があれば優先リスト化する
-    async function loadVideoDevices() {
-      try {
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const allCams = devices.filter(d => d.kind === 'videoinput');
-        // 背面カメラっぽいものを優先しつつ全カメラを保持
-        const backCams = allCams.filter(d => !d.label.toLowerCase().includes('front') && !d.label.toLowerCase().includes('前面'));
-        videoDevices = backCams.length > 0 ? backCams : allCams;
+    const btnConnectCar = document.getElementById('btnConnectCar');
+    const inputRoomCode = document.getElementById('inputRoomCode');
+    const remoteVideo = document.getElementById('remoteVideo');
+    const simCanvas = document.getElementById('simCanvas');
+    const btnFovMode = document.getElementById('btnFovMode');
+    const btnRec = document.getElementById('btnRec');
+    const btnReviewMode = document.getElementById('btnReviewMode');
+    const reviewBar = document.getElementById('reviewBar');
 
-        // ラベルに ultra wide や 超広角 や 0.5 が含まれるものがあれば初期インデックスにする
-        const ultraIdx = videoDevices.findIndex(d => {
-          const l = d.label.toLowerCase();
-          return l.includes('ultra') || l.includes('超広角') || l.includes('0.5') || l.includes('wide');
-        });
-        if (ultraIdx !== -1 && currentDeviceIndex === -1) {
-          currentDeviceIndex = ultraIdx;
-        } else if (currentDeviceIndex === -1 && videoDevices.length > 0) {
-          currentDeviceIndex = 0;
-        }
-      } catch (e) {
-        console.warn(e);
-      }
-    }
+    // 画角モード切替
+    btnFovMode.addEventListener('click', () => {
+      isWideContain = !isWideContain;
+      remoteVideo.style.setProperty('object-fit', isWideContain ? 'contain' : 'cover', 'important');
+      btnFovMode.textContent = isWideContain ? '📐 FOV: FULL-WIDE' : '📐 FOV: ZOOM-FILL';
+    });
 
-    // 1. カメラ起動 (超広角＆最小ズームアウト自動適用)
-    async function startCamera(specificDeviceId = null) {
-      if (localStream) {
-        localStream.getTracks().forEach(t => t.stop());
-      }
-      try {
-        const videoConstraints = {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          frameRate: { ideal: 30 }
-        };
-
-        if (specificDeviceId) {
-          videoConstraints.deviceId = { exact: specificDeviceId };
-        } else {
-          videoConstraints.facingMode = { ideal: 'environment' };
-        }
-
-        localStream = await navigator.mediaDevices.getUserMedia({
-          video: videoConstraints,
-          audio: false
-        });
-
-        // 初回許可後にデバイス一覧を取得
-        if (videoDevices.length === 0) {
-          await loadVideoDevices();
-        }
-
-        const videoTrack = localStream.getVideoTracks()[0];
-        if (videoTrack) {
-          const label = videoTrack.label || `CAM #${currentDeviceIndex + 1}`;
-          document.getElementById('lensBadge').textContent = label.substring(0, 18);
-
-          // ブラウザがハードウェアズーム制御に対応していれば最小値(最広角)に引き下げる
-          if (videoTrack.getCapabilities) {
-            const caps = videoTrack.getCapabilities();
-            if (caps.zoom && typeof caps.zoom.min === 'number') {
-              await videoTrack.applyConstraints({
-                advanced: [{ zoom: caps.zoom.min }]
-              }).catch(() => {});
-              logMsg(`Wide Zoom Applied (${caps.zoom.min}x) - ${label}`);
-            } else {
-              logMsg(`Active Lens: ${label}`);
-            }
-          }
-        }
-
-        const videoEl = document.getElementById('cameraPreview');
-        videoEl.srcObject = localStream;
-        await videoEl.play().catch(() => {});
-
-        // 接続中のピットPCへ新しい広角ストリームを即時プッシュ
-        activeDataConns.forEach(conn => {
-          if (conn.open && peer) {
-            peer.call(conn.peer, localStream);
-          }
-        });
-
-        return true;
-      } catch (err) {
-        logMsg('Camera Error: ' + err.message);
-        return false;
+    function attachStreamToFullScreen(stream) {
+      liveStream = stream;
+      if (!isReviewMode) {
+        remoteVideo.srcObject = stream;
+        remoteVideo.style.opacity = '1';
+        simCanvas.style.opacity = '0';
+        remoteVideo.play().catch(() => {});
       }
     }
 
-    // 「📐 広角レンズ切替」ボタン：スマホの複数レンズ（標準 ➔ 超広角0.5x ➔ 望遠）を順番に切り替える
-    document.getElementById('btnWideLens').addEventListener('click', async () => {
-      await loadVideoDevices();
-      if (videoDevices.length <= 1) {
-        logMsg('切替可能な別レンズが見つかりません。最小ズームを再適用します。');
-        await startCamera();
-        return;
-      }
-      currentDeviceIndex = (currentDeviceIndex + 1) % videoDevices.length;
-      const targetCam = videoDevices[currentDeviceIndex];
-      logMsg(`レンズ切替中 (${currentDeviceIndex + 1}/${videoDevices.length}): ${targetCam.label || 'Lens'}`);
-      await startCamera(targetCam.deviceId);
-    });
-
-    // 向き変更時
-    window.addEventListener('orientationchange', () => {
-      setTimeout(() => {
-        const devId = (videoDevices[currentDeviceIndex]) ? videoDevices[currentDeviceIndex].deviceId : null;
-        startCamera(devId);
-      }, 300);
-    });
-
-    // 2. DEMOモード切替
-    const btnDemo = document.getElementById('btnDemo');
-    btnDemo.addEventListener('click', () => {
-      isDemoMode = !isDemoMode;
-      btnDemo.textContent = isDemoMode ? 'DEMO: ON' : 'DEMO: OFF';
-      btnDemo.className = isDemoMode
-        ? 'px-2.5 py-2 bg-amber-500/20 border border-amber-400/50 text-amber-300 text-xs font-bold rounded'
-        : 'px-2.5 py-2 bg-slate-800 border border-white/10 text-slate-400 text-xs font-bold rounded';
-    });
-
-    // 3. M5Stack BLE接続
-    document.getElementById('btnBle').addEventListener('click', async () => {
-      if (!navigator.bluetooth) {
-        logMsg('このブラウザはWeb Bluetooth非対応です（BluefyまたはAndroid Chrome推奨）');
-        return;
-      }
-      try {
-        logMsg('M5Stackを検索中...');
-        const device = await navigator.bluetooth.requestDevice({
-          filters: [{ namePrefix: 'M5' }],
-          optionalServices: [NUS_SERVICE_UUID]
-        });
-        const server = await device.gatt.connect();
-        const service = await server.getPrimaryService(NUS_SERVICE_UUID);
-        const char = await service.getCharacteristic(NUS_TX_CHAR_UUID);
-        await char.startNotifications();
-
-        bleConnected = true;
-        isDemoMode = false;
-        btnDemo.textContent = 'DEMO: OFF';
-        document.getElementById('bleBadge').textContent = 'M5 BLE: LINKED';
-        document.getElementById('bleBadge').className = 'px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 font-bold';
-        logMsg('M5Stack BLE Connected!');
-
-        let buffer = '';
-        char.addEventListener('characteristicvaluechanged', (e) => {
-          const chunk = new TextDecoder().decode(e.target.value);
-          buffer += chunk;
-          let lines = buffer.split('\n');
-          buffer = lines.pop();
-          for (let line of lines) {
-            if (!line.trim()) continue;
-            try {
-              const d = JSON.parse(line);
-              latestTelemetry = {
-                spd: d.spd ?? 0,
-                rpm: d.rpm ?? 0,
-                gear: d.gear ?? 1,
-                thr: d.thr ?? 0,
-                brk: d.brk ?? 0,
-                gx: d.gx ?? 0,
-                gy: d.gy ?? 0,
-                steer: d.steer ?? 0
-              };
-            } catch (err) {}
-          }
-        });
-      } catch (err) {
-        logMsg('BLE Error: ' + err.message);
-      }
-    });
-
-    // 4. WebRTC 配信開始
-    document.getElementById('btnStartTx').addEventListener('click', async () => {
-      const roomCode = document.getElementById('roomInput').value.trim().toUpperCase();
-      if (!roomCode) return;
-
-      if (!localStream) {
-        const ok = await startCamera();
-        if (!ok) return;
-      }
-
+    // --- WebRTC 接続 ---
+    btnConnectCar.addEventListener('click', () => {
+      const room = inputRoomCode.value.trim().toUpperCase();
+      if (!room) return;
       if (peer) peer.destroy();
-      activeDataConns = [];
 
-      const peerId = 'RACE-CAR-' + roomCode;
-      logMsg(`Signaling connecting as [${peerId}]...`);
+      const pitPeerId = 'RACE-COACH-' + room + '-' + Math.floor(Math.random() * 1000);
+      const targetCarPeerId = 'RACE-CAR-' + room;
 
-      peer = new Peer(peerId, PEER_CONFIG);
+      btnConnectCar.textContent = 'CONNECTING...';
+      btnConnectCar.className = 'px-2.5 py-0.5 bg-amber-600 text-white font-extrabold text-[11px] rounded tracking-wider shadow';
+
+      peer = new Peer(pitPeerId, PEER_CONFIG);
 
       peer.on('open', () => {
-        document.getElementById('txDot').className = 'w-3 h-3 rounded-full bg-emerald-400 animate-ping';
-        document.getElementById('txStatus').textContent = 'ON AIR: ' + roomCode;
-        document.getElementById('btnStartTx').textContent = 'TRANSMITTING (配信中)';
-        document.getElementById('btnStartTx').className = 'py-2.5 bg-cyan-600 text-white font-extrabold text-base rounded tracking-wider shadow-lg';
-        logMsg(`配信待機中！PC側で ROOM [${roomCode}] の「LINK CAR」を押してください。`);
-      });
+        dataConn = peer.connect(targetCarPeerId, { reliable: false });
 
-      peer.on('connection', (conn) => {
-        logMsg(`Pit PC Linked (${conn.peer})!`);
-        activeDataConns.push(conn);
-        updatePitCount();
-
-        conn.on('open', () => {
-          if (localStream) {
-            peer.call(conn.peer, localStream);
-          }
+        dataConn.on('open', () => {
+          btnConnectCar.textContent = 'LINKED 📡';
+          btnConnectCar.className = 'px-2.5 py-0.5 bg-emerald-600 text-white font-extrabold text-[11px] rounded tracking-wider shadow';
+          isAutoSim = false;
+          document.getElementById('chkAutoSim').checked = false;
+          dataConn.send({ type: 'REQUEST_VIDEO' });
         });
 
-        conn.on('data', (data) => {
-          if (data && data.type === 'REQUEST_VIDEO' && localStream) {
-            peer.call(conn.peer, localStream);
+        dataConn.on('data', (data) => {
+          if (data && typeof data.spd !== 'undefined' && !isReviewMode) {
+            telem = { ...telem, ...data };
+            if (data.t) {
+              const lat = Math.max(1, Date.now() - data.t);
+              document.getElementById('statLatency').textContent = `${lat}ms`;
+            }
           }
-        });
-
-        conn.on('close', () => {
-          activeDataConns = activeDataConns.filter(c => c !== conn);
-          updatePitCount();
         });
       });
 
       peer.on('call', (call) => {
-        if (localStream) {
-          call.answer(localStream);
-        }
+        call.answer();
+        call.on('stream', (stream) => {
+          attachStreamToFullScreen(stream);
+        });
       });
+    });
 
-      peer.on('error', (err) => {
-        logMsg('Peer Error: ' + err.type + ' - ' + err.message);
-      });
-
-      if ('wakeLock' in navigator) {
-        navigator.wakeLock.request('screen').catch(() => {});
+    // --- ⏺ 録画 ＆ 25Hzテレメトリ同時記録機能 ---
+    btnRec.addEventListener('click', () => {
+      if (!isRecording) {
+        startSessionRecording();
+      } else {
+        stopSessionRecording();
       }
     });
 
-    function updatePitCount() {
-      const count = activeDataConns.filter(c => c.open).length;
-      const badge = document.getElementById('pitBadge');
-      badge.textContent = `PIT PC: ${count}`;
-      badge.className = count > 0
-        ? 'px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-400/50 font-bold'
-        : 'px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-white/10';
+    function startSessionRecording() {
+      // カメラ映像が来ていればそのストリーム、未接続テスト時は背景Canvasを録画
+      const targetStream = liveStream || simCanvas.captureStream(30);
+      recordedChunks = [];
+      recordedTelemetryLog = [];
+      recStartTime = performance.now();
+
+      // MP4優先、非対応ブラウザはWebMで録画
+      const mimeTypes = [
+        'video/mp4;codecs=avc1',
+        'video/mp4',
+        'video/webm;codecs=vp9',
+        'video/webm;codecs=vp8',
+        'video/webm'
+      ];
+      let selectedMime = '';
+      for (const m of mimeTypes) {
+        if (MediaRecorder.isTypeSupported(m)) {
+          selectedMime = m;
+          break;
+        }
+      }
+
+      try {
+        mediaRecorder = selectedMime
+          ? new MediaRecorder(targetStream, { mimeType: selectedMime })
+          : new MediaRecorder(targetStream);
+      } catch (e) {
+        mediaRecorder = new MediaRecorder(targetStream);
+      }
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) recordedChunks.push(e.data);
+      };
+
+      mediaRecorder.onstop = () => {
+        const ext = (mediaRecorder.mimeType && mediaRecorder.mimeType.includes('mp4')) ? 'mp4' : 'webm';
+        const videoBlob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || 'video/webm' });
+        const videoUrl = URL.createObjectURL(videoBlob);
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+
+        // 1. 動画ファイルの自動ダウンロード
+        downloadBlob(videoBlob, `ND27_MOVIE_${stamp}.${ext}`);
+
+        // 2. 同期テレメトリJSONログ（アプリ内Data-Movie再生用）のダウンロード
+        const jsonBlob = new Blob([JSON.stringify(recordedTelemetryLog)], { type: 'application/json' });
+        downloadBlob(jsonBlob, `ND27_TELEM_${stamp}.json`);
+
+        // 3. CSVログ（Excel / RaceStudio外部比較用）のダウンロード
+        const csvHeader = 'Time_s,Speed_kmh,RPM,Gear,Throttle_pct,Brake_pct,Clutch_pct,LonG,LatG,Steer_deg\n';
+        const csvRows = recordedTelemetryLog.map(r =>
+          `${(r.offsetMs / 1000).toFixed(3)},${r.spd},${r.rpm},${r.gear},${r.thr},${r.brk},${r.clt || 0},${r.gx},${r.gy},${r.steer}`
+        ).join('\n');
+        const csvBlob = new Blob([csvHeader + csvRows], { type: 'text/csv' });
+        downloadBlob(csvBlob, `ND27_LOG_${stamp}.csv`);
+
+        // 録画した動画をそのままREVIEWモードにセットして即座に見返せるようにする
+        enterReviewModeWithUrl(videoUrl);
+      };
+
+      mediaRecorder.start(200);
+      isRecording = true;
+      btnRec.textContent = '⏹ STOP REC';
+      btnRec.className = 'px-2.5 py-0.5 bg-rose-500 animate-pulse text-white font-extrabold text-[11px] rounded tracking-wider border border-white shadow';
     }
 
-    // 5. 25Hz テレメトリ送信ループ
-    setInterval(() => {
-      if (isDemoMode && !bleConnected) {
-        demoPhase += 0.05;
-        const wave = Math.sin(demoPhase);
-        const brkZone = wave < -0.25 ? Math.min(100, Math.round((-wave - 0.25) * 145)) : 0;
-        const thrZone = brkZone === 0 ? Math.min(100, Math.max(0, Math.round((wave + 0.3) * 90))) : 0;
-        const spd = Math.round(135 + wave * 65);
-        latestTelemetry = {
-          spd: spd,
-          rpm: Math.round(3800 + (spd % 45) * 80),
-          gear: spd > 175 ? 5 : spd > 135 ? 4 : spd > 95 ? 3 : 2,
-          thr: thrZone,
-          brk: brkZone,
-          gx: Number((brkZone > 0 ? -brkZone * 0.012 : thrZone * 0.004).toFixed(2)),
-          gy: Number((Math.cos(demoPhase * 0.8) * 1.15).toFixed(2)),
-          steer: Math.round(Math.cos(demoPhase * 0.8) * 95)
-        };
+    function stopSessionRecording() {
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
       }
+      isRecording = false;
+      btnRec.textContent = '⏺ REC';
+      btnRec.className = 'px-2.5 py-0.5 bg-rose-700 hover:bg-rose-600 text-white font-extrabold text-[11px] rounded tracking-wider border border-rose-400/40 shadow';
+      document.getElementById('recTimerBadge').textContent = '720p 60FPS';
+    }
 
-      document.getElementById('valSpd').textContent = Math.round(latestTelemetry.spd);
-      document.getElementById('valRpm').textContent = Math.round(latestTelemetry.rpm);
-      document.getElementById('valThr').textContent = Math.round(latestTelemetry.thr);
-      document.getElementById('valBrk').textContent = Math.round(latestTelemetry.brk);
-      document.getElementById('valG').textContent = `${latestTelemetry.gx.toFixed(1)}/${latestTelemetry.gy.toFixed(1)}`;
+    function downloadBlob(blob, filename) {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+    }
 
-      const payload = {
-        t: Date.now(),
-        ...latestTelemetry
-      };
-      activeDataConns.forEach(conn => {
-        if (conn.open) {
-          conn.send(payload);
-        }
-      });
-    }, 40);
+    // --- 🎬 DATA-MOVIE REVIEW（走行後動画＆ログ完全同期再生モード） ---
+    const revSeek = document.getElementById('revSeek');
+    const btnRevPlay = document.getElementById('btnRevPlay');
+    const revTimeLabel = document.getElementById('revTimeLabel');
+    const revSpeed = document.getElementById('revSpeed');
 
-    window.addEventListener('load', async () => {
-      await startCamera();
-      // 初回許可後に超広角レンズが見つかっていれば自動的に切り替える
-      await loadVideoDevices();
-      if (currentDeviceIndex > 0 && videoDevices[currentDeviceIndex]) {
-        await startCamera(videoDevices[currentDeviceIndex].deviceId);
+    btnReviewMode.addEventListener('click', () => {
+      reviewBar.classList.toggle('hidden');
+    });
+
+    function enterReviewModeWithUrl(videoUrl) {
+      isReviewMode = true;
+      isAutoSim = false;
+      document.getElementById('chkAutoSim').checked = false;
+      reviewBar.classList.remove('hidden');
+
+      document.getElementById('statusBadge').innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-400"></span> REVIEW // DATA-MOVIE';
+      remoteVideo.srcObject = null;
+      remoteVideo.src = videoUrl;
+      remoteVideo.loop = true;
+      remoteVideo.style.opacity = '1';
+      simCanvas.style.opacity = '0';
+      remoteVideo.play().catch(() => {});
+      btnRevPlay.textContent = '⏸ PAUSE';
+    }
+
+    btnRevPlay.addEventListener('click', () => {
+      if (remoteVideo.paused) {
+        remoteVideo.play();
+        btnRevPlay.textContent = '⏸ PAUSE';
+      } else {
+        remoteVideo.pause();
+        btnRevPlay.textContent = '▶ PLAY';
       }
     });
+
+    revSpeed.addEventListener('change', (e) => {
+      remoteVideo.playbackRate = parseFloat(e.target.value) || 1.0;
+    });
+
+    revSeek.addEventListener('input', (e) => {
+      if (remoteVideo.duration) {
+        const targetTime = (parseFloat(e.target.value) / 1000) * remoteVideo.duration;
+        remoteVideo.currentTime = targetTime;
+        syncTelemetryToVideoTime(targetTime * 1000);
+      }
+    });
+
+    // 過去ファイルの手動読み込み（動画 ＆ JSONログ）
+    document.getElementById('inputLoadVideo').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) enterReviewModeWithUrl(URL.createObjectURL(file));
+    });
+
+    document.getElementById('inputLoadJson').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          recordedTelemetryLog = JSON.parse(ev.target.result);
+        } catch (err) {}
+      };
+      reader.readAsText(file);
+    });
+
+    document.getElementById('btnExitReview').addEventListener('click', () => {
+      isReviewMode = false;
+      reviewBar.classList.add('hidden');
+      document.getElementById('statusBadge').innerHTML = '<span class="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span> LIVE // CAR ND-27';
+      remoteVideo.pause();
+      remoteVideo.removeAttribute('src');
+      if (liveStream) {
+        remoteVideo.srcObject = liveStream;
+        remoteVideo.play().catch(() => {});
+      } else {
+        remoteVideo.style.opacity = '0';
+        simCanvas.style.opacity = '1';
+        isAutoSim = true;
+        document.getElementById('chkAutoSim').checked = true;
+      }
+    });
+
+    // 動画の再生位置（ミリ秒）に合わせて当時のテレメトリと過去6秒のペダル波形を完全復元する
+    function syncTelemetryToVideoTime(currentMs) {
+      if (!recordedTelemetryLog || recordedTelemetryLog.length === 0) return;
+      // 二分探索または近傍検索で該当フレームを取得
+      let idx = 0;
+      for (let i = 0; i < recordedTelemetryLog.length; i++) {
+        if (recordedTelemetryLog[i].offsetMs <= currentMs) {
+          idx = i;
+        } else {
+          break;
+        }
+      }
+      const frame = recordedTelemetryLog[idx];
+      if (frame) {
+        telem = { ...telem, ...frame };
+        // その時点までの過去240フレーム（約6秒分）のペダル波形をオシロスコープに反映
+        for (let j = 0; j < MAX_HISTORY; j++) {
+          const histIdx = idx - (MAX_HISTORY - 1 - j);
+          if (histIdx >= 0 && recordedTelemetryLog[histIdx]) {
+            oscilloHistory[j] = {
+              thr: recordedTelemetryLog[histIdx].thr,
+              brk: recordedTelemetryLog[histIdx].brk
+            };
+          } else {
+            oscilloHistory[j] = { thr: 0, brk: 0 };
+          }
+        }
+      }
+    }
+
+    // --- ドラッグ移動 ＆ リサイズ ---
+    const hudContainer = document.getElementById('hudContainer');
+    const panels = document.querySelectorAll('#hudContainer > div');
+
+    function updateScale(panel) {
+      const baseW = parseFloat(panel.dataset.baseW) || 150;
+      const currentW = panel.offsetWidth;
+      const scale = Math.max(0.65, Math.min(2.8, currentW / baseW));
+      panel.style.setProperty('--ui-scale', scale.toFixed(3));
+    }
+
+    panels.forEach(panel => {
+      updateScale(panel);
+      let isDragging = false, isResizing = false;
+      let startX, startY, startLeft, startTop, initW, initH;
+
+      panel.addEventListener('mousedown', (e) => {
+        if (e.target.classList.contains('resize-handle')) return;
+        isDragging = true;
+        startX = e.clientX;
+        startY = e.clientY;
+        const rect = panel.getBoundingClientRect();
+        const parentRect = hudContainer.getBoundingClientRect();
+        startLeft = rect.left - parentRect.left;
+        startTop = rect.top - parentRect.top;
+        panel.style.transform = 'none';
+        panel.style.left = startLeft + 'px';
+        panel.style.top = startTop + 'px';
+        panel.style.right = 'auto';
+        panel.style.bottom = 'auto';
+      });
+
+      const handle = panel.querySelector('.resize-handle');
+      if (handle) {
+        handle.addEventListener('mousedown', (e) => {
+          e.stopPropagation();
+          isResizing = true;
+          startX = e.clientX;
+          startY = e.clientY;
+          initW = panel.offsetWidth;
+          initH = panel.offsetHeight;
+        });
+      }
+
+      window.addEventListener('mousemove', (e) => {
+        if (isDragging) {
+          panel.style.left = (startLeft + e.clientX - startX) + 'px';
+          panel.style.top = (startTop + e.clientY - startY) + 'px';
+        } else if (isResizing) {
+          const minW = parseFloat(panel.dataset.minW) || 60;
+          const minH = parseFloat(panel.dataset.minH) || 30;
+          panel.style.width = Math.max(minW, initW + (e.clientX - startX)) + 'px';
+          panel.style.height = Math.max(minH, initH + (e.clientY - startY)) + 'px';
+          updateScale(panel);
+        }
+      });
+
+      window.addEventListener('mouseup', () => {
+        isDragging = false;
+        isResizing = false;
+      });
+    });
+
+    document.getElementById('btnResetHud').addEventListener('click', () => location.reload());
+    const drawerSim = document.getElementById('drawerSim');
+    document.getElementById('btnToggleSim').addEventListener('click', () => drawerSim.classList.toggle('translate-x-full'));
+    document.getElementById('btnCloseSim').addEventListener('click', () => drawerSim.classList.add('translate-x-full'));
+    document.getElementById('chkAutoSim').addEventListener('change', (e) => isAutoSim = e.target.checked);
+
+    let simPhase = 4.2;
+    const oscilloCanvas = document.getElementById('oscilloCanvas');
+    const oscCtx = oscilloCanvas.getContext('2d');
+    const gCanvas = document.getElementById('gCanvas');
+    const gCtx = gCanvas.getContext('2d');
+    const gpsCanvas = document.getElementById('gpsCanvas');
+    const gpsCtx = gpsCanvas.getContext('2d');
+    const sCtx = simCanvas.getContext('2d');
+
+    const fswTrack = [
+      [0.12, 0.25], [0.85, 0.25], [0.90, 0.35], [0.78, 0.48],
+      [0.62, 0.42], [0.52, 0.55], [0.60, 0.75], [0.42, 0.82],
+      [0.28, 0.68], [0.18, 0.78], [0.10, 0.55], [0.12, 0.25]
+    ];
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      if (isReviewMode) {
+        // REVIEWモード中は動画の現在時刻に合わせてテレメトリを同期
+        if (remoteVideo.duration) {
+          const cur = remoteVideo.currentTime;
+          const dur = remoteVideo.duration;
+          revSeek.value = Math.round((cur / dur) * 1000);
+          revTimeLabel.textContent = `${ cur.toFixed(1) }s / ${ dur.toFixed(1) }s`;
+          syncTelemetryToVideoTime(cur * 1000);
+        }
+      } else {
+        if (isAutoSim) {
+          simPhase += 0.03;
+          const wave = Math.sin(simPhase);
+          const brk = wave < -0.2 ? Math.min(100, Math.round((-wave - 0.2) * 135)) : 0;
+          const thr = brk === 0 ? Math.min(100, Math.max(0, Math.round((wave + 0.25) * 88))) : 0;
+          const spd = Math.round(125 + wave * 55);
+          telem = {
+            spd: spd,
+            rpm: Math.round(3800 + (spd % 45) * 75),
+            gear: spd > 165 ? 5 : spd > 125 ? 4 : spd > 88 ? 3 : 2,
+            thr: thr,
+            brk: brk,
+            clt: 0,
+            gx: Number((brk > 0 ? -brk * 0.011 : thr * 0.004).toFixed(2)),
+            gy: Number((Math.cos(simPhase * 0.7) * 0.95).toFixed(2)),
+            steer: Number((Math.cos(simPhase * 0.7) * 15).toFixed(1))
+          };
+        }
+
+        oscilloHistory.shift();
+        oscilloHistory.push({ thr: telem.thr, brk: telem.brk });
+
+        // 録画中ならテレメトリをタイムスタンプ付きで記録
+        if (isRecording) {
+          const elapsedMs = Math.round(performance.now() - recStartTime);
+          recordedTelemetryLog.push({
+            offsetMs: elapsedMs,
+            ...telem
+          });
+          document.getElementById('recTimerBadge').textContent = `🔴 REC ${(elapsedMs / 1000).toFixed(1)}s`;
+        }
+      }
+
+      // HUD数値反映
+      document.getElementById('hudSpeed').textContent = Math.round(telem.spd);
+      document.getElementById('hudGear').textContent = telem.gear;
+      document.getElementById('hudRpm').textContent = Math.round(telem.rpm).toLocaleString();
+      document.getElementById('hudSteer').textContent = `${telem.steer}°`;
+      document.getElementById('hudRpmBar').style.width = Math.min(100, (telem.rpm / 7500) * 100) + '%';
+
+      document.getElementById('barThr').style.height = telem.thr + '%';
+      document.getElementById('barBrk').style.height = telem.brk + '%';
+      document.getElementById('barClt').style.height = (telem.clt || 0) + '%';
+      document.getElementById('labelThr').textContent = `${Math.round(telem.thr)}%`;
+      document.getElementById('labelBrk').textContent = `${Math.round(telem.brk)}% (${(telem.brk * 0.085).toFixed(1)} MPa)`;
+
+      const gTotal = Math.hypot(telem.gx, telem.gy).toFixed(2);
+      document.getElementById('hudGTotal').textContent = `${gTotal}G`;
+      document.getElementById('hudGLat').textContent = telem.gy.toFixed(2);
+      document.getElementById('hudGLon').textContent = telem.gx.toFixed(2);
+
+      // オシロスコープ描画
+      oscilloCanvas.width = oscilloCanvas.offsetWidth;
+      oscilloCanvas.height = oscilloCanvas.offsetHeight;
+      const w = oscilloCanvas.width, h = oscilloCanvas.height;
+      oscCtx.clearRect(0, 0, w, h);
+
+      oscCtx.strokeStyle = '#10b981';
+      oscCtx.lineWidth = 4.5;
+      oscCtx.beginPath();
+      for (let i = 0; i < oscilloHistory.length; i++) {
+        const x = (i / (oscilloHistory.length - 1)) * w;
+        const y = h - (oscilloHistory[i].thr / 100) * (h - 8) - 4;
+        if (i === 0) oscCtx.moveTo(x, y); else oscCtx.lineTo(x, y);
+      }
+      oscCtx.stroke();
+
+      oscCtx.strokeStyle = '#f43f5e';
+      oscCtx.lineWidth = 4.5;
+      oscCtx.beginPath();
+      for (let i = 0; i < oscilloHistory.length; i++) {
+        const x = (i / (oscilloHistory.length - 1)) * w;
+        const y = h - (oscilloHistory[i].brk / 100) * (h - 8) - 4;
+        if (i === 0) oscCtx.moveTo(x, y); else oscCtx.lineTo(x, y);
+      }
+      oscCtx.stroke();
+
+      // G-BALL描画
+      gCanvas.width = gCanvas.offsetWidth;
+      gCanvas.height = gCanvas.offsetHeight;
+      const gw = gCanvas.width, gh = gCanvas.height;
+      const cx = gw / 2, cy = gh / 2, r = Math.min(cx, cy) - 3;
+      gCtx.clearRect(0, 0, gw, gh);
+      gCtx.strokeStyle = 'rgba(255,255,255,0.18)';
+      gCtx.lineWidth = 1;
+      gCtx.beginPath(); gCtx.arc(cx, cy, r * 0.6, 0, Math.PI * 2); gCtx.stroke();
+      gCtx.beginPath(); gCtx.arc(cx, cy, r, 0, Math.PI * 2); gCtx.stroke();
+      gCtx.beginPath(); gCtx.moveTo(cx, 0); gCtx.lineTo(cx, gh); gCtx.moveTo(0, cy); gCtx.lineTo(gw, cy); gCtx.stroke();
+
+      const bx = cx + (telem.gy / 1.5) * r;
+      const by = cy - (telem.gx / 1.5) * r;
+      gCtx.fillStyle = '#f59e0b';
+      gCtx.beginPath();
+      gCtx.arc(Math.max(3, Math.min(gw - 3, bx)), Math.max(3, Math.min(gh - 3, by)), 3.5, 0, Math.PI * 2);
+      gCtx.fill();
+
+      // GPSコースマップ描画
+      gpsCanvas.width = gpsCanvas.offsetWidth;
+      gpsCanvas.height = gpsCanvas.offsetHeight;
+      const pw = gpsCanvas.width, ph = gpsCanvas.height;
+      gpsCtx.clearRect(0, 0, pw, ph);
+      gpsCtx.strokeStyle = 'rgba(255,255,255,0.35)';
+      gpsCtx.lineWidth = 2;
+      gpsCtx.lineJoin = 'round';
+      gpsCtx.beginPath();
+      fswTrack.forEach((pt, idx) => {
+        const x = pt[0] * pw, y = pt[1] * ph;
+        if (idx === 0) gpsCtx.moveTo(x, y); else gpsCtx.lineTo(x, y);
+      });
+      gpsCtx.stroke();
+
+      const idx = Math.floor((simPhase * 1.5) % (fswTrack.length - 1));
+      const dotX = fswTrack[idx][0] * pw;
+      const dotY = fswTrack[idx][1] * ph;
+      gpsCtx.fillStyle = '#38bdf8';
+      gpsCtx.beginPath();
+      gpsCtx.arc(dotX, dotY, 3.5, 0, Math.PI * 2);
+      gpsCtx.fill();
+
+      // カメラ未接続時の背景描画
+      if (simCanvas.style.opacity !== '0') {
+        simCanvas.width = simCanvas.offsetWidth;
+        simCanvas.height = simCanvas.offsetHeight;
+        const sw = simCanvas.width, sh = simCanvas.height;
+        sCtx.fillStyle = '#080c16';
+        sCtx.fillRect(0, 0, sw, sh);
+        sCtx.fillStyle = '#141d2f';
+        sCtx.beginPath();
+        sCtx.moveTo(sw * 0.45, sh * 0.45);
+        sCtx.lineTo(sw * 0.55, sh * 0.45);
+        sCtx.lineTo(sw * 0.85, sh);
+        sCtx.lineTo(sw * 0.15, sh);
+        sCtx.fill();
+      }
+    }
+
+    animate();
   </script>
 </body>
 </html>
