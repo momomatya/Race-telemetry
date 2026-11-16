@@ -75,7 +75,7 @@
       <span id="statusBadge" class="flex items-center gap-1.5 px-2 py-0.5 rounded bg-rose-950/90 border border-rose-500/50 text-rose-400 font-extrabold">
         <span class="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span> LIVE // CAR ND-27
       </span>
-      <span class="text-white font-extrabold tracking-wide">CH 01 // ND-ROADSTER #27</span>
+      <span id="headerCourseBadge" class="text-cyan-300 font-extrabold tracking-wide">📍 FSW (4,563m)</span>
       <span class="text-slate-600">|</span>
       <span id="statLatency" class="mono text-cyan-400 font-bold">244ms</span>
       <span class="text-slate-600">|</span>
@@ -101,20 +101,20 @@
       <button id="btnBurnMode" class="px-2 py-0.5 bg-amber-600/30 hover:bg-amber-600/50 text-amber-300 text-[11px] font-extrabold rounded border border-amber-400/50" title="動画へのHUDメーター焼き込みON/OFF">
         🔥 焼込: ON
       </button>
+      <label class="px-2 py-0.5 bg-[#161f33] hover:bg-slate-700 text-emerald-300 text-[11px] font-extrabold rounded border border-emerald-500/40 cursor-pointer" title="過去のログ(.json/.csv)を比較ベストとして読み込む">
+        🏆 REF読込 <input id="inputHeaderRefLog" type="file" accept=".json,.csv" class="hidden" />
+      </label>
       <button id="btnReviewMode" class="px-2 py-0.5 bg-[#161f33] hover:bg-slate-700 text-amber-300 text-[11px] font-bold rounded border border-amber-500/30">
         🎬 REVIEW
       </button>
       <button id="btnFovMode" class="px-2 py-0.5 bg-[#161f33] hover:bg-slate-700 text-cyan-300 text-[11px] font-bold rounded border border-cyan-500/30" title="映像の表示比率切替">
         📐 FOV: FULL-WIDE
       </button>
-      <button id="btnPtt" class="px-2.5 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-[11px] rounded tracking-wider shadow">
-        🎙 RADIO PTT [SPACE]
-      </button>
       <button id="btnResetHud" class="px-2 py-0.5 bg-[#161f33] hover:bg-slate-700 text-cyan-300 text-[11px] font-bold rounded border border-cyan-500/30">
-        ↺ RESET HUD
+        ↺ RESET
       </button>
-      <button id="btnToggleSim" class="px-2 py-0.5 bg-[#161f33] hover:bg-slate-700 text-slate-300 text-[11px] font-bold rounded border border-white/10">
-        ⚙ SIM
+      <button id="btnToggleSim" class="px-2 py-0.5 bg-cyan-900/60 hover:bg-cyan-800 text-cyan-200 text-[11px] font-extrabold rounded border border-cyan-400/40">
+        ⚙ コース/設定
       </button>
     </div>
   </header>
@@ -148,7 +148,7 @@
     </button>
   </div>
 
-  <!-- HUDメイン領域 -->
+  <!-- HUDメイン領域（GT7デザイン完全維持） -->
   <main id="hudContainer" class="relative flex-1 w-full h-full overflow-hidden z-20 pointer-events-none">
 
     <!-- 1. 左上：スピード＆ギアパネル -->
@@ -199,32 +199,32 @@
       <div class="hud-handle space-y-[2px] text-[calc(0.58rem*var(--ui-scale))] mono font-bold leading-tight">
         <div class="grid grid-cols-12 items-center">
           <span class="col-span-2 text-slate-400 text-center bg-slate-800/80 rounded-sm text-[calc(0.5rem*var(--ui-scale))]">3</span>
-          <span class="col-span-6 text-right pr-1.5 text-slate-100">0'10.549</span>
-          <span class="col-span-4 text-center bg-blue-600 text-white rounded-sm py-[1px] text-[calc(0.52rem*var(--ui-scale))]">-3.077</span>
+          <span id="timeS3" class="col-span-6 text-right pr-1.5 text-slate-100">0'21.549</span>
+          <span id="badgeS3" class="col-span-4 text-center bg-blue-600 text-white rounded-sm py-[1px] text-[calc(0.52rem*var(--ui-scale))]">-0.210</span>
         </div>
         <div class="grid grid-cols-12 items-center">
           <span class="col-span-2 text-slate-400 text-center bg-slate-800/80 rounded-sm text-[calc(0.5rem*var(--ui-scale))]">2</span>
-          <span class="col-span-6 text-right pr-1.5 text-slate-100">0'18.183</span>
-          <span class="col-span-4 text-center bg-blue-600 text-white rounded-sm py-[1px] text-[calc(0.52rem*var(--ui-scale))]">-17.844</span>
+          <span id="timeS2" class="col-span-6 text-right pr-1.5 text-slate-100">0'38.183</span>
+          <span id="badgeS2" class="col-span-4 text-center bg-blue-600 text-white rounded-sm py-[1px] text-[calc(0.52rem*var(--ui-scale))]">-0.340</span>
         </div>
         <div class="grid grid-cols-12 items-center">
           <span class="col-span-2 text-slate-200 text-center bg-slate-700 rounded-sm text-[calc(0.5rem*var(--ui-scale))]">1</span>
-          <span class="col-span-6 text-right pr-1.5 text-white font-extrabold">0'10.699</span>
-          <span class="col-span-4 text-center bg-slate-700/80 text-slate-300 rounded-sm py-[1px] text-[calc(0.5rem*var(--ui-scale))]">LIVE</span>
+          <span id="timeS1" class="col-span-6 text-right pr-1.5 text-white font-extrabold">0'24.699</span>
+          <span id="badgeS1" class="col-span-4 text-center bg-slate-700/80 text-slate-300 rounded-sm py-[1px] text-[calc(0.5rem*var(--ui-scale))]">LIVE</span>
         </div>
         <div class="grid grid-cols-12 items-center pt-0.5 border-t border-white/10">
           <span class="col-span-3 text-slate-400 text-[calc(0.48rem*var(--ui-scale))]">LAST</span>
-          <span class="col-span-5 text-right pr-1 text-slate-300 text-[calc(0.52rem*var(--ui-scale))]">1'15.016</span>
-          <span class="col-span-4 text-center bg-rose-600 text-white rounded-sm py-[1px] text-[calc(0.52rem*var(--ui-scale))]">+1.891</span>
+          <span id="timeLast" class="col-span-5 text-right pr-1 text-slate-300 text-[calc(0.52rem*var(--ui-scale))]">1'55.016</span>
+          <span id="badgeLast" class="col-span-4 text-center bg-rose-600 text-white rounded-sm py-[1px] text-[calc(0.52rem*var(--ui-scale))]">+0.420</span>
         </div>
         <div class="grid grid-cols-12 items-center">
           <span class="col-span-3 text-emerald-400 text-[calc(0.48rem*var(--ui-scale))]">BEST</span>
-          <span class="col-span-6 text-right pr-1 text-emerald-400 text-[calc(0.52rem*var(--ui-scale))]">1'00.785</span>
-          <span class="col-span-3 text-right text-slate-500 text-[calc(0.45rem*var(--ui-scale))]">P1</span>
+          <span id="timeBest" class="col-span-6 text-right pr-1 text-emerald-400 text-[calc(0.52rem*var(--ui-scale))]">1'54.596</span>
+          <span id="labelBestSource" class="col-span-3 text-right text-slate-500 text-[calc(0.45rem*var(--ui-scale))]">REF</span>
         </div>
         <div class="grid grid-cols-12 items-center">
           <span class="col-span-3 text-amber-400 text-[calc(0.48rem*var(--ui-scale))]">OPT.</span>
-          <span class="col-span-6 text-right pr-1 text-amber-400 text-[calc(0.52rem*var(--ui-scale))]">1'07.447</span>
+          <span id="timeOpt" class="col-span-6 text-right pr-1 text-amber-400 text-[calc(0.52rem*var(--ui-scale))]">1'54.120</span>
           <span class="col-span-3 text-right text-slate-500 text-[calc(0.45rem*var(--ui-scale))]">IDEAL</span>
         </div>
       </div>
@@ -237,10 +237,10 @@
          style="top: 14px; left: 50%; transform: translateX(-50%); width: 135px; height: 32px; --ui-scale: 1;">
       <div class="hud-handle leading-none">
         <div class="text-[calc(0.42rem*var(--ui-scale))] font-bold text-slate-400">LIVE LAP</div>
-        <div class="text-[calc(0.45rem*var(--ui-scale))] font-extrabold text-cyan-400">SECTOR 1</div>
+        <div id="hudCurrentSector" class="text-[calc(0.45rem*var(--ui-scale))] font-extrabold text-cyan-400">SECTOR 1</div>
       </div>
       <div id="hudLapTime" class="text-[calc(1.05rem*var(--ui-scale))] font-black mono text-white leading-none tracking-tight">0'10.883</div>
-      <span class="px-1 py-[1px] rounded-sm bg-cyan-950 text-cyan-300 mono text-[calc(0.45rem*var(--ui-scale))] font-bold border border-cyan-500/40">LIVE</span>
+      <span id="hudLiveDeltaBadge" class="px-1 py-[1px] rounded-sm bg-cyan-950 text-cyan-300 mono text-[calc(0.45rem*var(--ui-scale))] font-bold border border-cyan-500/40">LIVE</span>
       <div class="resize-handle">⤡</div>
     </div>
 
@@ -250,7 +250,7 @@
          style="top: 14px; right: 162px; width: 88px; height: 68px; --ui-scale: 1;">
       <div class="hud-handle flex justify-between items-center text-[calc(0.45rem*var(--ui-scale))] font-bold">
         <span class="text-cyan-400">● GPS</span>
-        <span class="text-slate-200">STRAIGHT</span>
+        <span id="hudCourseShort" class="text-slate-200">FSW</span>
       </div>
       <canvas id="gpsCanvas" class="w-full flex-1"></canvas>
       <div class="resize-handle">⤡</div>
@@ -271,22 +271,24 @@
       <div class="resize-handle">⤡</div>
     </div>
 
-    <!-- 6. 下部：ペダルアプリケーション・トレース -->
+    <!-- 6. 下部：4chテレメトリ・トレース（THR / BRK / SPD / BEST Δ・細線2.0px仕様） -->
     <div id="panelPedals" data-base-w="880" data-base-h="66" data-min-w="420" data-min-h="50"
          class="absolute pointer-events-auto gt-panel rounded-sm px-3 py-1.5 flex flex-col justify-between"
          style="bottom: 10px; left: 50%; transform: translateX(-50%); width: 880px; height: 66px; --ui-scale: 1;">
 
-      <div class="hud-handle flex justify-between items-center text-[calc(0.68rem*var(--ui-scale))] font-extrabold tracking-wide">
+      <div class="hud-handle flex justify-between items-center text-[calc(0.66rem*var(--ui-scale))] font-extrabold tracking-wide">
         <div class="flex items-center gap-3">
-          <span class="text-white flex items-center gap-1"><span class="text-cyan-400">⠿</span>•PEDAL APPLICATION TRACE (LAST 6s)</span>
-          <span class="text-emerald-400">THR: <span id="labelThr">0%</span></span>
-          <span class="text-rose-400">BRK: <span id="labelBrk">59% (5.0 MPa)</span></span>
-          <span class="text-slate-300">CLT: <span id="labelClt">0%</span></span>
+          <span class="text-white flex items-center gap-1"><span class="text-cyan-400">⠿</span>•TELEMETRY TRACE (LAST 6s)</span>
+          <span class="text-emerald-400">■ THR: <span id="labelThr" class="mono">0%</span></span>
+          <span class="text-rose-400">■ BRK: <span id="labelBrk" class="mono">59% (5.0 MPa)</span></span>
+          <span class="text-sky-400">■ SPD: <span id="labelSpd" class="mono">92 km/h</span></span>
+          <span class="text-amber-400">■ BEST Δ: <span id="labelDelta" class="mono">+0.00s</span></span>
         </div>
-        <span class="text-slate-400 text-[calc(0.6rem*var(--ui-scale))] tracking-widest">TRAIL BRAKE RELEASE GRADIENT</span>
+        <span class="text-slate-400 text-[calc(0.56rem*var(--ui-scale))] tracking-widest">THR / BRK / SPD / DELTA</span>
       </div>
 
       <div class="flex items-end gap-2.5 flex-1 pt-1 overflow-hidden">
+        <!-- 左端ミニインジケータ（THR / BRK / SPD） -->
         <div class="flex items-end gap-1.5 h-full pb-0.5 shrink-0">
           <div class="flex flex-col items-center h-full justify-end">
             <div class="w-4 flex-1 bg-slate-800/90 rounded-sm overflow-hidden flex flex-col justify-end border border-white/10">
@@ -302,12 +304,13 @@
           </div>
           <div class="flex flex-col items-center h-full justify-end">
             <div class="w-4 flex-1 bg-slate-800/90 rounded-sm overflow-hidden flex flex-col justify-end border border-white/10">
-              <div id="barClt" class="w-full bg-cyan-400" style="height: 0%;"></div>
+              <div id="barSpd" class="w-full bg-sky-400" style="height: 42%;"></div>
             </div>
-            <span class="text-[calc(0.55rem*var(--ui-scale))] font-black text-cyan-400 leading-none mt-0.5">CLT</span>
+            <span class="text-[calc(0.55rem*var(--ui-scale))] font-black text-sky-400 leading-none mt-0.5">SPD</span>
           </div>
         </div>
 
+        <!-- 4ch波形オシロスコープ本体 -->
         <div class="relative flex-1 h-full bg-[#060911]/90 rounded-sm border border-white/10 overflow-hidden">
           <canvas id="oscilloCanvas" class="w-full h-full block"></canvas>
           <div class="absolute inset-x-2 bottom-0.5 flex justify-between text-[calc(0.55rem*var(--ui-scale))] mono font-bold text-slate-400 pointer-events-none">
@@ -324,59 +327,440 @@
 
   </main>
 
-  <!-- 右側：自動録画設定 ＆ シミュレーション設定ドロワー -->
-  <div id="drawerSim" class="fixed top-9 right-0 bottom-0 w-72 bg-slate-950/95 border-l border-white/15 p-4 z-40 transform translate-x-full transition-transform duration-200 space-y-4 text-xs">
+  <!-- 右側：コース＆セクター設定 / ベスト比較ログ読込 / 自動録画設定ドロワー -->
+  <div id="drawerSim" class="fixed top-9 right-0 bottom-0 w-80 bg-slate-950/95 border-l border-white/15 p-3.5 z-40 transform translate-x-full transition-transform duration-200 overflow-y-auto space-y-3.5 text-xs">
     <div class="flex items-center justify-between border-b border-white/10 pb-2">
-      <h3 class="font-bold text-cyan-400">AUTO-REC & SIMULATOR</h3>
-      <button id="btnCloseSim" class="text-slate-400 hover:text-white">✕</button>
+      <h3 class="font-extrabold text-sm text-cyan-400 tracking-wider">📍 COURSE & SECTOR / REF LOG</h3>
+      <button id="btnCloseSim" class="text-slate-400 hover:text-white text-sm">✕</button>
     </div>
 
-    <!-- 自動録画トリガー設定 -->
-    <div class="space-y-2.5 bg-slate-900/90 p-2.5 rounded border border-cyan-500/30">
-      <div class="font-extrabold text-cyan-300 tracking-wider">⚡ AUTO-REC TRIGGER (SmartyCam式)</div>
+    <!-- 1. GPSコース選択 ＆ セクター距離設定 -->
+    <div class="space-y-2 bg-slate-900/90 p-2.5 rounded border border-cyan-500/30">
       <div class="flex items-center justify-between">
-        <span class="text-slate-300">開始車速しきい値:</span>
+        <span class="font-extrabold text-cyan-300">1. サーキット選択 & GPS検索</span>
+        <button id="btnDetectGpsCourse" class="px-2 py-0.5 bg-cyan-600 hover:bg-cyan-500 text-white font-extrabold rounded text-[11px] shadow">
+          📍 GPS近隣コース検索
+        </button>
+      </div>
+      <div id="gpsDetectStatus" class="text-[10px] mono text-slate-400">GPSボタンを押すと現在地から一番近いコースを自動選択します。</div>
+
+      <select id="selectCourse" class="w-full bg-slate-950 border border-white/20 rounded px-2 py-1.5 text-white font-bold">
+        <option value="fsw">富士スピードウェイ (FSW - 4,563m)</option>
+        <option value="motegi">モビリティリゾートもてぎ (4,801m)</option>
+        <option value="nikko">日光サーキット (1,047m)</option>
+        <option value="sodegaura">袖ヶ浦フォレストレースウェイ (2,436m)</option>
+        <option value="tsukuba">筑波サーキット TC2000 (2,045m)</option>
+      </select>
+
+      <div class="pt-1.5 border-t border-white/10 space-y-1.5">
+        <div class="text-[11px] font-bold text-slate-300">コース全長 & セクター境界設定 (m)</div>
+        <div class="grid grid-cols-3 gap-1.5 text-center">
+          <div class="bg-slate-950 p-1.5 rounded border border-white/10">
+            <div class="text-[10px] text-cyan-400 font-bold">S1 終了 (m)</div>
+            <input id="inputS1End" type="number" value="1450" class="w-full bg-transparent text-center mono font-bold text-white focus:outline-none" />
+          </div>
+          <div class="bg-slate-950 p-1.5 rounded border border-white/10">
+            <div class="text-[10px] text-amber-400 font-bold">S2 終了 (m)</div>
+            <input id="inputS2End" type="number" value="3050" class="w-full bg-transparent text-center mono font-bold text-white focus:outline-none" />
+          </div>
+          <div class="bg-slate-950 p-1.5 rounded border border-white/10">
+            <div class="text-[10px] text-emerald-400 font-bold">全長 / S3終了</div>
+            <input id="inputCourseLen" type="number" value="4563" class="w-full bg-transparent text-center mono font-bold text-white focus:outline-none" />
+          </div>
+        </div>
+        <div id="sectorRangeText" class="text-[10px] mono text-slate-400">
+          S1: 0〜1450m | S2: 1450〜3050m | S3: 3050〜4563m
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. 過去ログ（BEST基準データ）読み込み -->
+    <div class="space-y-2 bg-slate-900/90 p-2.5 rounded border border-emerald-500/30">
+      <div class="font-extrabold text-emerald-300">2. 比較ベストデータ (REF LOG) 設定</div>
+      <div class="text-[11px] text-slate-300 leading-snug">
+        過去の走行ログ（<span class="mono text-amber-300">.json</span> または <span class="mono text-amber-300">.csv</span>）を読み込むと、そのログのタイムと各セクターを「BEST基準」としてリアルタイム比較します。
+      </div>
+      <label class="block w-full py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white font-extrabold text-center rounded cursor-pointer shadow">
+        📂 過去ログを比較BESTとして読み込む
+        <input id="inputRefLogDrawer" type="file" accept=".json,.csv" class="hidden" />
+      </label>
+      <div id="refLogStatus" class="text-[10px] mono text-emerald-400 bg-slate-950 p-1.5 rounded border border-white/10">
+        現在の基準: FSW デフォルト基準 (BEST 1'54.596)
+      </div>
+    </div>
+
+    <!-- 3. 自動録画トリガー設定 -->
+    <div class="space-y-2 bg-slate-900/90 p-2.5 rounded border border-white/15">
+      <div class="font-extrabold text-slate-200">3. ⚡ 自動録画トリガー (SmartyCam式)</div>
+      <div class="flex items-center justify-between">
+        <span class="text-slate-300">開始車速 (1.5秒維持):</span>
         <div class="flex items-center gap-1">
           <input id="inputAutoStartSpd" type="number" value="10" min="3" max="60" class="w-14 bg-slate-950 border border-white/20 rounded px-1.5 py-0.5 text-right mono font-bold text-emerald-400" />
           <span class="text-slate-400">km/h</span>
         </div>
       </div>
       <div class="flex items-center justify-between">
-        <span class="text-slate-300">停止車速しきい値:</span>
+        <span class="text-slate-300">停止車速 / 待機秒数:</span>
         <div class="flex items-center gap-1">
-          <input id="inputAutoStopSpd" type="number" value="5" min="1" max="30" class="w-14 bg-slate-950 border border-white/20 rounded px-1.5 py-0.5 text-right mono font-bold text-rose-400" />
-          <span class="text-slate-400">km/h</span>
-        </div>
-      </div>
-      <div class="flex items-center justify-between">
-        <span class="text-slate-300">停止後の待機秒数:</span>
-        <div class="flex items-center gap-1">
-          <input id="inputAutoStopSec" type="number" value="10" min="3" max="60" class="w-14 bg-slate-950 border border-white/20 rounded px-1.5 py-0.5 text-right mono font-bold text-amber-400" />
+          <input id="inputAutoStopSpd" type="number" value="5" min="1" max="30" class="w-12 bg-slate-950 border border-white/20 rounded px-1 py-0.5 text-right mono font-bold text-rose-400" />
+          <span class="text-slate-400">km/h /</span>
+          <input id="inputAutoStopSec" type="number" value="10" min="3" max="60" class="w-12 bg-slate-950 border border-white/20 rounded px-1 py-0.5 text-right mono font-bold text-amber-400" />
           <span class="text-slate-400">秒</span>
         </div>
       </div>
-      <div class="text-[10px] text-slate-400 leading-relaxed pt-1 border-t border-white/10">
-        ※開始車速を1.5秒維持で自動REC開始、停止車速未満を指定秒数維持で自動保存＆終了します。
-      </div>
     </div>
 
-    <!-- 机上テスト用シミュレーター操作 -->
-    <div class="space-y-2.5 bg-slate-900/90 p-2.5 rounded border border-white/10">
-      <div class="font-extrabold text-slate-300 tracking-wider">🏎 DESK TEST SIMULATOR</div>
+    <!-- 4. 机上テスト用シミュレーター操作 -->
+    <div class="space-y-2 bg-slate-900/90 p-2.5 rounded border border-white/10">
+      <div class="font-extrabold text-slate-300">4. 🏎 机上テスト用シミュレーター</div>
       <label class="flex items-center gap-2 cursor-pointer">
         <input id="chkAutoSim" type="checkbox" checked class="rounded" />
         <span class="font-bold text-slate-200">AUTO DEMO WAVEFORM</span>
       </label>
-      <button id="btnSimPitStop" class="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold rounded shadow tracking-wider">
-        🚀 テスト走行開始 (自動録画テスト)
+      <button id="btnSimPitStop" class="w-full py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold rounded shadow">
+        🚀 テスト走行 ⇄ ピット停止 (0 km/h)
       </button>
-      <div id="simStateNote" class="text-[10px] mono text-slate-400">
-        ※ボタンを押すと「走行(120km/h+)」と「ピット停止(0km/h)」を切り替えて自動録画の開始・停止をテストできます。
-      </div>
     </div>
   </div>
 
   <script>
+    const CIRCUIT_DB = {
+      fsw: {
+        name: '富士スピードウェイ',
+        short: 'FSW',
+        lat: 35.3717, lon: 138.9272,
+        length: 4563, s1End: 1450, s2End: 3050,
+        refS1: 24.810, refS2: 43.120, refS3: 46.666,
+        track: [
+          [0.12, 0.25], [0.85, 0.25], [0.90, 0.35], [0.78, 0.48],
+          [0.62, 0.42], [0.52, 0.55], [0.60, 0.75], [0.42, 0.82],
+          [0.28, 0.68], [0.18, 0.78], [0.10, 0.55], [0.12, 0.25]
+        ]
+      },
+      motegi: {
+        name: 'モビリティリゾートもてぎ',
+        short: 'MOTEGI',
+        lat: 36.5328, lon: 140.2269,
+        length: 4801, s1End: 1550, s2End: 3350,
+        refS1: 36.200, refS2: 48.500, refS3: 40.100,
+        track: [
+          [0.20, 0.25], [0.75, 0.20], [0.88, 0.32], [0.70, 0.50],
+          [0.85, 0.68], [0.65, 0.82], [0.30, 0.78], [0.15, 0.60],
+          [0.32, 0.45], [0.20, 0.25]
+        ]
+      },
+      nikko: {
+        name: '日光サーキット',
+        short: 'NIKKO',
+        lat: 36.6875, lon: 139.8406,
+        length: 1047, s1End: 350, s2End: 720,
+        refS1: 11.450, refS2: 14.820, refS3: 13.530,
+        track: [
+          [0.20, 0.30], [0.78, 0.25], [0.85, 0.48], [0.60, 0.55],
+          [0.72, 0.78], [0.35, 0.82], [0.15, 0.62], [0.20, 0.30]
+        ]
+      },
+      sodegaura: {
+        name: '袖ヶ浦フォレストレースウェイ',
+        short: 'SODEGAURA',
+        lat: 35.4083, lon: 140.0711,
+        length: 2436, s1End: 800, s2End: 1650,
+        refS1: 23.500, refS2: 26.800, refS3: 24.200,
+        track: [
+          [0.15, 0.30], [0.80, 0.22], [0.88, 0.45], [0.65, 0.65],
+          [0.75, 0.82], [0.35, 0.80], [0.18, 0.58], [0.15, 0.30]
+        ]
+      },
+      tsukuba: {
+        name: '筑波サーキット TC2000',
+        short: 'TC2000',
+        lat: 36.1797, lon: 139.9889,
+        length: 2045, s1End: 650, s2End: 1350,
+        refS1: 20.150, refS2: 22.400, refS3: 21.250,
+        track: [
+          [0.18, 0.30], [0.72, 0.25], [0.85, 0.45], [0.55, 0.55],
+          [0.82, 0.75], [0.30, 0.82], [0.12, 0.58], [0.18, 0.30]
+        ]
+      }
+    };
+
+    let currentCourseKey = 'fsw';
+    let courseConfig = {
+      name: CIRCUIT_DB.fsw.name,
+      short: CIRCUIT_DB.fsw.short,
+      length: CIRCUIT_DB.fsw.length,
+      s1End: CIRCUIT_DB.fsw.s1End,
+      s2End: CIRCUIT_DB.fsw.s2End,
+      track: CIRCUIT_DB.fsw.track
+    };
+
+    let refBestData = {
+      sourceName: 'FSW DEFAULT',
+      totalTime: 114.596,
+      s1: 24.810,
+      s2: 43.120,
+      s3: 46.666,
+      distTimeTable: []
+    };
+
+    let sessionBestSectors = {
+      s1: 24.810,
+      s2: 43.120,
+      s3: 46.666,
+      bestLap: 114.596
+    };
+
+    let lapState = {
+      lapDistM: 0,
+      lapElapsedSec: 0,
+      currentSector: 1,
+      liveDeltaSec: 0,
+      s1Time: null,
+      s2Time: null,
+      s3Time: null,
+      lastLapTime: null,
+      lastFrameMs: performance.now()
+    };
+
+    function formatLapTime(sec) {
+      if (sec === null || sec === undefined || isNaN(sec) || sec < 0) return "--'--.---";
+      const mins = Math.floor(sec / 60);
+      const rem = (sec % 60).toFixed(3).padStart(6, '0');
+      return `${mins}'${rem}`;
+    }
+
+    function updateDeltaBadge(el, deltaSec) {
+      if (deltaSec === null || isNaN(deltaSec)) {
+        el.textContent = 'LIVE';
+        el.className = 'col-span-4 text-center bg-slate-700/80 text-slate-300 rounded-sm py-[1px] text-[calc(0.5rem*var(--ui-scale))]';
+        return;
+      }
+      const sign = deltaSec >= 0 ? '+' : '';
+      el.textContent = `${sign}${deltaSec.toFixed(3)}`;
+      if (deltaSec <= 0) {
+        el.className = 'col-span-4 text-center bg-blue-600 text-white rounded-sm py-[1px] text-[calc(0.52rem*var(--ui-scale))]';
+      } else {
+        el.className = 'col-span-4 text-center bg-rose-600 text-white rounded-sm py-[1px] text-[calc(0.52rem*var(--ui-scale))]';
+      }
+    }
+
+    function buildDefaultRefTable(c) {
+      refBestData.s1 = c.refS1;
+      refBestData.s2 = c.refS2;
+      refBestData.s3 = c.refS3;
+      refBestData.totalTime = c.refS1 + c.refS2 + c.refS3;
+      refBestData.distTimeTable = [
+        { distM: 0, timeSec: 0 },
+        { distM: courseConfig.s1End, timeSec: c.refS1 },
+        { distM: courseConfig.s2End, timeSec: c.refS1 + c.refS2 },
+        { distM: courseConfig.length, timeSec: refBestData.totalTime }
+      ];
+      sessionBestSectors = {
+        s1: c.refS1,
+        s2: c.refS2,
+        s3: c.refS3,
+        bestLap: refBestData.totalTime
+      };
+      refreshTimingBoardStatic();
+    }
+
+    function getRefTimeAtDistance(distM) {
+      const tbl = refBestData.distTimeTable;
+      if (!tbl || tbl.length === 0) return null;
+      if (distM <= 0) return 0;
+      for (let i = 1; i < tbl.length; i++) {
+        if (distM <= tbl[i].distM) {
+          const p0 = tbl[i - 1];
+          const p1 = tbl[i];
+          const span = Math.max(0.1, p1.distM - p0.distM);
+          const ratio = (distM - p0.distM) / span;
+          return p0.timeSec + ratio * (p1.timeSec - p0.timeSec);
+        }
+      }
+      return tbl[tbl.length - 1].timeSec;
+    }
+
+    function refreshTimingBoardStatic() {
+      document.getElementById('timeBest').textContent = formatLapTime(refBestData.totalTime);
+      const opt = sessionBestSectors.s1 + sessionBestSectors.s2 + sessionBestSectors.s3;
+      document.getElementById('timeOpt').textContent = formatLapTime(opt);
+      document.getElementById('headerCourseBadge').textContent = `📍 ${courseConfig.short} (${courseConfig.length.toLocaleString()}m)`;
+      document.getElementById('hudCourseShort').textContent = courseConfig.short;
+      document.getElementById('sectorRangeText').textContent =
+        `S1: 0〜${courseConfig.s1End}m | S2: ${courseConfig.s1End}〜${courseConfig.s2End}m | S3: ${courseConfig.s2End}〜${courseConfig.length}m`;
+    }
+
+    function applyCourseSelection(key) {
+      const c = CIRCUIT_DB[key];
+      if (!c) return;
+      currentCourseKey = key;
+      courseConfig = {
+        name: c.name,
+        short: c.short,
+        length: c.length,
+        s1End: c.s1End,
+        s2End: c.s2End,
+        track: c.track
+      };
+      document.getElementById('selectCourse').value = key;
+      document.getElementById('inputS1End').value = c.s1End;
+      document.getElementById('inputS2End').value = c.s2End;
+      document.getElementById('inputCourseLen').value = c.length;
+      lapState.lapDistM = 0;
+      lapState.lapElapsedSec = 0;
+      lapState.currentSector = 1;
+      lapState.liveDeltaSec = 0;
+      buildDefaultRefTable(c);
+    }
+
+    function calcGpsDistanceKm(lat1, lon1, lat2, lon2) {
+      const R = 6371;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    function selectNearestCourseByCoords(lat, lon) {
+      let bestKey = 'fsw';
+      let minKm = Infinity;
+      for (const [key, c] of Object.entries(CIRCUIT_DB)) {
+        const dKm = calcGpsDistanceKm(lat, lon, c.lat, c.lon);
+        if (dKm < minKm) {
+          minKm = dKm;
+          bestKey = key;
+        }
+      }
+      applyCourseSelection(bestKey);
+      document.getElementById('gpsDetectStatus').textContent =
+        `✅ 現在地から最寄りの「${CIRCUIT_DB[bestKey].name}」(約${minKm.toFixed(1)}km)を自動設定しました！`;
+    }
+
+    document.getElementById('btnDetectGpsCourse').addEventListener('click', () => {
+      if (!navigator.geolocation) {
+        document.getElementById('gpsDetectStatus').textContent = '⚠ このブラウザではGPSが利用できません。';
+        return;
+      }
+      document.getElementById('gpsDetectStatus').textContent = '📡 GPSで現在地を取得中...';
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          selectNearestCourseByCoords(pos.coords.latitude, pos.coords.longitude);
+        },
+        (err) => {
+          document.getElementById('gpsDetectStatus').textContent = '⚠ GPS取得失敗: 手動でコースを選択してください。';
+        },
+        { enableHighAccuracy: true, timeout: 6000 }
+      );
+    });
+
+    document.getElementById('selectCourse').addEventListener('change', (e) => {
+      applyCourseSelection(e.target.value);
+    });
+
+    ['inputS1End', 'inputS2End', 'inputCourseLen'].forEach(id => {
+      document.getElementById(id).addEventListener('change', () => {
+        const s1 = parseFloat(document.getElementById('inputS1End').value) || 500;
+        const s2 = parseFloat(document.getElementById('inputS2End').value) || 1000;
+        const len = parseFloat(document.getElementById('inputCourseLen').value) || 2000;
+        courseConfig.s1End = Math.min(s1, len - 50);
+        courseConfig.s2End = Math.min(Math.max(s2, courseConfig.s1End + 50), len - 10);
+        courseConfig.length = len;
+        refreshTimingBoardStatic();
+      });
+    });
+
+    function handleReferenceLogFile(file) {
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const text = ev.target.result;
+        let frames = [];
+        try {
+          if (file.name.endsWith('.json')) {
+            const raw = JSON.parse(text);
+            frames = raw.map(r => ({
+              timeSec: (r.offsetMs ?? 0) / 1000,
+              spd: parseFloat(r.spd ?? 0)
+            }));
+          } else {
+            const lines = text.trim().split(/\r?\n/);
+            for (let i = 1; i < lines.length; i++) {
+              const cols = lines[i].split(',');
+              if (cols.length >= 2) {
+                frames.push({
+                  timeSec: parseFloat(cols[0]) || 0,
+                  spd: parseFloat(cols[1]) || 0
+                });
+              }
+            }
+          }
+        } catch (err) {
+          alert('ログの読み込みに失敗しました: ' + err.message);
+          return;
+        }
+
+        if (frames.length < 5) return;
+
+        let dist = 0;
+        const startT = frames[0].timeSec;
+        const distTable = [{ distM: 0, timeSec: 0 }];
+        let s1T = null, s2T = null, totalT = null;
+
+        for (let i = 1; i < frames.length; i++) {
+          const dt = Math.max(0, frames[i].timeSec - frames[i - 1].timeSec);
+          const avgSpdMs = ((frames[i].spd + frames[i - 1].spd) / 2) / 3.6;
+          dist += avgSpdMs * dt;
+          const elapsed = frames[i].timeSec - startT;
+          distTable.push({ distM: dist, timeSec: elapsed });
+
+          if (s1T === null && dist >= courseConfig.s1End) s1T = elapsed;
+          if (s2T === null && dist >= courseConfig.s2End) s2T = elapsed - (s1T || 0);
+          if (totalT === null && dist >= courseConfig.length) {
+            totalT = elapsed;
+            break;
+          }
+        }
+
+        const lastEntry = distTable[distTable.length - 1];
+        if (!totalT && lastEntry.distM > 10) {
+          const scale = courseConfig.length / lastEntry.distM;
+          distTable.forEach(pt => {
+            pt.distM *= scale;
+            pt.timeSec *= scale;
+          });
+          totalT = lastEntry.timeSec * scale;
+          s1T = totalT * (courseConfig.s1End / courseConfig.length);
+          s2T = totalT * ((courseConfig.s2End - courseConfig.s1End) / courseConfig.length);
+        }
+
+        const s3T = Math.max(1, totalT - (s1T || 0) - (s2T || 0));
+
+        refBestData = {
+          sourceName: file.name.slice(0, 14),
+          totalTime: totalT,
+          s1: s1T || totalT * 0.3,
+          s2: s2T || totalT * 0.35,
+          s3: s3T,
+          distTimeTable: distTable
+        };
+
+        sessionBestSectors.s1 = Math.min(sessionBestSectors.s1, refBestData.s1);
+        sessionBestSectors.s2 = Math.min(sessionBestSectors.s2, refBestData.s2);
+        sessionBestSectors.s3 = Math.min(sessionBestSectors.s3, refBestData.s3);
+
+        document.getElementById('labelBestSource').textContent = 'LOG';
+        document.getElementById('refLogStatus').textContent =
+          `✅ 比較ログ読込完了: ${file.name} (BEST ${formatLapTime(refBestData.totalTime)})`;
+        refreshTimingBoardStatic();
+      };
+      reader.readAsText(file);
+    }
+
+    document.getElementById('inputHeaderRefLog').addEventListener('change', (e) => handleReferenceLogFile(e.target.files[0]));
+    document.getElementById('inputRefLogDrawer').addEventListener('change', (e) => handleReferenceLogFile(e.target.files[0]));
+
     const PEER_CONFIG = {
       debug: 1,
       config: {
@@ -397,14 +781,12 @@
     let isBurnInMode = true;
     let lastRecWasBurned = false;
 
-    // --- ⚡ 自動録画 (Auto-Rec) 状態管理変数 ---
     let isAutoRecEnabled = true;
-    let isCarLinked = false; // 実車（スマホ）接続中フラグ
-    let isSimTrackOutTest = false; // 机上での自動録画テスト中フラグ
-    let aboveSpeedSince = null; // 開始速度を超え始めた時刻
-    let belowSpeedSince = null; // 停止速度を下回り始めた時刻
+    let isCarLinked = false;
+    let isSimTrackOutTest = false;
+    let aboveSpeedSince = null;
+    let belowSpeedSince = null;
 
-    // --- 録画 & ログ保存用変数 ---
     let isRecording = false;
     let mediaRecorder = null;
     let recordedChunks = [];
@@ -415,6 +797,7 @@
       spd: 92, rpm: 4580, gear: 4, thr: 0, brk: 59, clt: 0, gx: -0.15, gy: -0.71, steer: -1.2
     };
 
+    // 4chオシロスコープ履歴 (thr, brk, spd, delta)
     const oscilloHistory = [];
     const MAX_HISTORY = 240;
     for (let i = 0; i < MAX_HISTORY; i++) {
@@ -422,7 +805,9 @@
       const w = Math.sin(p);
       const b = w < -0.2 ? Math.min(100, Math.round((-w - 0.2) * 130)) : 0;
       const t = b === 0 ? Math.min(100, Math.max(0, Math.round((w + 0.25) * 85))) : 0;
-      oscilloHistory.push({ thr: t, brk: b });
+      const s = Math.round(125 + w * 55);
+      const d = Number((Math.sin(p * 0.5) * 0.35).toFixed(3));
+      oscilloHistory.push({ thr: t, brk: b, spd: s, delta: d });
     }
 
     const hudContainer = document.getElementById('hudContainer');
@@ -441,7 +826,8 @@
     const btnToggleLiveHud = document.getElementById('btnToggleLiveHud');
     const btnSimPitStop = document.getElementById('btnSimPitStop');
 
-    // 自動録画モード ON/OFF 切替
+    buildDefaultRefTable(CIRCUIT_DB.fsw);
+
     btnAutoRec.addEventListener('click', () => {
       isAutoRecEnabled = !isAutoRecEnabled;
       aboveSpeedSince = null;
@@ -452,24 +838,22 @@
         : 'px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-400 text-[11px] font-bold rounded border border-white/10';
     });
 
-    // 机上での自動録画テストボタン（走行開始 ⇄ ピット停止 0km/h）
     btnSimPitStop.addEventListener('click', () => {
       isSimTrackOutTest = !isSimTrackOutTest;
       if (isSimTrackOutTest) {
         isAutoSim = true;
         document.getElementById('chkAutoSim').checked = true;
         btnSimPitStop.textContent = '🛑 ピット停止 (0 km/h) にして自動停止テスト';
-        btnSimPitStop.className = 'w-full py-2 bg-rose-600 hover:bg-rose-500 text-white font-extrabold rounded shadow tracking-wider';
+        btnSimPitStop.className = 'w-full py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-extrabold rounded shadow';
       } else {
         isAutoSim = false;
         document.getElementById('chkAutoSim').checked = false;
         telem = { spd: 0, rpm: 850, gear: 1, thr: 0, brk: 0, clt: 0, gx: 0, gy: 0, steer: 0 };
         btnSimPitStop.textContent = '🚀 テスト走行開始 (自動録画テスト)';
-        btnSimPitStop.className = 'w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold rounded shadow tracking-wider';
+        btnSimPitStop.className = 'w-full py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold rounded shadow';
       }
     });
 
-    // 焼き込みモード切替
     btnBurnMode.addEventListener('click', () => {
       isBurnInMode = !isBurnInMode;
       btnBurnMode.textContent = isBurnInMode ? '🔥 焼込: ON' : '📹 焼込: OFF(元映像)';
@@ -478,7 +862,6 @@
         : 'px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-400 text-[11px] font-bold rounded border border-white/10';
     });
 
-    // 画角モード切替
     btnFovMode.addEventListener('click', () => {
       isWideContain = !isWideContain;
       remoteVideo.style.setProperty('object-fit', isWideContain ? 'contain' : 'cover', 'important');
@@ -495,7 +878,6 @@
       }
     }
 
-    // --- WebRTC 接続 ---
     btnConnectCar.addEventListener('click', () => {
       const room = inputRoomCode.value.trim().toUpperCase();
       if (!room) return;
@@ -525,6 +907,10 @@
         dataConn.on('data', (data) => {
           if (data && typeof data.spd !== 'undefined' && !isReviewMode) {
             telem = { ...telem, ...data };
+            if (data.lat && data.lon && !window._autoCourseDetected) {
+              window._autoCourseDetected = true;
+              selectNearestCourseByCoords(data.lat, data.lon);
+            }
             if (data.t) {
               const lat = Math.max(1, Date.now() - data.t);
               document.getElementById('statLatency').textContent = `${lat}ms`;
@@ -545,7 +931,6 @@
       });
     });
 
-    // --- ⏺ 録画 ＆ HUD焼き込み合成記録 ---
     btnRec.addEventListener('click', () => {
       if (!isRecording) {
         startSessionRecording();
@@ -602,17 +987,17 @@
         const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
         const suffix = lastRecWasBurned ? 'HUD_BURNED' : 'RAW';
 
-        downloadBlob(videoBlob, `ND27_${suffix}_${stamp}.${ext}`);
+        downloadBlob(videoBlob, `ND27_${courseConfig.short}_${suffix}_${stamp}.${ext}`);
 
         const jsonBlob = new Blob([JSON.stringify(recordedTelemetryLog)], { type: 'application/json' });
-        downloadBlob(jsonBlob, `ND27_TELEM_${stamp}.json`);
+        downloadBlob(jsonBlob, `ND27_${courseConfig.short}_TELEM_${stamp}.json`);
 
-        const csvHeader = 'Time_s,Speed_kmh,RPM,Gear,Throttle_pct,Brake_pct,Clutch_pct,LonG,LatG,Steer_deg\n';
+        const csvHeader = 'Time_s,Speed_kmh,RPM,Gear,Throttle_pct,Brake_pct,Delta_s,LonG,LatG,Steer_deg,LapDist_m,Sector\n';
         const csvRows = recordedTelemetryLog.map(r =>
-          `${(r.offsetMs / 1000).toFixed(3)},${r.spd},${r.rpm},${r.gear},${r.thr},${r.brk},${r.clt || 0},${r.gx},${r.gy},${r.steer}`
+          `${(r.offsetMs / 1000).toFixed(3)},${r.spd},${r.rpm},${r.gear},${r.thr},${r.brk},${(r.delta || 0).toFixed(3)},${r.gx},${r.gy},${r.steer},${Math.round(r.distM || 0)},${r.sector || 1}`
         ).join('\n');
         const csvBlob = new Blob([csvHeader + csvRows], { type: 'text/csv' });
-        downloadBlob(csvBlob, `ND27_LOG_${stamp}.csv`);
+        downloadBlob(csvBlob, `ND27_${courseConfig.short}_LOG_${stamp}.csv`);
 
         enterReviewModeWithUrl(videoUrl, lastRecWasBurned);
       };
@@ -643,19 +1028,16 @@
       a.click();
     }
 
-    // --- ⚡ 車速連動の自動録画開始・自動停止チェック関数 ---
     function evaluateAutoRecording(nowMs) {
       if (!isAutoRecEnabled || isReviewMode) return;
-      // 実車接続中、または手動録画中、またはSIMテストモード中のみ自動判定を動かす（初回ページ表示時の勝手な録画防止）
       if (!isCarLinked && !isSimTrackOutTest && !isRecording) return;
 
       const startSpd = parseFloat(document.getElementById('inputAutoStartSpd').value) || 10;
       const stopSpd = parseFloat(document.getElementById('inputAutoStopSpd').value) || 5;
       const stopHoldMs = (parseFloat(document.getElementById('inputAutoStopSec').value) || 10) * 1000;
-      const startHoldMs = 1500; // 1.5秒間しきい値を超えたら走行開始と判定
+      const startHoldMs = 1500;
 
       if (!isRecording) {
-        // 録画待機中：車速が startSpd 以上になったらカウント開始
         if (telem.spd >= startSpd) {
           if (aboveSpeedSince === null) {
             aboveSpeedSince = nowMs;
@@ -674,7 +1056,6 @@
           }
         }
       } else {
-        // 録画中：車速が stopSpd 未満になったら停止カウントダウン開始
         if (telem.spd < stopSpd) {
           if (belowSpeedSince === null) {
             belowSpeedSince = nowMs;
@@ -687,13 +1068,93 @@
             }
           }
         } else {
-          // 再び走り出したら停止カウントダウンを解除して録画継続
           belowSpeedSince = null;
         }
       }
     }
 
-    // --- 🎬 DATA-MOVIE REVIEW（走行後動画＆ログ同期再生モード） ---
+    function updateLapAndSectorTiming(nowMs) {
+      const dtSec = Math.min(0.2, Math.max(0, (nowMs - lapState.lastFrameMs) / 1000));
+      lapState.lastFrameMs = nowMs;
+
+      if (telem.spd > 1) {
+        const dMeters = (telem.spd / 3.6) * dtSec;
+        const prevDist = lapState.lapDistM;
+        lapState.lapDistM += dMeters;
+        lapState.lapElapsedSec += dtSec;
+
+        if (prevDist < courseConfig.s1End && lapState.lapDistM >= courseConfig.s1End) {
+          lapState.s1Time = lapState.lapElapsedSec;
+          const deltaS1 = lapState.s1Time - refBestData.s1;
+          document.getElementById('timeS1').textContent = formatLapTime(lapState.s1Time);
+          updateDeltaBadge(document.getElementById('badgeS1'), deltaS1);
+          sessionBestSectors.s1 = Math.min(sessionBestSectors.s1, lapState.s1Time);
+        }
+
+        if (prevDist < courseConfig.s2End && lapState.lapDistM >= courseConfig.s2End) {
+          lapState.s2Time = lapState.lapElapsedSec - (lapState.s1Time || refBestData.s1);
+          const deltaS2 = lapState.s2Time - refBestData.s2;
+          document.getElementById('timeS2').textContent = formatLapTime(lapState.s2Time);
+          updateDeltaBadge(document.getElementById('badgeS2'), deltaS2);
+          sessionBestSectors.s2 = Math.min(sessionBestSectors.s2, lapState.s2Time);
+        }
+
+        if (lapState.lapDistM >= courseConfig.length) {
+          const fullLap = lapState.lapElapsedSec;
+          const s12 = (lapState.s1Time || refBestData.s1) + (lapState.s2Time || refBestData.s2);
+          lapState.s3Time = Math.max(1, fullLap - s12);
+          const deltaS3 = lapState.s3Time - refBestData.s3;
+          document.getElementById('timeS3').textContent = formatLapTime(lapState.s3Time);
+          updateDeltaBadge(document.getElementById('badgeS3'), deltaS3);
+          sessionBestSectors.s3 = Math.min(sessionBestSectors.s3, lapState.s3Time);
+
+          lapState.lastLapTime = fullLap;
+          const deltaLap = fullLap - refBestData.totalTime;
+          document.getElementById('timeLast').textContent = formatLapTime(fullLap);
+          updateDeltaBadge(document.getElementById('badgeLast'), deltaLap);
+
+          if (fullLap < refBestData.totalTime) {
+            refBestData.totalTime = fullLap;
+            document.getElementById('timeBest').textContent = formatLapTime(fullLap);
+            document.getElementById('labelBestSource').textContent = 'NEW!';
+          }
+          refreshTimingBoardStatic();
+
+          lapState.lapDistM = lapState.lapDistM % courseConfig.length;
+          lapState.lapElapsedSec = 0;
+        }
+      }
+
+      if (lapState.lapDistM < courseConfig.s1End) {
+        lapState.currentSector = 1;
+      } else if (lapState.lapDistM < courseConfig.s2End) {
+        lapState.currentSector = 2;
+      } else {
+        lapState.currentSector = 3;
+      }
+
+      document.getElementById('hudLapDist').textContent =
+        `${Math.round(lapState.lapDistM).toLocaleString()}m [S${lapState.currentSector}]`;
+      document.getElementById('hudCurrentSector').textContent = `SECTOR ${lapState.currentSector}`;
+      document.getElementById('hudLapTime').textContent = formatLapTime(lapState.lapElapsedSec);
+
+      const refTimeNow = getRefTimeAtDistance(lapState.lapDistM);
+      const liveDeltaBadge = document.getElementById('hudLiveDeltaBadge');
+      if (refTimeNow !== null && lapState.lapDistM > 15) {
+        const diff = lapState.lapElapsedSec - refTimeNow;
+        lapState.liveDeltaSec = Math.max(-2.5, Math.min(2.5, diff));
+        const sign = diff >= 0 ? '+' : '';
+        liveDeltaBadge.textContent = `${sign}${diff.toFixed(2)}`;
+        liveDeltaBadge.className = diff <= 0
+          ? 'px-1 py-[1px] rounded-sm bg-blue-600 text-white mono text-[calc(0.45rem*var(--ui-scale))] font-bold'
+          : 'px-1 py-[1px] rounded-sm bg-rose-600 text-white mono text-[calc(0.45rem*var(--ui-scale))] font-bold';
+      } else {
+        lapState.liveDeltaSec = 0;
+        liveDeltaBadge.textContent = 'LIVE';
+        liveDeltaBadge.className = 'px-1 py-[1px] rounded-sm bg-cyan-950 text-cyan-300 mono text-[calc(0.45rem*var(--ui-scale))] font-bold border border-cyan-500/40';
+      }
+    }
+
     const revSeek = document.getElementById('revSeek');
     const btnRevPlay = document.getElementById('btnRevPlay');
     const revTimeLabel = document.getElementById('revTimeLabel');
@@ -799,21 +1260,24 @@
       const frame = recordedTelemetryLog[idx];
       if (frame) {
         telem = { ...telem, ...frame };
+        if (frame.distM !== undefined) lapState.lapDistM = frame.distM;
+        if (frame.delta !== undefined) lapState.liveDeltaSec = frame.delta;
         for (let j = 0; j < MAX_HISTORY; j++) {
           const histIdx = idx - (MAX_HISTORY - 1 - j);
           if (histIdx >= 0 && recordedTelemetryLog[histIdx]) {
             oscilloHistory[j] = {
-              thr: recordedTelemetryLog[histIdx].thr,
-              brk: recordedTelemetryLog[histIdx].brk
+              thr: recordedTelemetryLog[histIdx].thr ?? 0,
+              brk: recordedTelemetryLog[histIdx].brk ?? 0,
+              spd: recordedTelemetryLog[histIdx].spd ?? 0,
+              delta: recordedTelemetryLog[histIdx].delta ?? 0
             };
           } else {
-            oscilloHistory[j] = { thr: 0, brk: 0 };
+            oscilloHistory[j] = { thr: 0, brk: 0, spd: 0, delta: 0 };
           }
         }
       }
     }
 
-    // --- ドラッグ移動 ＆ リサイズ ---
     const panels = document.querySelectorAll('#hudContainer > div');
 
     function updateScale(panel) {
@@ -889,12 +1353,6 @@
     const gpsCanvas = document.getElementById('gpsCanvas');
     const gpsCtx = gpsCanvas.getContext('2d');
     const sCtx = simCanvas.getContext('2d');
-
-    const fswTrack = [
-      [0.12, 0.25], [0.85, 0.25], [0.90, 0.35], [0.78, 0.48],
-      [0.62, 0.42], [0.52, 0.55], [0.60, 0.75], [0.42, 0.82],
-      [0.28, 0.68], [0.18, 0.78], [0.10, 0.55], [0.12, 0.25]
-    ];
 
     // --- 録画用：画面上のHUDパネル配置をそのまま1280x720キャンバスに焼き込む関数 ---
     function renderBurnInCompositeFrame() {
@@ -995,19 +1453,19 @@
       compCtx.font = `bold ${Math.round(bSpd.h * 0.12)}px "JetBrains Mono", monospace`;
       compCtx.fillText(`STEER ${telem.steer}°`, bSpd.x, bSpd.y + bSpd.h + 14);
       compCtx.textAlign = 'right';
-      compCtx.fillText('1,637m [S1]', bSpd.x + bSpd.w, bSpd.y + bSpd.h + 14);
+      compCtx.fillText(document.getElementById('hudLapDist').textContent, bSpd.x + bSpd.w, bSpd.y + bSpd.h + 14);
       compCtx.textAlign = 'left';
 
       // パネル2: セクタータイムボード
       const bTim = getBox('panelTimingBoard');
       drawPanelBg(bTim);
       const rows = [
-        { s: '3', t: "0'10.549", d: '-3.077', bg: '#2563eb', c: '#fff' },
-        { s: '2', t: "0'18.183", d: '-17.844', bg: '#2563eb', c: '#fff' },
-        { s: '1', t: "0'10.699", d: 'LIVE', bg: '#334155', c: '#cbd5e1' },
-        { s: 'LAST', t: "1'15.016", d: '+1.891', bg: '#e11d48', c: '#fff' },
-        { s: 'BEST', t: "1'00.785", d: 'P1', bg: 'transparent', c: '#34d399' },
-        { s: 'OPT.', t: "1'07.447", d: 'IDEAL', bg: 'transparent', c: '#fbbf24' }
+        { s: '3', t: document.getElementById('timeS3').textContent, d: document.getElementById('badgeS3').textContent, bg: document.getElementById('badgeS3').className.includes('rose') ? '#e11d48' : '#2563eb', c: '#fff' },
+        { s: '2', t: document.getElementById('timeS2').textContent, d: document.getElementById('badgeS2').textContent, bg: document.getElementById('badgeS2').className.includes('rose') ? '#e11d48' : '#2563eb', c: '#fff' },
+        { s: '1', t: document.getElementById('timeS1').textContent, d: document.getElementById('badgeS1').textContent, bg: document.getElementById('badgeS1').className.includes('rose') ? '#e11d48' : '#334155', c: '#fff' },
+        { s: 'LAST', t: document.getElementById('timeLast').textContent, d: document.getElementById('badgeLast').textContent, bg: document.getElementById('badgeLast').className.includes('rose') ? '#e11d48' : '#2563eb', c: '#fff' },
+        { s: 'BEST', t: document.getElementById('timeBest').textContent, d: document.getElementById('labelBestSource').textContent, bg: 'transparent', c: '#34d399' },
+        { s: 'OPT.', t: document.getElementById('timeOpt').textContent, d: 'IDEAL', bg: 'transparent', c: '#fbbf24' }
       ];
       const rowH = (bTim.h - 10) / 6;
       rows.forEach((r, idx) => {
@@ -1036,7 +1494,7 @@
       compCtx.font = `bold ${Math.round(bLap.h * 0.26)}px "Barlow Condensed", sans-serif`;
       compCtx.fillText('LIVE LAP', bLap.x + 8, bLap.y + bLap.h * 0.42);
       compCtx.fillStyle = '#22d3ee';
-      compCtx.fillText('SECTOR 1', bLap.x + 8, bLap.y + bLap.h * 0.80);
+      compCtx.fillText(document.getElementById('hudCurrentSector').textContent, bLap.x + 8, bLap.y + bLap.h * 0.80);
 
       compCtx.fillStyle = '#ffffff';
       compCtx.font = `900 ${Math.round(bLap.h * 0.56)}px "JetBrains Mono", monospace`;
@@ -1047,7 +1505,7 @@
       drawPanelBg(bGps);
       compCtx.fillStyle = '#22d3ee';
       compCtx.font = `bold ${Math.round(bGps.h * 0.14)}px "Barlow Condensed", sans-serif`;
-      compCtx.fillText('● GPS', bGps.x + 6, bGps.y + bGps.h * 0.20);
+      compCtx.fillText(`● GPS ${courseConfig.short}`, bGps.x + 6, bGps.y + bGps.h * 0.20);
       compCtx.drawImage(gpsCanvas, bGps.x + 4, bGps.y + bGps.h * 0.24, bGps.w - 8, bGps.h * 0.72);
 
       // パネル5: G-BALL
@@ -1068,19 +1526,27 @@
       compCtx.fillText(`LAT:${telem.gy.toFixed(2)} LON:${telem.gx.toFixed(2)}`, bG.x + bG.w / 2, bG.y + bG.h + 12);
       compCtx.textAlign = 'left';
 
-      // パネル6: 下部ペダル波形オシロスコープ
+      // パネル6: 下部4chテレメトリ波形オシロスコープ
       const bPed = getBox('panelPedals');
       drawPanelBg(bPed);
-      compCtx.font = `800 ${Math.round(bPed.h * 0.19)}px "Barlow Condensed", sans-serif`;
+      compCtx.font = `800 ${Math.round(bPed.h * 0.18)}px "Barlow Condensed", sans-serif`;
       compCtx.fillStyle = '#ffffff';
-      compCtx.fillText('⠿•PEDAL APPLICATION TRACE (LAST 6s)', bPed.x + 10, bPed.y + bPed.h * 0.25);
+      compCtx.fillText('⠿•TELEMETRY TRACE (LAST 6s)', bPed.x + 10, bPed.y + bPed.h * 0.25);
 
-      const thrTxt = `THR: ${Math.round(telem.thr)}%`;
-      const brkTxt = `BRK: ${Math.round(telem.brk)}% (${(telem.brk * 0.085).toFixed(1)} MPa)`;
+      const thrTxt = `■ THR: ${Math.round(telem.thr)}%`;
+      const brkTxt = `■ BRK: ${Math.round(telem.brk)}% (${(telem.brk * 0.085).toFixed(1)} MPa)`;
+      const spdTxt = `■ SPD: ${Math.round(telem.spd)} km/h`;
+      const dSign = lapState.liveDeltaSec >= 0 ? '+' : '';
+      const dltTxt = `■ BEST Δ: ${dSign}${lapState.liveDeltaSec.toFixed(2)}s`;
+
       compCtx.fillStyle = '#34d399';
-      compCtx.fillText(thrTxt, bPed.x + 255, bPed.y + bPed.h * 0.25);
+      compCtx.fillText(thrTxt, bPed.x + 215, bPed.y + bPed.h * 0.25);
       compCtx.fillStyle = '#fb7185';
-      compCtx.fillText(brkTxt, bPed.x + 335, bPed.y + bPed.h * 0.25);
+      compCtx.fillText(brkTxt, bPed.x + 305, bPed.y + bPed.h * 0.25);
+      compCtx.fillStyle = '#38bdf8';
+      compCtx.fillText(spdTxt, bPed.x + 465, bPed.y + bPed.h * 0.25);
+      compCtx.fillStyle = '#fbbf24';
+      compCtx.fillText(dltTxt, bPed.x + 585, bPed.y + bPed.h * 0.25);
 
       const miniX = bPed.x + 10;
       const miniY = bPed.y + bPed.h * 0.34;
@@ -1088,7 +1554,7 @@
       const bars = [
         { val: telem.thr, col: '#34d399', lbl: 'THR' },
         { val: telem.brk, col: '#f43f5e', lbl: 'BRK' },
-        { val: telem.clt || 0, col: '#22d3ee', lbl: 'CLT' }
+        { val: (telem.spd / 220) * 100, col: '#38bdf8', lbl: 'SPD' }
       ];
       bars.forEach((b, i) => {
         const bx = miniX + i * 20;
@@ -1152,16 +1618,33 @@
           };
         }
 
+        // 距離積分・セクタータイム・比較ベストとのデルタ更新
+        updateLapAndSectorTiming(nowMs);
+
         // 自動録画の開始・停止トリガー判定
         evaluateAutoRecording(nowMs);
 
+        // シミュレーション時はΔ波形も見やすいよう微少変動を加味
+        const currentDelta = isAutoSim
+          ? Number((Math.sin(simPhase * 0.45) * 0.45).toFixed(3))
+          : lapState.liveDeltaSec;
+        lapState.liveDeltaSec = currentDelta;
+
         oscilloHistory.shift();
-        oscilloHistory.push({ thr: telem.thr, brk: telem.brk });
+        oscilloHistory.push({
+          thr: telem.thr,
+          brk: telem.brk,
+          spd: telem.spd,
+          delta: currentDelta
+        });
 
         if (isRecording) {
           const elapsedMs = Math.round(nowMs - recStartTime);
           recordedTelemetryLog.push({
             offsetMs: elapsedMs,
+            distM: lapState.lapDistM,
+            sector: lapState.currentSector,
+            delta: currentDelta,
             ...telem
           });
           if (belowSpeedSince === null) {
@@ -1177,39 +1660,86 @@
       document.getElementById('hudSteer').textContent = `${telem.steer}°`;
       document.getElementById('hudRpmBar').style.width = Math.min(100, (telem.rpm / 7500) * 100) + '%';
 
+      // 下部パネルのバー ＆ 4ch数値ラベル更新
+      const spdPct = Math.min(100, Math.max(0, (telem.spd / 220) * 100));
       document.getElementById('barThr').style.height = telem.thr + '%';
       document.getElementById('barBrk').style.height = telem.brk + '%';
-      document.getElementById('barClt').style.height = (telem.clt || 0) + '%';
+      document.getElementById('barSpd').style.height = spdPct + '%';
+
       document.getElementById('labelThr').textContent = `${Math.round(telem.thr)}%`;
       document.getElementById('labelBrk').textContent = `${Math.round(telem.brk)}% (${(telem.brk * 0.085).toFixed(1)} MPa)`;
+      document.getElementById('labelSpd').textContent = `${Math.round(telem.spd)} km/h`;
+      const dSign = lapState.liveDeltaSec >= 0 ? '+' : '';
+      document.getElementById('labelDelta').textContent = `${dSign}${lapState.liveDeltaSec.toFixed(2)}s`;
 
       const gTotal = Math.hypot(telem.gx, telem.gy).toFixed(2);
       document.getElementById('hudGTotal').textContent = `${gTotal}G`;
       document.getElementById('hudGLat').textContent = telem.gy.toFixed(2);
       document.getElementById('hudGLon').textContent = telem.gx.toFixed(2);
 
-      // オシロスコープ描画
+      // --- 4ch オシロスコープ描画 (細線 2.0px) ---
       oscilloCanvas.width = oscilloCanvas.offsetWidth;
       oscilloCanvas.height = oscilloCanvas.offsetHeight;
       const w = oscilloCanvas.width, h = oscilloCanvas.height;
       oscCtx.clearRect(0, 0, w, h);
 
-      oscCtx.strokeStyle = '#10b981';
-      oscCtx.lineWidth = 4.5;
+      // Δ = 0.00s のセンター基準点線
+      oscCtx.save();
+      oscCtx.strokeStyle = 'rgba(255, 255, 255, 0.14)';
+      oscCtx.lineWidth = 1;
+      oscCtx.setLineDash([4, 4]);
+      oscCtx.beginPath();
+      oscCtx.moveTo(0, h * 0.5);
+      oscCtx.lineTo(w, h * 0.5);
+      oscCtx.stroke();
+      oscCtx.restore();
+
+      oscCtx.lineCap = 'round';
+      oscCtx.lineJoin = 'round';
+      const TRACE_WIDTH = 2.0;
+
+      // 1. 車速 SPD (水色 #38bdf8 : 0〜220km/h)
+      oscCtx.strokeStyle = '#38bdf8';
+      oscCtx.lineWidth = TRACE_WIDTH;
       oscCtx.beginPath();
       for (let i = 0; i < oscilloHistory.length; i++) {
         const x = (i / (oscilloHistory.length - 1)) * w;
-        const y = h - (oscilloHistory[i].thr / 100) * (h - 8) - 4;
+        const normSpd = Math.min(1, Math.max(0, (oscilloHistory[i].spd || 0) / 220));
+        const y = h - normSpd * (h - 6) - 3;
         if (i === 0) oscCtx.moveTo(x, y); else oscCtx.lineTo(x, y);
       }
       oscCtx.stroke();
 
-      oscCtx.strokeStyle = '#f43f5e';
-      oscCtx.lineWidth = 4.5;
+      // 2. アクセル THR (緑 #10b981 : 0〜100%)
+      oscCtx.strokeStyle = '#10b981';
+      oscCtx.lineWidth = TRACE_WIDTH;
       oscCtx.beginPath();
       for (let i = 0; i < oscilloHistory.length; i++) {
         const x = (i / (oscilloHistory.length - 1)) * w;
-        const y = h - (oscilloHistory[i].brk / 100) * (h - 8) - 4;
+        const y = h - ((oscilloHistory[i].thr || 0) / 100) * (h - 6) - 3;
+        if (i === 0) oscCtx.moveTo(x, y); else oscCtx.lineTo(x, y);
+      }
+      oscCtx.stroke();
+
+      // 3. ブレーキ BRK (赤 #f43f5e : 0〜100%)
+      oscCtx.strokeStyle = '#f43f5e';
+      oscCtx.lineWidth = TRACE_WIDTH;
+      oscCtx.beginPath();
+      for (let i = 0; i < oscilloHistory.length; i++) {
+        const x = (i / (oscilloHistory.length - 1)) * w;
+        const y = h - ((oscilloHistory[i].brk || 0) / 100) * (h - 6) - 3;
+        if (i === 0) oscCtx.moveTo(x, y); else oscCtx.lineTo(x, y);
+      }
+      oscCtx.stroke();
+
+      // 4. ベストタイム比 Δ DELTA (黄 #fbbf24 : 中央=0.0s, ±2.0sスケール、マイナス[速い]が上)
+      oscCtx.strokeStyle = '#fbbf24';
+      oscCtx.lineWidth = TRACE_WIDTH;
+      oscCtx.beginPath();
+      for (let i = 0; i < oscilloHistory.length; i++) {
+        const x = (i / (oscilloHistory.length - 1)) * w;
+        const d = Math.max(-2.0, Math.min(2.0, oscilloHistory[i].delta || 0));
+        const y = (h * 0.5) + (d / 2.0) * (h * 0.44);
         if (i === 0) oscCtx.moveTo(x, y); else oscCtx.lineTo(x, y);
       }
       oscCtx.stroke();
@@ -1238,19 +1768,26 @@
       gpsCanvas.height = gpsCanvas.offsetHeight;
       const pw = gpsCanvas.width, ph = gpsCanvas.height;
       gpsCtx.clearRect(0, 0, pw, ph);
-      gpsCtx.strokeStyle = 'rgba(255,255,255,0.35)';
+
+      const trk = courseConfig.track;
+      gpsCtx.strokeStyle = 'rgba(255,255,255,0.38)';
       gpsCtx.lineWidth = 2;
       gpsCtx.lineJoin = 'round';
       gpsCtx.beginPath();
-      fswTrack.forEach((pt, idx) => {
+      trk.forEach((pt, idx) => {
         const x = pt[0] * pw, y = pt[1] * ph;
         if (idx === 0) gpsCtx.moveTo(x, y); else gpsCtx.lineTo(x, y);
       });
       gpsCtx.stroke();
 
-      const idx = Math.floor((simPhase * 1.5) % (fswTrack.length - 1));
-      const dotX = fswTrack[idx][0] * pw;
-      const dotY = fswTrack[idx][1] * ph;
+      const progress = Math.max(0, Math.min(0.999, lapState.lapDistM / Math.max(1, courseConfig.length)));
+      const floatIdx = progress * (trk.length - 1);
+      const i0 = Math.floor(floatIdx);
+      const i1 = Math.min(trk.length - 1, i0 + 1);
+      const frac = floatIdx - i0;
+      const dotX = (trk[i0][0] + (trk[i1][0] - trk[i0][0]) * frac) * pw;
+      const dotY = (trk[i0][1] + (trk[i1][1] - trk[i0][1]) * frac) * ph;
+
       gpsCtx.fillStyle = '#38bdf8';
       gpsCtx.beginPath();
       gpsCtx.arc(dotX, dotY, 3.5, 0, Math.PI * 2);
@@ -1272,7 +1809,6 @@
         sCtx.fill();
       }
 
-      // 録画中かつ「焼込: ON」なら合成Canvasへ描画
       if (isRecording && isBurnInMode) {
         renderBurnInCompositeFrame();
       }
