@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>IN-CAR TELEMETRY TX</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,800;1,700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Barlow Condensed', sans-serif;
+      background-color: #05070a;
+      color: #f1f5f9;
+      overflow: hidden;
+      touch-action: manipulation;
+    }
+    .mono { font-family: 'JetBrains Mono', monospace; }
+  </style>
+</head>
+<body class="h-screen w-screen flex flex-col justify-between select-none">
+
+  <!-- カメラプレビュー背景 (スマホ上でもトリミングせず全画角を確認できるよう contain 指定) -->
+  <div class="relative flex-1 bg-black overflow-hidden flex items-center justify-center">
+    <video id="cameraPreview" class="w-full h-full object-contain" autoplay playsinline muted></video>
+
+    <!-- 上部ステータスオーバーレイ -->
+    <div class="absolute top-3 left-3 right-3 flex flex-wrap items-center justify-between gap-2 bg-slate-950/80 backdrop-blur-md border border-white/15 px-3 py-2 rounded">
+      <div class="flex items-center gap-2">
+        <span id="txDot" class="w-3 h-3 rounded-full bg-slate-500"></span>
+        <span id="txStatus" class="text-sm font-bold tracking-wider uppercase">STANDBY</span>
+      </div>
+      <div class="flex items-center gap-2 text-xs mono">
+        <span id="lensBadge" class="px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-500/30">LENS: AUTO</span>
+        <span id="bleBadge" class="px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-white/10">M5 BLE: OFF</span>
+        <span id="pitBadge" class="px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-white/10">PIT PC: 0</span>
+      </div>
+    </div>
+
+    <!-- 中央ライブ数値モニター -->
+    <div class="absolute bottom-3 left-3 right-3 bg-slate-950/85 backdrop-blur-md border border-white/10 p-2 rounded grid grid-cols-5 gap-2 text-center">
+      <div>
+        <div class="text-[10px] text-slate-400">SPEED</div>
+        <div id="valSpd" class="text-xl font-extrabold italic text-white mono">0</div>
+      </div>
+      <div>
+        <div class="text-[10px] text-slate-400">RPM</div>
+        <div id="valRpm" class="text-xl font-extrabold italic text-cyan-400 mono">0</div>
+      </div>
+      <div>
+        <div class="text-[10px] text-slate-400">THR %</div>
+        <div id="valThr" class="text-xl font-extrabold italic text-emerald-400 mono">0</div>
+      </div>
+      <div>
+        <div class="text-[10px] text-slate-400">BRK %</div>
+        <div id="valBrk" class="text-xl font-extrabold italic text-rose-500 mono">0</div>
+      </div>
+      <div>
+        <div class="text-[10px] text-slate-400">G (X/Y)</div>
+        <div id="valG" class="text-sm font-bold text-amber-400 mono mt-1">0.0/0.0</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 下部コントロールパネル -->
+  <div class="bg-slate-900 border-t border-white/15 p-3 space-y-2">
+    <div class="flex items-center gap-1.5">
+      <div class="flex items-center bg-slate-950 border border-white/15 rounded px-2 py-1.5 flex-1">
+        <span class="text-xs text-slate-400 mr-1.5 font-bold">ROOM:</span>
+        <input id="roomInput" type="text" value="ND-27" class="bg-transparent text-cyan-400 font-bold mono text-base w-full focus:outline-none uppercase" />
+      </div>
+      <button id="btnWideLens" class="px-2.5 py-2 bg-cyan-700 hover:bg-cyan-600 active:bg-cyan-800 text-white text-xs font-extrabold rounded border border-cyan-400/40 shadow">
+        📐 広角レンズ切替
+      </button>
+      <button id="btnDemo" class="px-2.5 py-2 bg-amber-500/20 border border-amber-400/50 text-amber-300 text-xs font-bold rounded">
+        DEMO: ON
+      </button>
+    </div>
+
+    <div class="grid grid-cols-2 gap-2">
+      <button id="btnBle" class="py-2.5 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-bold text-sm rounded tracking-wider shadow">
+        1. CONNECT M5 BLE
+      </button>
+      <button id="btnStartTx" class="py-2.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-extrabold text-base rounded tracking-wider shadow-lg">
+        2. START TX (配信開始)
+      </button>
+    </div>
+    <div id="logBox" class="text-[11px] mono text-slate-400 truncate">「📐 広角レンズ切替」で超広角(0.5x)カメラを選択できます。</div>
+  </div>
+
+  <script>
+    const NUS_SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
+    const NUS_TX_CHAR_UUID = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
+
+    const PEER_CONFIG = {
+      debug: 1,
+      config: {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:stun2.l.google.com:19302' }
+        ]
+      }
+    };
+
+    let localStream = null;
+    let videoDevices = [];
+    let currentDeviceIndex = -1;
+    let peer = null;
+    let activeDataConns = [];
+    let isDemoMode = true;
+    let bleConnected = false;
+    let demoPhase = 0;
+
+    let latestTelemetry = {
+      spd: 0, rpm: 850, gear: 1, thr: 0, brk: 0, gx: 0, gy: 0, steer: 0
+    };
+
+    function logMsg(msg) {
+      console.log(msg);
+      document.getElementById('logBox').textContent = msg;
+    }
+
+    // 背面カメラ一覧を取得し、超広角(Ultra Wide)があれば優先リスト化する
+    async function loadVideoDevices() {
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const allCams = devices.filter(d => d.kind === 'videoinput');
+        const backCams = allCams.filter(d => !d.label.toLowerCase().includes('front') && !d.label.toLowerCase().includes('前面'));
+        videoDevices = backCams.length > 0 ? backCams : allCams;
+
+        const ultraIdx = videoDevices.findIndex(d => {
+          const l = d.label.toLowerCase();
+          return l.includes('ultra') || l.includes('超広角') || l.includes('0.5') || l.includes('wide');
+        });
+        if (ultraIdx !== -1 && currentDeviceIndex === -1) {
+          currentDeviceIndex = ultraIdx;
+        } else if (currentDeviceIndex === -1 && videoDevices.length > 0) {
+          currentDeviceIndex = 0;
+        }
+      } catch (e) {
+        console.warn(e);
+      }
+    }
+
+    // 1. カメラ起動 (超広角＆最小ズームアウト自動適用)
+    async function startCamera(specificDeviceId = null) {
+      if (localStream) {
+        localStream.getTracks().forEach(t => t.stop());
+      }
+      try {
+        const videoConstraints = {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          frameRate: { ideal: 30 }
+        };
+
+        if (specificDeviceId) {
+          videoConstraints.deviceId = { exact: specificDeviceId };
+        } else {
+          videoConstraints.facingMode = { ideal: 'environment' };
+        }
+
+        localStream = await navigator.mediaDevices.getUserMedia({
+          video: videoConstraints,
+          audio: false
+        });
+
+        if (videoDevices.length === 0) {
+          await loadVideoDevices();
+        }
+
+        const videoTrack = localStream.getVideoTracks()[0];
+        if (videoTrack) {
+          const label = videoTrack.label || `CAM #${currentDeviceIndex + 1}`;
+          document.getElementById('lensBadge').textContent = label.substring(0, 18);
+
+          // ハードウェア最小ズーム(最広角)を適用
+          if (videoTrack.getCapabilities) {
+            const caps = videoTrack.getCapabilities();
+            if (caps.zoom && typeof caps.zoom.min === 'number') {
+              await videoTrack.applyConstraints({
+                advanced: [{ zoom: caps.zoom.min }]
+              }).catch(() => {});
+              logMsg(`Wide Zoom Applied (${caps.zoom.min}x) - ${label}`);
+            } else {
+              logMsg(`Active Lens: ${label}`);
+            }
+          }
+        }
+
+        const videoEl = document.getElementById('cameraPreview');
+        videoEl.srcObject = localStream;
+        await videoEl.play().catch(() => {});
+
+        // 接続中のピットPCへ新しい広角ストリームを即時プッシュ
+        activeDataConns.forEach(conn => {
+          if (conn.open && peer) {
+            peer.call(conn.peer, localStream);
+          }
+        });
+
+        return true;
+      } catch (err) {
+        logMsg('Camera Error: ' + err.message);
+        return false;
+      }
+    }
+
+    // 「📐 広角レンズ切替」ボタン：背面レンズ（標準 ➔ 超広角0.5x ➔ 望遠）を順番に切り替える
+    document.getElementById('btnWideLens').addEventListener('click', async () => {
+      await loadVideoDevices();
+      if (videoDevices.length <= 1) {
+        logMsg('切替可能な別レンズが見つかりません。最小ズームを再適用します。');
+        await startCamera();
+        return;
+      }
+      currentDeviceIndex = (currentDeviceIndex + 1) % videoDevices.length;
+      const targetCam = videoDevices[currentDeviceIndex];
+      logMsg(`レンズ切替中 (${currentDeviceIndex + 1}/${videoDevices.length}): ${targetCam.label || 'Lens'}`);
+      await startCamera(targetCam.deviceId);
+    });
+
+    // 向き変更時
+    window.addEventListener('orientationchange', () => {
+      setTimeout(() => {
+        const devId = (videoDevices[currentDeviceIndex]) ? videoDevices[currentDeviceIndex].deviceId : null;
+        startCamera(devId);
+      }, 300);
+    });
+
+    // 2. DEMOモード切替（OFF時は車速0km/hにしてピットPCの自動録画停止をトリガーできるようにする）
+    const btnDemo = document.getElementById('btnDemo');
+    btnDemo.addEventListener('click', () => {
+      isDemoMode = !isDemoMode;
+      btnDemo.textContent = isDemoMode ? 'DEMO: ON' : 'DEMO: OFF (0km/h)';
+      btnDemo.className = isDemoMode
+        ? 'px-2.5 py-2 bg-amber-500/20 border border-amber-400/50 text-amber-300 text-xs font-bold rounded'
+        : 'px-2.5 py-2 bg-slate-800 border border-white/10 text-slate-400 text-xs font-bold rounded';
+
+      if (!isDemoMode && !bleConnected) {
+        latestTelemetry = {
+          spd: 0, rpm: 850, gear: 1, thr: 0, brk: 0, gx: 0, gy: 0, steer: 0
+        };
+        logMsg('DEMO停止 (0 km/h) - ピットPC側で自動録画停止カウントが進みます。');
+      } else if (isDemoMode) {
+        logMsg('DEMO走行開始 - ピットPC側で自動録画がスタートします。');
+      }
+    });
+
+    // 3. M5Stack BLE接続
+    document.getElementById('btnBle').addEventListener('click', async () => {
+      if (!navigator.bluetooth) {
+        logMsg('このブラウザはWeb Bluetooth非対応です（BluefyまたはAndroid Chrome推奨）');
+        return;
+      }
+      try {
+        logMsg('M5Stackを検索中...');
+        const device = await navigator.bluetooth.requestDevice({
+          filters: [{ namePrefix: 'M5' }],
+          optionalServices: [NUS_SERVICE_UUID]
+        });
+        const server = await device.gatt.connect();
+        const service = await server.getPrimaryService(NUS_SERVICE_UUID);
+        const char = await service.getCharacteristic(NUS_TX_CHAR_UUID);
+        await char.startNotifications();
+
+        bleConnected = true;
+        isDemoMode = false;
+        btnDemo.textContent = 'DEMO: OFF';
+        document.getElementById('bleBadge').textContent = 'M5 BLE: LINKED';
+        document.getElementById('bleBadge').className = 'px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 font-bold';
+        logMsg('M5Stack BLE Connected!');
+
+        let buffer = '';
+        char.addEventListener('characteristicvaluechanged', (e) => {
+          const chunk = new TextDecoder().decode(e.target.value);
+          buffer += chunk;
+          let lines = buffer.split('\n');
+          buffer = lines.pop();
+          for (let line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const d = JSON.parse(line);
+              latestTelemetry = {
+                spd: d.spd ?? 0,
+                rpm: d.rpm ?? 0,
+                gear: d.gear ?? 1,
+                thr: d.thr ?? 0,
+                brk: d.brk ?? 0,
+                gx: d.gx ?? 0,
+                gy: d.gy ?? 0,
+                steer: d.steer ?? 0
+              };
+            } catch (err) {}
+          }
+        });
+      } catch (err) {
+        logMsg('BLE Error: ' + err.message);
+      }
+    });
+
+    // 4. WebRTC 配信開始
+    document.getElementById('btnStartTx').addEventListener('click', async () => {
+      const roomCode = document.getElementById('roomInput').value.trim().toUpperCase();
+      if (!roomCode) return;
+
+      if (!localStream) {
+        const ok = await startCamera();
+        if (!ok) return;
+      }
+
+      if (peer) peer.destroy();
+      activeDataConns = [];
+
+      const peerId = 'RACE-CAR-' + roomCode;
+      logMsg(`Signaling connecting as [${peerId}]...`);
+
+      peer = new Peer(peerId, PEER_CONFIG);
+
+      peer.on('open', () => {
+        document.getElementById('txDot').className = 'w-3 h-3 rounded-full bg-emerald-400 animate-ping';
+        document.getElementById('txStatus').textContent = 'ON AIR: ' + roomCode;
+        document.getElementById('btnStartTx').textContent = 'TRANSMITTING (配信中)';
+        document.getElementById('btnStartTx').className = 'py-2.5 bg-cyan-600 text-white font-extrabold text-base rounded tracking-wider shadow-lg';
+        logMsg(`配信待機中！PC側で ROOM [${roomCode}] の「LINK CAR」を押してください。`);
+      });
+
+      peer.on('connection', (conn) => {
+        logMsg(`Pit PC Linked (${conn.peer})!`);
+        activeDataConns.push(conn);
+        updatePitCount();
+
+        conn.on('open', () => {
+          if (localStream) {
+            peer.call(conn.peer, localStream);
+          }
+        });
+
+        conn.on('data', (data) => {
+          if (data && data.type === 'REQUEST_VIDEO' && localStream) {
+            peer.call(conn.peer, localStream);
+          }
+        });
+
+        conn.on('close', () => {
+          activeDataConns = activeDataConns.filter(c => c !== conn);
+          updatePitCount();
+        });
+      });
+
+      peer.on('call', (call) => {
+        if (localStream) {
+          call.answer(localStream);
+        }
+      });
+
+      peer.on('error', (err) => {
+        logMsg('Peer Error: ' + err.type + ' - ' + err.message);
+      });
+
+      if ('wakeLock' in navigator) {
+        navigator.wakeLock.request('screen').catch(() => {});
+      }
+    });
+
+    function updatePitCount() {
+      const count = activeDataConns.filter(c => c.open).length;
+      const badge = document.getElementById('pitBadge');
+      badge.textContent = `PIT PC: ${count}`;
+      badge.className = count > 0
+        ? 'px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-400/50 font-bold'
+        : 'px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-white/10';
+    }
+
+    // 5. 25Hz テレメトリ送信ループ
+    setInterval(() => {
+      if (!bleConnected) {
+        if (isDemoMode) {
+          demoPhase += 0.05;
+          const wave = Math.sin(demoPhase);
+          const brkZone = wave < -0.25 ? Math.min(100, Math.round((-wave - 0.25) * 145)) : 0;
+          const thrZone = brkZone === 0 ? Math.min(100, Math.max(0, Math.round((wave + 0.3) * 90))) : 0;
+          const spd = Math.round(135 + wave * 65);
+          latestTelemetry = {
+            spd: spd,
+            rpm: Math.round(3800 + (spd % 45) * 80),
+            gear: spd > 175 ? 5 : spd > 135 ? 4 : spd > 95 ? 3 : 2,
+            thr: thrZone,
+            brk: brkZone,
+            gx: Number((brkZone > 0 ? -brkZone * 0.012 : thrZone * 0.004).toFixed(2)),
+            gy: Number((Math.cos(demoPhase * 0.8) * 1.15).toFixed(2)),
+            steer: Math.round(Math.cos(demoPhase * 0.8) * 95)
+          };
+        } else {
+          // DEMO OFF時はピット停止状態(0 km/h)を送る
+          latestTelemetry = {
+            spd: 0, rpm: 850, gear: 1, thr: 0, brk: 0, gx: 0, gy: 0, steer: 0
+          };
+        }
+      }
+
+      document.getElementById('valSpd').textContent = Math.round(latestTelemetry.spd);
+      document.getElementById('valRpm').textContent = Math.round(latestTelemetry.rpm);
+      document.getElementById('valThr').textContent = Math.round(latestTelemetry.thr);
+      document.getElementById('valBrk').textContent = Math.round(latestTelemetry.brk);
+      document.getElementById('valG').textContent = `${latestTelemetry.gx.toFixed(1)}/${latestTelemetry.gy.toFixed(1)}`;
+
+      const payload = {
+        t: Date.now(),
+        ...latestTelemetry
+      };
+      activeDataConns.forEach(conn => {
+        if (conn.open) {
+          conn.send(payload);
+        }
+      });
+    }, 40);
+
+    window.addEventListener('load', async () => {
+      await startCamera();
+      await loadVideoDevices();
+      if (currentDeviceIndex > 0 && videoDevices[currentDeviceIndex]) {
+        await startCamera(videoDevices[currentDeviceIndex].deviceId);
+      }
+    });
+  </script>
+</body>
+</html>
