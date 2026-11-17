@@ -22,25 +22,23 @@
 </head>
 <body class="h-screen w-screen flex flex-col justify-between select-none">
 
-  <!-- カメラプレビュー背景 (スマホ上でもトリミングせず全画角を確認できるよう contain 指定) -->
   <div class="relative flex-1 bg-black overflow-hidden flex items-center justify-center">
     <video id="cameraPreview" class="w-full h-full object-contain" autoplay playsinline muted></video>
 
-    <!-- 上部ステータスオーバーレイ -->
     <div class="absolute top-3 left-3 right-3 flex flex-wrap items-center justify-between gap-2 bg-slate-950/80 backdrop-blur-md border border-white/15 px-3 py-2 rounded">
       <div class="flex items-center gap-2">
         <span id="txDot" class="w-3 h-3 rounded-full bg-slate-500"></span>
         <span id="txStatus" class="text-sm font-bold tracking-wider uppercase">STANDBY</span>
       </div>
-      <div class="flex items-center gap-2 text-xs mono">
+      <div class="flex items-center gap-1.5 text-xs mono">
+        <span id="gpsBadge" class="px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-white/10">GPS: INIT</span>
         <span id="lensBadge" class="px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-500/30">LENS: AUTO</span>
         <span id="bleBadge" class="px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-white/10">M5 BLE: OFF</span>
         <span id="pitBadge" class="px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-white/10">PIT PC: 0</span>
       </div>
     </div>
 
-    <!-- 中央ライブ数値モニター -->
-    <div class="absolute bottom-3 left-3 right-3 bg-slate-950/85 backdrop-blur-md border border-white/10 p-2 rounded grid grid-cols-5 gap-2 text-center">
+    <div class="absolute bottom-3 left-3 right-3 bg-slate-950/85 backdrop-blur-md border border-white/10 p-2 rounded grid grid-cols-6 gap-1.5 text-center">
       <div>
         <div class="text-[10px] text-slate-400">SPEED</div>
         <div id="valSpd" class="text-xl font-extrabold italic text-white mono">0</div>
@@ -58,13 +56,16 @@
         <div id="valBrk" class="text-xl font-extrabold italic text-rose-500 mono">0</div>
       </div>
       <div>
-        <div class="text-[10px] text-slate-400">G (X/Y)</div>
-        <div id="valG" class="text-sm font-bold text-amber-400 mono mt-1">0.0/0.0</div>
+        <div class="text-[10px] text-slate-400">LAP</div>
+        <div id="valLap" class="text-lg font-extrabold text-amber-400 mono">L1</div>
+      </div>
+      <div>
+        <div class="text-[10px] text-slate-400">DIST (m)</div>
+        <div id="valDist" class="text-sm font-bold text-slate-200 mono mt-1">0m</div>
       </div>
     </div>
   </div>
 
-  <!-- 下部コントロールパネル -->
   <div class="bg-slate-900 border-t border-white/15 p-3 space-y-2">
     <div class="flex items-center gap-1.5">
       <div class="flex items-center bg-slate-950 border border-white/15 rounded px-2 py-1.5 flex-1">
@@ -87,7 +88,7 @@
         2. START TX (配信開始)
       </button>
     </div>
-    <div id="logBox" class="text-[11px] mono text-slate-400 truncate">「📐 広角レンズ切替」で超広角(0.5x)カメラを選択できます。</div>
+    <div id="logBox" class="text-[11px] mono text-slate-400 truncate">Solo 2 DL優先＋スマホ内蔵GPSでのライン通過自動検知に対応しています。</div>
   </div>
 
   <script>
@@ -105,6 +106,15 @@
       }
     };
 
+    // 各サーキットのコントロールライン（スタート/フィニッシュライン）中心座標・検知半径(m)・最小ラップ秒数
+    const CIRCUIT_START_LINES = {
+      fsw:       { name: 'FSW',       lat: 35.37222, lon: 138.92694, radiusM: 28, minLapSec: 85, lengthM: 4563 },
+      motegi:    { name: 'MOTEGI',    lat: 36.53310, lon: 140.22665, radiusM: 28, minLapSec: 90, lengthM: 4801 },
+      nikko:     { name: 'NIKKO',     lat: 36.68755, lon: 139.84062, radiusM: 22, minLapSec: 32, lengthM: 1047 },
+      sodegaura: { name: 'SODEGAURA', lat: 35.40835, lon: 140.07115, radiusM: 25, minLapSec: 55, lengthM: 2436 },
+      tsukuba:   { name: 'TC2000',    lat: 36.17975, lon: 139.98895, radiusM: 25, minLapSec: 48, lengthM: 2045 }
+    };
+
     let localStream = null;
     let videoDevices = [];
     let currentDeviceIndex = -1;
@@ -112,10 +122,28 @@
     let activeDataConns = [];
     let isDemoMode = true;
     let bleConnected = false;
+    let hasSoloTimingStream = false;
     let demoPhase = 0;
 
+    // スマホ内蔵GPSによるライン通過＆ラップ計測用ステート（Solo 2 DL未接続時のフォールバック）
+    let phoneGpsState = {
+      active: false,
+      nearestCircuitKey: 'fsw',
+      lat: undefined,
+      lon: undefined,
+      spdKmh: 0,
+      lap: 1,
+      distM: 0,
+      lapStartMs: performance.now(),
+      lapTime: 0,
+      lastLap: 0,
+      lastCrossMs: 0,
+      lastUpdateMs: performance.now()
+    };
+
     let latestTelemetry = {
-      spd: 0, rpm: 850, gear: 1, thr: 0, brk: 0, gx: 0, gy: 0, steer: 0
+      spd: 0, rpm: 850, gear: 1, thr: 0, brk: 0, gx: 0, gy: 0, steer: 0,
+      wtemp: 85, lap: 1, distM: 0, lapTime: 0, lastLap: 0, lat: undefined, lon: undefined
     };
 
     function logMsg(msg) {
@@ -123,7 +151,78 @@
       document.getElementById('logBox').textContent = msg;
     }
 
-    // 背面カメラ一覧を取得し、超広角(Ultra Wide)があれば優先リスト化する
+    // 2点間の距離(m)を計算
+    function calcDistMeters(lat1, lon1, lat2, lon2) {
+      const R = 6371000;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    // スマホ内蔵GPSウォッチャー（Solo 2 DLからタイム情報が来ていない時にライン通過を自動検知）
+    function initPhoneGpsTracker() {
+      if (!navigator.geolocation) return;
+      navigator.geolocation.watchPosition(
+        (pos) => {
+          const nowMs = performance.now();
+          const dtSec = Math.min(1.0, Math.max(0, (nowMs - phoneGpsState.lastUpdateMs) / 1000));
+          phoneGpsState.lastUpdateMs = nowMs;
+
+          const lat = pos.coords.latitude;
+          const lon = pos.coords.longitude;
+          phoneGpsState.lat = lat;
+          phoneGpsState.lon = lon;
+          phoneGpsState.active = true;
+
+          if (typeof pos.coords.speed === 'number' && pos.coords.speed >= 0) {
+            phoneGpsState.spdKmh = pos.coords.speed * 3.6;
+          }
+
+          // 最寄りサーキットの特定
+          let bestKey = phoneGpsState.nearestCircuitKey;
+          let minD = Infinity;
+          for (const [k, c] of Object.entries(CIRCUIT_START_LINES)) {
+            const d = calcDistMeters(lat, lon, c.lat, c.lon);
+            if (d < minD) {
+              minD = d;
+              bestKey = k;
+            }
+          }
+          phoneGpsState.nearestCircuitKey = bestKey;
+          const targetLine = CIRCUIT_START_LINES[bestKey];
+
+          // スタート/フィニッシュライン半径内を通過したか判定
+          const distToLineM = calcDistMeters(lat, lon, targetLine.lat, targetLine.lon);
+          const elapsedSinceLastCrossSec = (nowMs - phoneGpsState.lastCrossMs) / 1000;
+
+          if (distToLineM <= targetLine.radiusM && elapsedSinceLastCrossSec >= targetLine.minLapSec) {
+            if (phoneGpsState.lastCrossMs > 0) {
+              phoneGpsState.lastLap = (nowMs - phoneGpsState.lapStartMs) / 1000;
+              phoneGpsState.lap += 1;
+              logMsg(`🏁 [${targetLine.name}] LINE CROSS! L${phoneGpsState.lap} (LAST: ${phoneGpsState.lastLap.toFixed(2)}s)`);
+            }
+            phoneGpsState.lastCrossMs = nowMs;
+            phoneGpsState.lapStartMs = nowMs;
+            phoneGpsState.distM = 0;
+          } else {
+            const useSpd = bleConnected ? latestTelemetry.spd : phoneGpsState.spdKmh;
+            phoneGpsState.distM += (useSpd / 3.6) * dtSec;
+          }
+
+          phoneGpsState.lapTime = (nowMs - phoneGpsState.lapStartMs) / 1000;
+
+          const gpsBadge = document.getElementById('gpsBadge');
+          gpsBadge.textContent = hasSoloTimingStream ? 'GPS: SOLO2 25Hz' : `GPS: ${targetLine.name}`;
+          gpsBadge.className = 'px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/40 font-bold';
+        },
+        () => {},
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
+      );
+    }
+
     async function loadVideoDevices() {
       try {
         const devices = await navigator.mediaDevices.enumerateDevices();
@@ -140,12 +239,9 @@
         } else if (currentDeviceIndex === -1 && videoDevices.length > 0) {
           currentDeviceIndex = 0;
         }
-      } catch (e) {
-        console.warn(e);
-      }
+      } catch (e) {}
     }
 
-    // 1. カメラ起動 (超広角＆最小ズームアウト自動適用)
     async function startCamera(specificDeviceId = null) {
       if (localStream) {
         localStream.getTracks().forEach(t => t.stop());
@@ -177,16 +273,12 @@
           const label = videoTrack.label || `CAM #${currentDeviceIndex + 1}`;
           document.getElementById('lensBadge').textContent = label.substring(0, 18);
 
-          // ハードウェア最小ズーム(最広角)を適用
           if (videoTrack.getCapabilities) {
             const caps = videoTrack.getCapabilities();
             if (caps.zoom && typeof caps.zoom.min === 'number') {
               await videoTrack.applyConstraints({
                 advanced: [{ zoom: caps.zoom.min }]
               }).catch(() => {});
-              logMsg(`Wide Zoom Applied (${caps.zoom.min}x) - ${label}`);
-            } else {
-              logMsg(`Active Lens: ${label}`);
             }
           }
         }
@@ -195,7 +287,6 @@
         videoEl.srcObject = localStream;
         await videoEl.play().catch(() => {});
 
-        // 接続中のピットPCへ新しい広角ストリームを即時プッシュ
         activeDataConns.forEach(conn => {
           if (conn.open && peer) {
             peer.call(conn.peer, localStream);
@@ -209,51 +300,29 @@
       }
     }
 
-    // 「📐 広角レンズ切替」ボタン：背面レンズ（標準 ➔ 超広角0.5x ➔ 望遠）を順番に切り替える
     document.getElementById('btnWideLens').addEventListener('click', async () => {
       await loadVideoDevices();
       if (videoDevices.length <= 1) {
-        logMsg('切替可能な別レンズが見つかりません。最小ズームを再適用します。');
         await startCamera();
         return;
       }
       currentDeviceIndex = (currentDeviceIndex + 1) % videoDevices.length;
       const targetCam = videoDevices[currentDeviceIndex];
-      logMsg(`レンズ切替中 (${currentDeviceIndex + 1}/${videoDevices.length}): ${targetCam.label || 'Lens'}`);
       await startCamera(targetCam.deviceId);
     });
 
-    // 向き変更時
-    window.addEventListener('orientationchange', () => {
-      setTimeout(() => {
-        const devId = (videoDevices[currentDeviceIndex]) ? videoDevices[currentDeviceIndex].deviceId : null;
-        startCamera(devId);
-      }, 300);
-    });
-
-    // 2. DEMOモード切替（OFF時は車速0km/hにしてピットPCの自動録画停止をトリガーできるようにする）
     const btnDemo = document.getElementById('btnDemo');
     btnDemo.addEventListener('click', () => {
       isDemoMode = !isDemoMode;
-      btnDemo.textContent = isDemoMode ? 'DEMO: ON' : 'DEMO: OFF (0km/h)';
+      btnDemo.textContent = isDemoMode ? 'DEMO: ON' : 'DEMO: OFF (GPS/0km/h)';
       btnDemo.className = isDemoMode
         ? 'px-2.5 py-2 bg-amber-500/20 border border-amber-400/50 text-amber-300 text-xs font-bold rounded'
         : 'px-2.5 py-2 bg-slate-800 border border-white/10 text-slate-400 text-xs font-bold rounded';
-
-      if (!isDemoMode && !bleConnected) {
-        latestTelemetry = {
-          spd: 0, rpm: 850, gear: 1, thr: 0, brk: 0, gx: 0, gy: 0, steer: 0
-        };
-        logMsg('DEMO停止 (0 km/h) - ピットPC側で自動録画停止カウントが進みます。');
-      } else if (isDemoMode) {
-        logMsg('DEMO走行開始 - ピットPC側で自動録画がスタートします。');
-      }
     });
 
-    // 3. M5Stack BLE接続
     document.getElementById('btnBle').addEventListener('click', async () => {
       if (!navigator.bluetooth) {
-        logMsg('このブラウザはWeb Bluetooth非対応です（BluefyまたはAndroid Chrome推奨）');
+        logMsg('Web Bluetooth非対応ブラウザです（Android Chrome / iOS Bluefy推奨）');
         return;
       }
       try {
@@ -272,7 +341,7 @@
         btnDemo.textContent = 'DEMO: OFF';
         document.getElementById('bleBadge').textContent = 'M5 BLE: LINKED';
         document.getElementById('bleBadge').className = 'px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 font-bold';
-        logMsg('M5Stack BLE Connected!');
+        logMsg('M5Stack & Solo 2 DL Linked!');
 
         let buffer = '';
         char.addEventListener('characteristicvaluechanged', (e) => {
@@ -284,6 +353,9 @@
             if (!line.trim()) continue;
             try {
               const d = JSON.parse(line);
+              if (typeof d.distM === 'number' && typeof d.lapTime === 'number') {
+                hasSoloTimingStream = true;
+              }
               latestTelemetry = {
                 spd: d.spd ?? 0,
                 rpm: d.rpm ?? 0,
@@ -292,7 +364,15 @@
                 brk: d.brk ?? 0,
                 gx: d.gx ?? 0,
                 gy: d.gy ?? 0,
-                steer: d.steer ?? 0
+                steer: d.steer ?? 0,
+                wtemp: d.wtemp ?? 85,
+                // Solo 2 DLのタイム・距離・GPSがあれば優先し、無ければスマホ内蔵GPSのライン検知値を使用
+                lap: d.lap ?? phoneGpsState.lap,
+                distM: d.distM ?? phoneGpsState.distM,
+                lapTime: d.lapTime ?? phoneGpsState.lapTime,
+                lastLap: d.lastLap ?? phoneGpsState.lastLap,
+                lat: (d.lat && Math.abs(d.lat) > 20) ? d.lat : phoneGpsState.lat,
+                lon: (d.lon && Math.abs(d.lon) > 20) ? d.lon : phoneGpsState.lon
               };
             } catch (err) {}
           }
@@ -302,7 +382,6 @@
       }
     });
 
-    // 4. WebRTC 配信開始
     document.getElementById('btnStartTx').addEventListener('click', async () => {
       const roomCode = document.getElementById('roomInput').value.trim().toUpperCase();
       if (!roomCode) return;
@@ -316,8 +395,6 @@
       activeDataConns = [];
 
       const peerId = 'RACE-CAR-' + roomCode;
-      logMsg(`Signaling connecting as [${peerId}]...`);
-
       peer = new Peer(peerId, PEER_CONFIG);
 
       peer.on('open', () => {
@@ -325,11 +402,9 @@
         document.getElementById('txStatus').textContent = 'ON AIR: ' + roomCode;
         document.getElementById('btnStartTx').textContent = 'TRANSMITTING (配信中)';
         document.getElementById('btnStartTx').className = 'py-2.5 bg-cyan-600 text-white font-extrabold text-base rounded tracking-wider shadow-lg';
-        logMsg(`配信待機中！PC側で ROOM [${roomCode}] の「LINK CAR」を押してください。`);
       });
 
       peer.on('connection', (conn) => {
-        logMsg(`Pit PC Linked (${conn.peer})!`);
         activeDataConns.push(conn);
         updatePitCount();
 
@@ -356,14 +431,6 @@
           call.answer(localStream);
         }
       });
-
-      peer.on('error', (err) => {
-        logMsg('Peer Error: ' + err.type + ' - ' + err.message);
-      });
-
-      if ('wakeLock' in navigator) {
-        navigator.wakeLock.request('screen').catch(() => {});
-      }
     });
 
     function updatePitCount() {
@@ -375,7 +442,6 @@
         : 'px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-white/10';
     }
 
-    // 5. 25Hz テレメトリ送信ループ
     setInterval(() => {
       if (!bleConnected) {
         if (isDemoMode) {
@@ -392,12 +458,27 @@
             brk: brkZone,
             gx: Number((brkZone > 0 ? -brkZone * 0.012 : thrZone * 0.004).toFixed(2)),
             gy: Number((Math.cos(demoPhase * 0.8) * 1.15).toFixed(2)),
-            steer: Math.round(Math.cos(demoPhase * 0.8) * 95)
+            steer: Math.round(Math.cos(demoPhase * 0.8) * 95),
+            lat: phoneGpsState.lat,
+            lon: phoneGpsState.lon
           };
         } else {
-          // DEMO OFF時はピット停止状態(0 km/h)を送る
+          // DEMO OFF かつ BLE未接続時はスマホ内蔵GPSの車速・ライン通過判定で動作
           latestTelemetry = {
-            spd: 0, rpm: 850, gear: 1, thr: 0, brk: 0, gx: 0, gy: 0, steer: 0
+            spd: Math.round(phoneGpsState.spdKmh || 0),
+            rpm: 850,
+            gear: 1,
+            thr: 0,
+            brk: 0,
+            gx: 0,
+            gy: 0,
+            steer: 0,
+            lap: phoneGpsState.lap,
+            distM: phoneGpsState.distM,
+            lapTime: phoneGpsState.lapTime,
+            lastLap: phoneGpsState.lastLap,
+            lat: phoneGpsState.lat,
+            lon: phoneGpsState.lon
           };
         }
       }
@@ -406,7 +487,8 @@
       document.getElementById('valRpm').textContent = Math.round(latestTelemetry.rpm);
       document.getElementById('valThr').textContent = Math.round(latestTelemetry.thr);
       document.getElementById('valBrk').textContent = Math.round(latestTelemetry.brk);
-      document.getElementById('valG').textContent = `${latestTelemetry.gx.toFixed(1)}/${latestTelemetry.gy.toFixed(1)}`;
+      document.getElementById('valLap').textContent = latestTelemetry.lap ? `L${latestTelemetry.lap}` : 'L1';
+      document.getElementById('valDist').textContent = latestTelemetry.distM !== undefined ? `${Math.round(latestTelemetry.distM)}m` : '0m';
 
       const payload = {
         t: Date.now(),
@@ -420,6 +502,7 @@
     }, 40);
 
     window.addEventListener('load', async () => {
+      initPhoneGpsTracker();
       await startCamera();
       await loadVideoDevices();
       if (currentDeviceIndex > 0 && videoDevices[currentDeviceIndex]) {
