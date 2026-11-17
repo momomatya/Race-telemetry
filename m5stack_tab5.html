@@ -1,0 +1,1967 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>M5Stack Tab5 // Racing Driver Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,500;0,600;0,700;0,800;0,900;1,700;1,800;1,900&family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:ital,wght@0,500;0,700;0,800;1,700&family=Oswald:ital,wght@0,600;0,700;1,700&family=Roboto:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-deep: #04060a;
+      --panel-bg: rgba(10, 14, 22, 0.94);
+      --panel-border: rgba(255, 255, 255, 0.14);
+      --defi-white: #f8fafc;
+      --defi-amber: #ff9e00;
+      --defi-red: #ff1e38;
+      --defi-cyan: #00f0ff;
+    }
+
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #020306;
+      color: var(--defi-white);
+      font-family: 'Barlow Condensed', sans-serif;
+      overflow: hidden;
+      touch-action: none;
+    }
+
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .oswald {
+      font-family: 'Oswald', sans-serif;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Authentic FL5 +R Cluster Clean Geometric Sans-Serif Typography (Non-italic, Tabular) */
+    .fl5-font {
+      font-family: 'Inter', 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-style: normal;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.015em;
+    }
+
+    /* Defi High-Contrast Crisp Glow */
+    .defi-num-glow {
+      text-shadow: 0 0 14px rgba(255, 255, 255, 0.28);
+    }
+    .defi-amber-glow {
+      text-shadow: 0 0 16px rgba(255, 158, 0, 0.45);
+    }
+    .defi-cyan-glow {
+      text-shadow: 0 0 14px rgba(0, 240, 255, 0.4);
+    }
+
+    /* FL5 +R Silver Vertical Divider */
+    .fl5-silver-divider {
+      width: 2px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.02) 0%, rgba(226,232,240,0.5) 50%, rgba(255,255,255,0.02) 100%);
+      box-shadow: 0 0 10px rgba(255,255,255,0.22);
+    }
+
+    /* Customizable Widget Container (Base font-size enlarged to 18px for track legibility) */
+    .dash-widget {
+      position: absolute;
+      background: linear-gradient(160deg, rgba(13, 18, 29, 0.95) 0%, rgba(6, 9, 15, 0.98) 100%);
+      border: 1.5px solid var(--panel-border);
+      border-radius: 6px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      overflow: hidden;
+      --scale-x: 1;
+      --scale-y: 1;
+      --ui-scale: 1;
+      font-size: calc(18px * var(--ui-scale));
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    /* Top Carbon Accent Strip on Defi/FL5 Panels */
+    .dash-widget::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, rgba(255, 30, 56, 0.85), rgba(0, 240, 255, 0.65), transparent);
+      pointer-events: none;
+    }
+
+    /* Layout Edit Mode Styling */
+    body.edit-mode .dash-widget {
+      border: 1.5px dashed #ff9e00 !important;
+      background: rgba(15, 23, 42, 0.85) !important;
+      cursor: grab;
+    }
+    body.edit-mode .dash-widget:active {
+      cursor: grabbing;
+      border-color: #00f0ff !important;
+      box-shadow: 0 0 22px rgba(0, 240, 255, 0.35);
+      z-index: 40;
+    }
+
+    .widget-resize-handle {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      width: 24px;
+      height: 24px;
+      cursor: se-resize;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      color: #ff9e00;
+      background: rgba(255, 158, 0, 0.18);
+      border-top-left-radius: 6px;
+      font-size: 13px;
+      z-index: 50;
+    }
+    body.edit-mode .widget-resize-handle {
+      display: flex;
+    }
+
+    .edit-badge {
+      display: none;
+    }
+    body.edit-mode .edit-badge {
+      display: inline-flex;
+    }
+
+    /* Shift Light Strobe & Water Temp Warning Animations */
+    @keyframes shiftStrobe {
+      0%, 100% { background-color: rgba(255, 30, 56, 0.95); border-color: #ffffff; }
+      50% { background-color: rgba(15, 20, 30, 0.95); border-color: #ff1e38; }
+    }
+    .shift-bar-strobe {
+      animation: shiftStrobe 0.11s infinite;
+    }
+
+    @keyframes waterTempWarn {
+      0%, 100% { background: rgba(190, 18, 40, 0.92); border-color: #ffffff; }
+      50% { background: rgba(12, 16, 26, 0.96); border-color: #ff1e38; }
+    }
+    .temp-warn-active {
+      animation: waterTempWarn 0.35s infinite !important;
+    }
+  </style>
+</head>
+<body class="w-screen h-screen flex flex-col justify-between bg-[#020306] select-none overflow-hidden">
+
+  <!-- =========================================================================
+       1. TOP FIXED INDEPENDENT 15-LED SHIFT INDICATOR BAR
+       ========================================================================= -->
+  <div id="topShiftIndicatorBar" class="h-[26px] w-full bg-[#060911] border-b border-white/15 px-3 flex items-center justify-between shrink-0 z-50">
+    <div class="flex items-center space-x-2">
+      <span class="text-xs font-black tracking-widest text-slate-300">SHIFT</span>
+      <span id="topBarLapBadge" class="px-2 py-0.5 rounded bg-amber-500/25 border border-amber-400/60 text-amber-300 mono text-xs font-black">
+        LAP 08
+      </span>
+    </div>
+
+    <!-- 15 Independent LEDs -->
+    <div id="shiftLedsContainer" class="flex-1 max-w-[700px] mx-4 grid grid-cols-15 gap-1.5 h-[15px]" style="grid-template-columns: repeat(15, minmax(0, 1fr));">
+      <!-- Populated by JS -->
+    </div>
+
+    <div class="w-40 text-right">
+      <span id="shiftAlertText" class="mono text-xs font-extrabold text-slate-300 tracking-wider">7,000 RPM LIMIT</span>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       2. COMPACT TOP CONTROL & NAVIGATION BAR
+       ========================================================================= -->
+  <header class="h-[40px] bg-[#080c16] border-b border-white/15 px-2.5 flex items-center justify-between text-xs z-40 shrink-0">
+    <div class="flex items-center space-x-1.5">
+      <span class="px-2 py-0.5 rounded bg-rose-600 text-white font-black tracking-wider text-xs flex items-center gap-1">
+        <span class="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
+        TAB5
+      </span>
+
+      <!-- Page Selector Tabs (P1 / P2 / P3 - No +R text) -->
+      <div class="flex items-center bg-black/70 p-0.5 rounded border border-white/15 space-x-1">
+        <button data-page="1" class="page-tab-btn px-3 py-0.5 rounded text-xs font-black tracking-wider bg-rose-600 text-white transition">
+          P1: RACE / ATTACK
+        </button>
+        <button data-page="2" class="page-tab-btn px-3 py-0.5 rounded text-xs font-black tracking-wider text-slate-300 hover:text-white transition">
+          P2: CLUSTER
+        </button>
+        <button data-page="3" class="page-tab-btn px-3 py-0.5 rounded text-xs font-black tracking-wider text-slate-300 hover:text-white transition">
+          P3: STEER & PEDAL
+        </button>
+      </div>
+
+      <!-- REV LIMIT Input (5000 - 8500 RPM) -->
+      <div class="flex items-center bg-slate-900 border border-rose-500/40 rounded px-2 py-0.5 space-x-1" title="レブリミット回転数設定（タコメーターに▼印を表示）">
+        <span class="text-[11px] font-black text-rose-400">REV LIMIT:</span>
+        <input id="numRevLimitTop" type="number" min="5000" max="8500" step="100" value="7000"
+               class="w-16 bg-transparent text-white mono font-black text-xs text-right focus:outline-none" />
+        <span class="text-[11px] mono text-slate-400">RPM</span>
+      </div>
+
+      <!-- Quick Session Timer Presets (10m / 15m / 20m / 30m + Start/Pause) -->
+      <div class="hidden lg:flex items-center bg-slate-900/90 border border-white/15 rounded px-1.5 py-0.5 space-x-1">
+        <span class="text-xs font-bold text-amber-400 mr-0.5">⏱</span>
+        <button data-preset="10" class="timer-preset-btn px-2 py-0.5 bg-amber-500/30 border border-amber-400/60 text-amber-200 rounded text-[11px] mono font-extrabold">10m</button>
+        <button data-preset="15" class="timer-preset-btn px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[11px] mono font-bold">15m</button>
+        <button data-preset="20" class="timer-preset-btn px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[11px] mono font-bold">20m</button>
+        <button data-preset="30" class="timer-preset-btn px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[11px] mono font-bold">30m</button>
+        <button id="btnTopTimerToggle" class="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-[11px] font-black">PAUSE</button>
+      </div>
+    </div>
+
+    <!-- Right Controls: Layout Edit / Reset / SIM Drawer -->
+    <div class="flex items-center space-x-1.5">
+      <button id="btnTachoMode" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-cyan-300 font-bold text-xs border border-cyan-500/30" title="P1タコメーターの表示モード切替">
+        📊 P1 TACHO: ARCH
+      </button>
+      <button id="btnEditLayout" class="px-2.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-amber-300 font-extrabold text-xs border border-amber-500/40">
+        🛠 レイアウト編集: OFF
+      </button>
+      <button id="btnResetLayout" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs border border-white/10">
+        ↺ リセット
+      </button>
+      <button id="btnToggleSim" class="px-2.5 py-0.5 rounded bg-cyan-900/70 hover:bg-cyan-800 text-cyan-200 font-extrabold text-xs border border-cyan-400/40">
+        ⚙ SIM
+      </button>
+    </div>
+  </header>
+
+  <!-- =========================================================================
+       3. MAIN DASHBOARD VIEWPORT (3 PAGES)
+       ========================================================================= -->
+  <main id="dashViewport" class="relative flex-1 w-full h-full overflow-hidden bg-[#04060a]">
+
+    <!-- =======================================================================
+         PAGE 1: RACE / TIME ATTACK (CUSTOMIZABLE MODULAR LAYOUT)
+         ======================================================================= -->
+    <section id="dashPage1" class="dash-page relative w-full h-full overflow-hidden">
+
+      <!-- PANEL A: P2-STYLE SLOPED HOCKEY-STICK DIGITAL TACHOMETER (With ▼ REV Marker & Honeycomb Redzone) -->
+      <div id="w_p1_tacho" class="dash-widget px-3 py-1.5 flex flex-col justify-between"
+           data-base-w="1240" data-base-h="135" data-min-w="420" data-min-h="85"
+           style="top: 6px; left: 10px; width: calc(100% - 20px); height: 23.5%;">
+        <div class="flex items-center justify-between text-[0.76em] font-extrabold tracking-wider text-slate-300 leading-none shrink-0">
+          <span class="flex items-center gap-2">
+            <span class="edit-badge text-amber-400">⠿</span>
+            <span class="text-white font-black">ENGINE RPM // DIGITAL TACHOMETER</span>
+            <span id="p1RevLimitTag" class="px-2 py-0.5 bg-rose-950/90 border border-rose-500/70 text-rose-300 mono text-[0.95em] rounded-sm font-black">
+              ▼ REV 7,000 RPM
+            </span>
+          </span>
+          <div class="flex items-center gap-4 mono">
+            <span class="text-slate-300 text-[1.0em]">PEAK: <strong id="p1RpmPeak" class="text-cyan-300">7,420</strong></span>
+            <span id="p1RpmNum" class="text-[1.9em] font-black text-white defi-num-glow leading-none">6,480 <span class="text-[0.5em] text-slate-400">RPM</span></span>
+          </div>
+        </div>
+
+        <!-- Sloped Hockey-Stick Tachometer Canvas (0..3 sloped, 3..8 horizontal, with scale numbers inside) -->
+        <div class="relative flex-1 w-full mt-1 bg-[#030509] rounded-sm border border-white/15 overflow-hidden">
+          <canvas id="fl5TachoCanvas" class="w-full h-full block"></canvas>
+        </div>
+        <div class="widget-resize-handle">⤡</div>
+      </div>
+
+      <!-- PANEL B: MASSIVE GEAR, SPEED & CURRENT LAP COUNTER -->
+      <div id="w_p1_speed_gear" class="dash-widget p-3 flex flex-col justify-between"
+           data-base-w="370" data-base-h="310" data-min-w="220" data-min-h="160"
+           style="top: 25.5%; left: 10px; width: 29%; height: 49.5%;">
+        <div class="flex items-center justify-between text-[0.82em] font-extrabold tracking-widest text-slate-300 leading-none">
+          <span><span class="edit-badge text-amber-400">⠿</span> GEAR & SPEED</span>
+          <span class="px-2.5 py-0.5 rounded bg-amber-500/25 border border-amber-400/60 text-amber-300 mono font-black text-[1.18em]">
+            LAP <b id="p1LapCount" class="text-white">08</b>
+          </span>
+        </div>
+
+        <!-- Giant Gear & Speed Display -->
+        <div class="flex items-center justify-between gap-2 my-auto py-1">
+          <!-- Gear Box -->
+          <div class="flex flex-col items-center justify-center bg-gradient-to-b from-amber-500/20 to-rose-600/25 border-2 border-amber-400/80 rounded-lg px-4 py-1.5 min-w-[40%] shadow-[inset_0_0_24px_rgba(255,158,0,0.3)]">
+            <span class="text-[0.72em] font-black tracking-widest text-amber-300 leading-none">GEAR</span>
+            <span id="p1Gear" class="text-[6.2em] font-black fl5-font text-amber-400 defi-amber-glow leading-[0.85] mt-0.5">4</span>
+          </div>
+
+          <!-- Speed Readout -->
+          <div class="flex-1 flex flex-col items-end justify-center pr-1">
+            <div class="text-[0.72em] font-black tracking-widest text-cyan-300 leading-none mb-1">SPEED</div>
+            <div id="p1Speed" class="text-[5.2em] font-extrabold fl5-font text-white defi-num-glow leading-[0.84] tracking-tight">148</div>
+            <div class="flex items-center justify-between w-full mt-2 pt-1 border-t border-white/15 text-[0.85em] mono">
+              <span class="text-slate-300">MAX: <b id="p1MaxSpeed" class="text-cyan-300">194</b></span>
+              <span class="font-black text-slate-200 text-[1.2em]">km/h</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Mini Pedal Monitor Bars -->
+        <div class="space-y-1.5 pt-1 border-t border-white/10">
+          <div class="flex items-center gap-2 text-[0.78em] mono font-extrabold">
+            <span class="w-9 text-emerald-400">THR</span>
+            <div class="flex-1 h-3 bg-slate-900 rounded-sm overflow-hidden border border-white/15">
+              <div id="p1MiniThr" class="h-full bg-emerald-400 transition-all duration-50" style="width: 85%;"></div>
+            </div>
+            <span id="p1MiniThrTxt" class="w-11 text-right text-emerald-300">85%</span>
+          </div>
+          <div class="flex items-center gap-2 text-[0.78em] mono font-extrabold">
+            <span class="w-9 text-rose-400">BRK</span>
+            <div class="flex-1 h-3 bg-slate-900 rounded-sm overflow-hidden border border-white/15">
+              <div id="p1MiniBrk" class="h-full bg-rose-500 transition-all duration-50" style="width: 0%;"></div>
+            </div>
+            <span id="p1MiniBrkTxt" class="w-11 text-right text-rose-300">0%</span>
+          </div>
+        </div>
+        <div class="widget-resize-handle">⤡</div>
+      </div>
+
+      <!-- PANEL C: CURRENT LAP TIME, BEST LAP, BEST DELTA BAR -->
+      <div id="w_p1_lap_delta" class="dash-widget p-3 flex flex-col justify-between"
+           data-base-w="440" data-base-h="310" data-min-w="250" data-min-h="160"
+           style="top: 25.5%; left: calc(29% + 20px); width: 35%; height: 49.5%;">
+        <div class="flex items-center justify-between text-[0.82em] font-extrabold tracking-widest text-slate-300 leading-none">
+          <span><span class="edit-badge text-amber-400">⠿</span> LAP TIMING & BEST Δ</span>
+          <span id="p1CurSectorBadge" class="px-2.5 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-500/50 mono font-black text-[1.05em]">SECTOR 2</span>
+        </div>
+
+        <!-- Center Visual Best Delta Bar & Giant Delta Number -->
+        <div class="my-auto py-1">
+          <div class="flex items-baseline justify-between mb-1">
+            <span class="text-[0.85em] font-extrabold text-slate-200 tracking-wider">BEST TIME Δ</span>
+            <span id="p1DeltaNum" class="text-[4.1em] font-black mono text-emerald-400 leading-none tracking-tight defi-cyan-glow">-0.342</span>
+          </div>
+          <!-- Center-Zero Visual Delta Bar -->
+          <div class="relative w-full h-5 bg-slate-900/95 rounded border border-white/20 overflow-hidden">
+            <div class="absolute left-1/2 top-0 bottom-0 w-0.5 bg-white/80 z-10"></div>
+            <div id="p1DeltaBarFill" class="absolute top-0 bottom-0 bg-emerald-400 transition-all duration-75" style="right: 50%; width: 24%;"></div>
+          </div>
+          <div class="flex justify-between text-[0.7em] mono font-bold text-slate-300 mt-1">
+            <span class="text-emerald-400">◀ FASTER (-1.5s)</span>
+            <span>0.00s</span>
+            <span class="text-rose-400">SLOWER (+1.5s) ▶</span>
+          </div>
+        </div>
+
+        <!-- Current Lap Time & Best Lap Time (Significantly Enlarged) -->
+        <div class="grid grid-cols-2 gap-2.5 pt-2 border-t border-white/15 mono">
+          <div class="bg-black/70 px-2.5 py-1.5 rounded border border-white/20">
+            <div class="text-[0.7em] text-cyan-300 font-extrabold">CURRENT LAP (現在)</div>
+            <div id="p1LiveLap" class="text-[2.1em] font-black text-white leading-none mt-1">1'04.280</div>
+          </div>
+          <div class="bg-black/70 px-2.5 py-1.5 rounded border border-emerald-500/50">
+            <div class="text-[0.7em] text-emerald-400 font-extrabold">BEST TIME (自己ベスト)</div>
+            <div id="p1BestLap" class="text-[2.1em] font-black text-emerald-400 leading-none mt-1">1'54.596</div>
+          </div>
+        </div>
+        <div class="widget-resize-handle">⤡</div>
+      </div>
+
+      <!-- PANEL D: 2D-SCALABLE (VERTICAL & HORIZONTAL) GT7-STYLE SECTOR TIME & DELTA BOARD -->
+      <div id="w_p1_sector" class="dash-widget p-2.5 flex flex-col justify-between"
+           data-scale-mode="sector2d" data-base-w="410" data-base-h="310" data-min-w="220" data-min-h="150"
+           style="top: 25.5%; right: 10px; width: calc(36% - 30px); height: 49.5%;">
+        <div class="flex items-center justify-between text-[0.8em] font-extrabold tracking-widest text-slate-300 border-b border-white/15 pb-1 leading-none shrink-0">
+          <span><span class="edit-badge text-amber-400">⠿</span> SECTOR TIMES & Δ</span>
+          <span class="mono text-cyan-300 font-black">📍 FSW</span>
+        </div>
+
+        <!-- 6-Row Flex Container that stretches both vertically and horizontally -->
+        <div id="p1SectorRowsContainer" class="flex-1 flex flex-col justify-between gap-1 py-1 mono font-black leading-none overflow-hidden">
+          <!-- Sector 3 -->
+          <div class="flex-1 grid grid-cols-12 items-center bg-white/[0.05] rounded-sm px-1.5 min-h-0">
+            <span class="sector-2d-text col-span-2 text-center bg-slate-800 text-slate-100 rounded-sm py-0.5 text-[1.0em] inline-block origin-center">S3</span>
+            <span id="p1S3Time" class="sector-2d-text col-span-6 text-right pr-2 text-white text-[1.36em] inline-block origin-right">0'46.456</span>
+            <span id="p1S3Badge" class="sector-2d-text col-span-4 text-center bg-blue-600 text-white rounded-sm py-0.5 text-[1.12em] shadow inline-block origin-center">-0.210</span>
+          </div>
+          <!-- Sector 2 -->
+          <div class="flex-1 grid grid-cols-12 items-center bg-white/[0.05] rounded-sm px-1.5 min-h-0">
+            <span class="sector-2d-text col-span-2 text-center bg-slate-800 text-slate-100 rounded-sm py-0.5 text-[1.0em] inline-block origin-center">S2</span>
+            <span id="p1S2Time" class="sector-2d-text col-span-6 text-right pr-2 text-white text-[1.36em] inline-block origin-right">0'42.780</span>
+            <span id="p1S2Badge" class="sector-2d-text col-span-4 text-center bg-blue-600 text-white rounded-sm py-0.5 text-[1.12em] shadow inline-block origin-center">-0.340</span>
+          </div>
+          <!-- Sector 1 -->
+          <div class="flex-1 grid grid-cols-12 items-center bg-white/[0.08] rounded-sm px-1.5 min-h-0">
+            <span class="sector-2d-text col-span-2 text-center bg-cyan-900 text-cyan-200 rounded-sm py-0.5 text-[1.0em] inline-block origin-center">S1</span>
+            <span id="p1S1Time" class="sector-2d-text col-span-6 text-right pr-2 text-white font-black text-[1.36em] inline-block origin-right">0'24.699</span>
+            <span id="p1S1Badge" class="sector-2d-text col-span-4 text-center bg-blue-600 text-white rounded-sm py-0.5 text-[1.12em] shadow inline-block origin-center">-0.111</span>
+          </div>
+          <!-- LAST LAP -->
+          <div class="flex-1 grid grid-cols-12 items-center border-t border-white/20 px-1.5 min-h-0">
+            <span class="sector-2d-text col-span-3 text-slate-200 text-[0.98em] inline-block origin-left">LAST</span>
+            <span id="p1LastTime" class="sector-2d-text col-span-5 text-right pr-1.5 text-white text-[1.28em] inline-block origin-right">1'55.016</span>
+            <span id="p1LastBadge" class="sector-2d-text col-span-4 text-center bg-rose-600 text-white rounded-sm py-0.5 text-[1.08em] shadow inline-block origin-center">+0.420</span>
+          </div>
+          <!-- BEST LAP -->
+          <div class="flex-1 grid grid-cols-12 items-center px-1.5 min-h-0">
+            <span class="sector-2d-text col-span-3 text-emerald-400 text-[0.98em] inline-block origin-left">BEST</span>
+            <span id="p1BoardBest" class="sector-2d-text col-span-6 text-right pr-1.5 text-emerald-400 font-black text-[1.32em] inline-block origin-right">1'54.596</span>
+            <span class="sector-2d-text col-span-3 text-right text-slate-300 text-[0.88em] inline-block origin-right">REF</span>
+          </div>
+          <!-- OPTIMAL LAP -->
+          <div class="flex-1 grid grid-cols-12 items-center px-1.5 min-h-0">
+            <span class="sector-2d-text col-span-3 text-amber-400 text-[0.98em] inline-block origin-left">OPT.</span>
+            <span id="p1BoardOpt" class="sector-2d-text col-span-6 text-right pr-1.5 text-amber-300 font-black text-[1.32em] inline-block origin-right">1'53.935</span>
+            <span class="sector-2d-text col-span-3 text-right text-slate-300 text-[0.88em] inline-block origin-right">IDEAL</span>
+          </div>
+        </div>
+        <div class="widget-resize-handle">⤡</div>
+      </div>
+
+      <!-- PANEL E: DEFI-STYLE WATER TEMP (With Peak Hold & >=98°C Red Warning Flash) -->
+      <div id="w_p1_water" class="dash-widget px-3.5 py-2 flex flex-col justify-between"
+           data-base-w="580" data-base-h="130" data-min-w="240" data-min-h="85"
+           style="bottom: 6px; left: 10px; width: 46%; height: 22.5%;">
+        <div class="flex items-center justify-between text-[0.8em] font-extrabold tracking-widest text-slate-300 leading-none">
+          <span><span class="edit-badge text-amber-400">⠿</span> WATER TEMP (水温)</span>
+          <span id="p1WaterStatus" class="px-2 py-0.5 rounded bg-cyan-950/90 text-cyan-300 border border-cyan-500/40 font-black text-[0.9em]">NORMAL (適温)</span>
+        </div>
+
+        <div class="flex items-baseline justify-between my-auto">
+          <div class="flex items-baseline gap-1.5">
+            <span id="p1WaterTemp" class="text-[3.8em] font-black mono text-white defi-num-glow leading-none">88</span>
+            <span class="text-[1.4em] font-bold text-slate-200">℃</span>
+          </div>
+          <div class="text-right mono text-[0.92em] space-y-0.5">
+            <div class="text-slate-300">PEAK HOLD: <b id="p1WaterPeak" class="text-amber-300">91</b>℃</div>
+            <div class="text-rose-400 font-extrabold">WARN SET: ≥ 98℃</div>
+          </div>
+        </div>
+
+        <div class="w-full h-3 bg-slate-900 rounded-sm overflow-hidden border border-white/15">
+          <div id="p1WaterBar" class="h-full bg-gradient-to-r from-cyan-400 via-emerald-400 to-rose-500 transition-all duration-150" style="width: 55%;"></div>
+        </div>
+        <div class="widget-resize-handle">⤡</div>
+      </div>
+
+      <!-- PANEL F: SESSION COUNTDOWN TIMER (10m Default) & CURRENT CLOCK TIME -->
+      <div id="w_p1_timer_clock" class="dash-widget px-3.5 py-2 flex items-center justify-between gap-4"
+           data-base-w="650" data-base-h="130" data-min-w="280" data-min-h="85"
+           style="bottom: 6px; right: 10px; width: calc(54% - 30px); height: 22.5%;">
+        <!-- Session Countdown Timer -->
+        <div class="flex-1 flex flex-col justify-between h-full border-r border-white/15 pr-4">
+          <div class="flex items-center justify-between text-[0.78em] font-extrabold tracking-widest text-amber-400 leading-none">
+            <span><span class="edit-badge text-amber-400">⠿</span> SESSION TIMER</span>
+            <div class="flex items-center gap-1">
+              <button data-preset="10" class="timer-preset-btn px-2 py-0.5 bg-amber-500/30 border border-amber-400/60 text-amber-200 rounded text-[0.9em] mono font-black">10m</button>
+              <button data-preset="15" class="timer-preset-btn px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded text-[0.9em] mono font-bold">15m</button>
+              <button data-preset="20" class="timer-preset-btn px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded text-[0.9em] mono font-bold">20m</button>
+              <button data-preset="30" class="timer-preset-btn px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded text-[0.9em] mono font-bold">30m</button>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between my-auto">
+            <div id="p1SessionTimer" class="text-[3.3em] font-black mono text-white leading-none tracking-tight">09:42</div>
+            <div class="flex items-center gap-1.5">
+              <button id="btnTimerToggleP1" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded text-[0.8em] tracking-wider">PAUSE</button>
+              <button id="btnTimerResetP1" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded text-[0.8em] border border-white/15">RESET</button>
+            </div>
+          </div>
+
+          <div class="text-[0.7em] mono text-slate-300 leading-none">
+            走行枠残り時間（3分以下で点滅）
+          </div>
+        </div>
+
+        <!-- Current Clock Time -->
+        <div class="w-[38%] flex flex-col justify-between h-full text-right">
+          <div class="text-[0.78em] font-extrabold tracking-widest text-slate-300 leading-none">CURRENT TIME</div>
+          <div id="p1ClockTime" class="text-[2.85em] font-black mono text-cyan-300 leading-none my-auto">14:25:08</div>
+          <div class="text-[0.7em] mono text-slate-300 leading-none">GPS SYNC // JST</div>
+        </div>
+        <div class="widget-resize-handle">⤡</div>
+      </div>
+
+    </section>
+
+    <!-- =======================================================================
+         PAGE 2: CLUSTER (SLOPED TACHOMETER + P1 6-ROW SECTOR BOARD, NO "+R" TEXT)
+         ======================================================================= -->
+    <section id="dashPage2" class="dash-page hidden relative w-full h-full overflow-hidden bg-[#040406] fl5-font flex flex-col justify-between">
+
+      <!-- UPPER CLUSTER (50% Height): 11 Circular Shift Dots + Sloped-to-Horizontal Tachometer + Center Red Gear Cradle + Right Speed -->
+      <div class="relative w-full h-[50%] px-6 pt-1.5 flex flex-col justify-between">
+
+        <!-- Top 11 Circular Illuminated Shift Dots -->
+        <div class="w-full flex items-center justify-center pt-0.5 pb-0.5">
+          <div id="fl5ClusterDots" class="flex items-center space-x-5">
+            <!-- 11 round shift indicator dots generated by JS -->
+          </div>
+        </div>
+
+        <!-- Tachometer Arch Canvas + Center Gear Cradle + Right Upright Speed (NO "+R" LOGO) -->
+        <div class="relative flex-1 w-full">
+          <canvas id="fl5AuthenticClusterCanvas" class="absolute inset-0 w-full h-full block pointer-events-none"></canvas>
+
+          <!-- Right Side: Lap/Sector Status Pill & Massive Upright Speed Numeral ("193 km/h") -->
+          <div class="absolute right-[3.5%] top-[6%] text-right select-none pointer-events-none">
+            <div class="inline-flex items-center gap-2 px-3 py-0.5 rounded bg-white/10 border border-white/20 text-amber-300 font-black text-[1.15rem] tracking-wider mb-1">
+              <span>LAP <b id="p2Fl5LapNum" class="text-white">08</b></span>
+              <span class="text-slate-400">|</span>
+              <span id="p2Fl5SecBadge" class="text-cyan-300">SECTOR 2</span>
+            </div>
+            <div class="flex items-baseline justify-end text-white">
+              <span id="p2Fl5Speed" class="text-[6.8rem] font-bold leading-[0.84] tracking-tight fl5-font defi-num-glow">193</span>
+              <span class="text-[1.75rem] font-semibold text-slate-200 ml-2 fl5-font">km/h</span>
+            </div>
+          </div>
+
+          <!-- Center Gear Cradle: Massive Upright Non-Italic White Gear Numeral ("4") -->
+          <div class="absolute left-1/2 bottom-[3%] -translate-x-1/2 flex flex-col items-center justify-end pointer-events-none">
+            <span id="p2Fl5Gear" class="text-[8.2rem] font-extrabold text-white leading-[0.78] fl5-font drop-shadow-[0_6px_24px_rgba(0,0,0,0.98)]">4</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- LOWER CLUSTER (50% Height): 3 Bays separated by vertical glowing silver divider lines -->
+      <div class="relative w-full h-[50%] px-6 pb-3 pt-1 flex items-stretch justify-between">
+
+        <!-- BOTTOM LEFT BAY (38%): EXACT SAME SECTOR TIME & DELTA CONTENT AS P1 + CURRENT LAP & BEST Δ -->
+        <div class="w-[38%] pr-4 flex flex-col justify-between">
+
+          <!-- Top Header: Current Running Lap & +/- Best Delta -->
+          <div class="grid grid-cols-2 gap-2 bg-white/[0.05] border border-white/15 rounded px-3 py-1.5 shrink-0">
+            <div>
+              <div class="text-[0.75rem] font-bold text-cyan-300 tracking-wider leading-none">CURRENT LAP (現在タイム)</div>
+              <div id="p2Fl5CurLap" class="text-[2.1rem] font-extrabold text-white tracking-tight leading-none mt-0.5 mono">1'04.280</div>
+            </div>
+            <div class="text-right">
+              <div class="text-[0.75rem] font-bold text-slate-300 tracking-wider leading-none">BEST TIME Δ (+/-)</div>
+              <div id="p2Fl5Delta" class="text-[2.1rem] font-extrabold text-[#00e676] tracking-tight leading-none mt-0.5 mono">-0.342</div>
+            </div>
+          </div>
+
+          <!-- 6-Row Sector Time & Delta Board (Identical Content to P1 with Larger Fonts) -->
+          <div class="flex-1 flex flex-col justify-between gap-1 pt-1.5 mono font-extrabold leading-none">
+            <!-- S3 -->
+            <div class="flex-1 grid grid-cols-12 items-center bg-white/[0.04] rounded px-2">
+              <span class="col-span-2 text-center bg-slate-800 text-slate-100 rounded py-0.5 text-[1.05rem]">S3</span>
+              <span id="p2S3Time" class="col-span-6 text-right pr-3 text-white text-[1.45rem]">0'46.456</span>
+              <span id="p2S3Badge" class="col-span-4 text-center bg-blue-600 text-white rounded py-0.5 text-[1.18rem] shadow">-0.210</span>
+            </div>
+            <!-- S2 -->
+            <div class="flex-1 grid grid-cols-12 items-center bg-white/[0.04] rounded px-2">
+              <span class="col-span-2 text-center bg-slate-800 text-slate-100 rounded py-0.5 text-[1.05rem]">S2</span>
+              <span id="p2S2Time" class="col-span-6 text-right pr-3 text-white text-[1.45rem]">0'42.780</span>
+              <span id="p2S2Badge" class="col-span-4 text-center bg-blue-600 text-white rounded py-0.5 text-[1.18rem] shadow">-0.340</span>
+            </div>
+            <!-- S1 -->
+            <div class="flex-1 grid grid-cols-12 items-center bg-white/[0.07] rounded px-2">
+              <span class="col-span-2 text-center bg-cyan-900 text-cyan-200 rounded py-0.5 text-[1.05rem]">S1</span>
+              <span id="p2S1Time" class="col-span-6 text-right pr-3 text-white font-black text-[1.45rem]">0'24.699</span>
+              <span id="p2S1Badge" class="col-span-4 text-center bg-blue-600 text-white rounded py-0.5 text-[1.18rem] shadow">-0.111</span>
+            </div>
+            <!-- LAST -->
+            <div class="flex-1 grid grid-cols-12 items-center border-t border-white/20 px-2">
+              <span class="col-span-3 text-slate-200 text-[1.05rem]">LAST</span>
+              <span id="p2LastTime" class="col-span-5 text-right pr-2 text-white text-[1.38rem]">1'55.016</span>
+              <span id="p2LastBadge" class="col-span-4 text-center bg-rose-600 text-white rounded py-0.5 text-[1.15rem] shadow">+0.420</span>
+            </div>
+            <!-- BEST (with Crown) -->
+            <div class="flex-1 grid grid-cols-12 items-center px-2">
+              <span class="col-span-3 text-amber-400 text-[1.05rem] flex items-center gap-1">👑 BEST</span>
+              <span id="p2Fl5BestLap" class="col-span-6 text-right pr-2 text-emerald-400 font-black text-[1.42rem]">1'54.596</span>
+              <span class="col-span-3 text-right text-slate-300 text-[0.95rem]">REF</span>
+            </div>
+            <!-- OPT. -->
+            <div class="flex-1 grid grid-cols-12 items-center px-2">
+              <span class="col-span-3 text-amber-400 text-[1.05rem]">OPT.</span>
+              <span id="p2BoardOpt" class="col-span-6 text-right pr-2 text-amber-300 font-black text-[1.42rem]">1'53.935</span>
+              <span class="col-span-3 text-right text-slate-300 text-[0.95rem]">IDEAL</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Vertical Silver Divider Left -->
+        <div class="fl5-silver-divider h-full"></div>
+
+        <!-- BOTTOM CENTER BAY (34%): Enlarged 2-Column Automotive SVG Icons & Crisp Numerals -->
+        <div class="w-[34%] px-5 flex flex-col justify-around py-1">
+
+          <!-- Row 1: Water Temp (°C) & Session Countdown Timer -->
+          <div class="grid grid-cols-2 gap-4 items-center">
+            <div id="p2WaterCell" class="flex items-center justify-between px-1.5 py-1 rounded">
+              <svg class="w-8 h-8 text-cyan-300 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 3v10m0 0a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zm-3-7h3m-3 3h3M4 19c1.5-1 3-1 4.5 0s3 1 4.5 0 3-1 4.5 0 3 1 4.5 0" stroke-linecap="round"/>
+              </svg>
+              <div class="text-right">
+                <span class="text-[0.72rem] text-slate-300 font-bold block leading-none">WATER</span>
+                <span id="p2Fl5Water" class="text-[2.45rem] font-bold text-white leading-none">88</span>
+                <span class="text-[1.1rem] text-slate-300 ml-0.5">°C</span>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between">
+              <svg class="w-7 h-7 text-amber-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6" stroke-linecap="round"/>
+              </svg>
+              <div class="text-right">
+                <span class="text-[0.72rem] text-amber-400 font-bold block leading-none">SESSION</span>
+                <span id="p2Fl5Timer" class="text-[2.2rem] font-bold text-white leading-none mono">09:42</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Row 2: Oil Temp (°C) & Current Clock Time -->
+          <div class="grid grid-cols-2 gap-4 items-center">
+            <div class="flex items-center justify-between px-1.5">
+              <svg class="w-8 h-8 text-slate-200 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 14h4l2 3h8l3-5-3-1h-3l-2-2H6v5zM12 3v6m0 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <div class="text-right">
+                <span class="text-[0.72rem] text-slate-300 font-bold block leading-none">OIL TEMP</span>
+                <span id="p2Fl5OilTemp" class="text-[2.45rem] font-bold text-white leading-none">112</span>
+                <span class="text-[1.1rem] text-slate-300 ml-0.5">°C</span>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between">
+              <svg class="w-7 h-7 text-cyan-300 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2" stroke-linecap="round"/>
+              </svg>
+              <div class="text-right">
+                <span class="text-[0.72rem] text-slate-300 font-bold block leading-none">CLOCK</span>
+                <span id="p2Fl5Clock" class="text-[2.2rem] font-bold text-white leading-none mono">14:25</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Row 3: Oil Pressure (kPa) & Rev Limit Setting -->
+          <div class="grid grid-cols-2 gap-4 items-center">
+            <div class="flex items-center justify-between px-1.5">
+              <svg class="w-8 h-8 text-slate-200 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M2 13h4l2 3h9l4-5-3-1h-4l-2-2H5v5zM21 14l1 2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <div class="text-right">
+                <span class="text-[0.72rem] text-slate-300 font-bold block leading-none">OIL PRESS</span>
+                <span id="p2Fl5OilPress" class="text-[2.3rem] font-bold text-white leading-none">448</span>
+                <span class="text-[0.95rem] text-slate-300 ml-0.5">kPa</span>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between">
+              <svg class="w-7 h-7 text-rose-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3" stroke-linecap="round"/>
+              </svg>
+              <div class="text-right">
+                <span class="text-[0.72rem] text-rose-400 font-bold block leading-none">REV LIMIT</span>
+                <span id="p2Fl5RevLimitTxt" class="text-[2.1rem] font-bold text-white leading-none mono">7000</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Vertical Silver Divider Right -->
+        <div class="fl5-silver-divider h-full"></div>
+
+        <!-- BOTTOM RIGHT BAY (28%): Authentic FL5 G-Force Radar Circle -->
+        <div class="w-[28%] pl-3 flex items-center justify-center">
+          <canvas id="fl5GForceCanvas" class="w-full h-full block"></canvas>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- =======================================================================
+         PAGE 3: STEER & PEDAL (G-BALL INSIDE STEERING HUB + EMBEDDED BAR NUMBERS)
+         ======================================================================= -->
+    <section id="dashPage3" class="dash-page hidden relative w-full h-full overflow-hidden p-2.5">
+
+      <!-- LEFT SIDE (54% Width): GIANT INTERACTIVE STEERING WHEEL WITH G-BALL INSIDE CENTER HUB -->
+      <div id="w_p3_steer" class="dash-widget p-3 flex flex-col justify-between"
+           data-base-w="670" data-base-h="620" data-min-w="300" data-min-h="260"
+           style="top: 8px; left: 10px; bottom: 8px; width: calc(54% - 15px); height: calc(100% - 16px);">
+
+        <!-- Top Embedded Lap Timing Banner -->
+        <div class="flex items-center justify-between bg-black/70 border border-white/15 rounded-md px-3.5 py-1.5 z-20 shrink-0">
+          <div class="flex items-center gap-3">
+            <span class="edit-badge text-amber-400">⠿</span>
+            <span class="px-2.5 py-0.5 rounded bg-amber-500/25 border border-amber-400/60 text-amber-300 mono font-black text-[1.05em]">
+              LAP <b id="p3LapCount" class="text-white">08</b>
+            </span>
+            <div>
+              <div class="text-[0.62em] font-extrabold text-cyan-300 tracking-wider leading-none">CURRENT LAP (現在タイム)</div>
+              <div id="p3LiveLap" class="text-[2.15em] font-black mono text-white leading-none mt-0.5 defi-num-glow">1'04.280</div>
+            </div>
+          </div>
+          <div class="text-right">
+            <div class="text-[0.62em] font-extrabold text-slate-300 tracking-wider leading-none">BEST TIME Δ</div>
+            <div id="p3DeltaNum" class="text-[2.15em] font-black mono text-emerald-400 leading-none mt-0.5">-0.342s</div>
+          </div>
+        </div>
+
+        <div class="relative flex-1 w-full h-full flex items-center justify-center overflow-hidden">
+          <!-- 270-Degree Outer Steering Ring Gauge Canvas -->
+          <canvas id="p3SteerArcCanvas" class="absolute inset-0 w-full h-full block pointer-events-none"></canvas>
+
+          <!-- Giant Rotating Steering Wheel SVG -->
+          <svg id="steeringWheelSvg" viewBox="0 0 280 280" class="w-[84%] max-h-[90%] drop-shadow-[0_14px_34px_rgba(0,0,0,0.95)] transition-transform duration-75">
+            <!-- Outer Rim -->
+            <circle cx="140" cy="140" r="118" fill="none" stroke="#1e293b" stroke-width="26" />
+            <circle cx="140" cy="140" r="118" fill="none" stroke="#334155" stroke-width="19" />
+            <!-- Grips -->
+            <path d="M 28 100 A 118 118 0 0 0 28 180" fill="none" stroke="#0f172a" stroke-width="27" stroke-linecap="round"/>
+            <path d="M 252 100 A 118 118 0 0 1 252 180" fill="none" stroke="#0f172a" stroke-width="27" stroke-linecap="round"/>
+            <!-- Spokes -->
+            <path d="M 36 134 L 86 134 L 104 178 L 140 240 L 176 178 L 194 134 L 244 134" fill="rgba(15,23,42,0.88)" stroke="#475569" stroke-width="3.5" stroke-linejoin="round" />
+            <!-- Top Center Stripe Marker -->
+            <rect x="130" y="8" width="20" height="28" rx="3" fill="#ff9e00" stroke="#ffffff" stroke-width="1.5" />
+          </svg>
+
+          <!-- Stationary Center Hub G-BALL (Friction Circle) + Embedded Steering Angle -->
+          <div class="absolute flex flex-col items-center justify-between w-[48%] aspect-square rounded-full bg-[#050811]/95 border-2 border-cyan-400/70 shadow-[0_0_38px_rgba(0,0,0,0.98)] p-2.5 text-center pointer-events-none overflow-hidden">
+            <!-- Live G-Force Friction Circle Canvas inside the Steering Wheel Hub -->
+            <canvas id="p3HubGBallCanvas" class="absolute inset-0 w-full h-full block"></canvas>
+
+            <!-- Top Overlay inside Hub: G-BALL Total Readout -->
+            <div class="relative z-10 pt-1 leading-none">
+              <span class="px-2 py-0.5 rounded-full bg-black/80 border border-amber-400/50 text-[0.78em] mono font-black text-amber-300">
+                G-BALL <b id="p3HubGTotal" class="text-white">1.14G</b>
+              </span>
+            </div>
+
+            <!-- Bottom Overlay inside Hub: Steering Direction & Large Angle -->
+            <div class="relative z-10 pb-1 leading-none bg-black/75 px-3 py-0.5 rounded-full border border-white/15">
+              <span id="p3SteerDir" class="text-[0.65em] font-black text-cyan-300 mr-1">LEFT ◀</span>
+              <span id="p3SteerAngle" class="text-[1.55em] font-black mono text-amber-400 leading-none">-12°</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="widget-resize-handle">⤡</div>
+      </div>
+
+      <!-- RIGHT SIDE (46% Width): TWO ULTRA-WIDE VERTICAL PEDAL BARS WITH EMBEDDED NUMBERS -->
+      <div id="w_p3_pedals" class="dash-widget p-3 flex flex-col justify-between"
+           data-base-w="570" data-base-h="620" data-min-w="280" data-min-h="260"
+           style="top: 8px; right: 10px; bottom: 8px; width: calc(46% - 15px); height: calc(100% - 16px);">
+
+        <span class="edit-badge absolute top-2 left-3 text-amber-400 z-20">⠿ PEDAL VISUAL BARS</span>
+
+        <div class="flex-1 grid grid-cols-2 gap-4 h-full overflow-hidden">
+
+          <!-- BRAKE VERTICAL BAR (Left Column) -->
+          <div class="relative w-full h-full bg-[#050811] rounded-lg border-2 border-rose-500/60 overflow-hidden flex flex-col justify-end p-1.5">
+            <!-- Scale Grid Lines -->
+            <div class="absolute inset-x-0 bottom-[20%] border-t border-dashed border-white/15 z-10 pointer-events-none"><span class="text-[0.72em] mono text-white/40 pl-2">20%</span></div>
+            <div class="absolute inset-x-0 bottom-[40%] border-t border-dashed border-white/15 z-10 pointer-events-none"><span class="text-[0.72em] mono text-white/40 pl-2">40%</span></div>
+            <div class="absolute inset-x-0 bottom-[60%] border-t border-dashed border-white/15 z-10 pointer-events-none"><span class="text-[0.72em] mono text-white/40 pl-2">60%</span></div>
+            <div class="absolute inset-x-0 bottom-[80%] border-t border-dashed border-white/15 z-10 pointer-events-none"><span class="text-[0.72em] mono text-white/40 pl-2">80%</span></div>
+
+            <!-- Peak Hold Horizontal Line Marker inside Brake Column -->
+            <div id="p3BrkPeakLine" class="absolute left-0 right-0 h-1.5 bg-amber-300 shadow-[0_0_12px_#fcd34d] z-20 flex items-center justify-end pr-2" style="bottom: 94%;">
+              <span class="px-2 py-0.5 bg-black/90 text-amber-300 mono text-[0.72em] font-black rounded-sm -translate-y-3.5">
+                PEAK <b id="p3BrkPeakTxt">94%</b>
+              </span>
+            </div>
+
+            <!-- Dynamic Rising Brake Fill Bar -->
+            <div id="p3BrkBar" class="w-full bg-gradient-to-t from-rose-800 via-rose-600 to-amber-400 shadow-[0_0_32px_rgba(244,63,94,0.85)] rounded transition-all duration-50" style="height: 0%;"></div>
+
+            <!-- Top Embedded Badge -->
+            <div class="absolute top-3 inset-x-0 text-center z-20 pointer-events-none">
+              <span class="px-5 py-1 rounded bg-rose-600/95 text-white font-black text-[1.28em] tracking-widest shadow-lg">BRAKE</span>
+            </div>
+
+            <!-- Bottom Embedded Numeric Readout Inside Bar -->
+            <div class="absolute bottom-5 inset-x-0 flex flex-col items-center justify-center z-20 pointer-events-none drop-shadow-[0_4px_12px_rgba(0,0,0,0.95)]">
+              <div id="p3BrkVal" class="text-[4.6em] font-black fl5-font text-white leading-none">0<span class="text-[0.42em] ml-0.5">%</span></div>
+              <div id="p3BrkMpa" class="mt-1.5 px-3 py-0.5 rounded bg-black/80 border border-rose-400/50 text-[1.15em] mono font-extrabold text-rose-200">0.0 MPa</div>
+            </div>
+          </div>
+
+          <!-- THROTTLE VERTICAL BAR (Right Column) -->
+          <div class="relative w-full h-full bg-[#050811] rounded-lg border-2 border-emerald-500/60 overflow-hidden flex flex-col justify-end p-1.5">
+            <!-- Scale Grid Lines -->
+            <div class="absolute inset-x-0 bottom-[20%] border-t border-dashed border-white/15 z-10 pointer-events-none"><span class="text-[0.72em] mono text-white/40 pl-2">20%</span></div>
+            <div class="absolute inset-x-0 bottom-[40%] border-t border-dashed border-white/15 z-10 pointer-events-none"><span class="text-[0.72em] mono text-white/40 pl-2">40%</span></div>
+            <div class="absolute inset-x-0 bottom-[60%] border-t border-dashed border-white/15 z-10 pointer-events-none"><span class="text-[0.72em] mono text-white/40 pl-2">60%</span></div>
+            <div class="absolute inset-x-0 bottom-[80%] border-t border-dashed border-white/15 z-10 pointer-events-none"><span class="text-[0.72em] mono text-white/40 pl-2">80%</span></div>
+
+            <!-- Dynamic Rising Throttle Fill Bar -->
+            <div id="p3ThrBar" class="w-full bg-gradient-to-t from-emerald-800 via-emerald-500 to-cyan-300 shadow-[0_0_32px_rgba(16,185,129,0.85)] rounded transition-all duration-50" style="height: 85%;"></div>
+
+            <!-- Top Embedded Badge + Gear/Speed Pill -->
+            <div class="absolute top-3 inset-x-0 flex flex-col items-center z-20 pointer-events-none space-y-1.5">
+              <span class="px-5 py-1 rounded bg-emerald-600/95 text-white font-black text-[1.28em] tracking-widest shadow-lg">THROTTLE</span>
+              <span class="px-3 py-0.5 rounded bg-black/85 border border-white/25 mono text-[0.95em] text-slate-200 font-black">
+                GEAR <b id="p3Gear" class="text-amber-400">4</b> // <b id="p3Speed" class="text-white">148</b> km/h
+              </span>
+            </div>
+
+            <!-- Bottom Embedded Numeric Readout Inside Bar -->
+            <div class="absolute bottom-5 inset-x-0 flex flex-col items-center justify-center z-20 pointer-events-none drop-shadow-[0_4px_12px_rgba(0,0,0,0.95)]">
+              <div id="p3ThrVal" class="text-[4.6em] font-black fl5-font text-white leading-none">85<span class="text-[0.42em] ml-0.5">%</span></div>
+              <div id="p3ThrState" class="mt-1.5 px-3 py-0.5 rounded bg-black/80 border border-emerald-400/50 text-[1.1em] mono font-extrabold text-emerald-200">FULL OPEN</div>
+            </div>
+          </div>
+
+        </div>
+        <div class="widget-resize-handle">⤡</div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- =========================================================================
+       4. SLIDE-OVER SIMULATOR & TEST DRAWER
+       ========================================================================= -->
+  <aside id="simDrawer" class="fixed top-[66px] right-0 bottom-0 w-80 bg-[#080c16]/95 backdrop-blur-md border-l border-white/20 p-4 z-50 transform translate-x-full transition-transform duration-200 overflow-y-auto space-y-4 text-xs">
+    <div class="flex items-center justify-between border-b border-white/15 pb-2">
+      <span class="font-black text-sm text-cyan-300 tracking-wider">⚙ TELEMETRY SIMULATOR</span>
+      <button id="btnCloseSim" class="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded font-bold">✕ 閉じる</button>
+    </div>
+
+    <div class="flex items-center justify-between bg-slate-900 p-2.5 rounded border border-white/10">
+      <label for="chkAutoSim" class="font-extrabold text-white cursor-pointer">🔄 自動デモ走行 (AUTO SIM)</label>
+      <input id="chkAutoSim" type="checkbox" checked class="w-4 h-4 accent-cyan-400 cursor-pointer" />
+    </div>
+
+    <div class="space-y-3 bg-slate-900/80 p-3 rounded border border-white/10">
+      <div>
+        <div class="flex justify-between font-bold mb-1">
+          <span class="text-slate-300">ENGINE RPM</span>
+          <span id="lblSimRpm" class="mono text-cyan-300">6480 RPM</span>
+        </div>
+        <input id="sldRpm" type="range" min="800" max="8000" step="50" value="6480" class="w-full accent-cyan-400" />
+      </div>
+
+      <div>
+        <div class="flex justify-between font-bold mb-1">
+          <span class="text-rose-400">REV LIMIT (▼印 & 点滅回転数)</span>
+          <span id="lblSimRev" class="mono text-rose-300">7000 RPM</span>
+        </div>
+        <input id="sldRevLimit" type="range" min="5000" max="8000" step="100" value="7000" class="w-full accent-rose-500" />
+      </div>
+
+      <div>
+        <div class="flex justify-between font-bold mb-1">
+          <span class="text-slate-300">SPEED</span>
+          <span id="lblSimSpd" class="mono text-white">148 km/h</span>
+        </div>
+        <input id="sldSpd" type="range" min="0" max="240" step="1" value="148" class="w-full accent-cyan-400" />
+      </div>
+
+      <div>
+        <div class="flex justify-between font-bold mb-1">
+          <span class="text-slate-300">GEAR</span>
+          <span id="lblSimGear" class="mono text-amber-400">4</span>
+        </div>
+        <input id="sldGear" type="range" min="1" max="6" step="1" value="4" class="w-full accent-amber-400" />
+      </div>
+
+      <div>
+        <div class="flex justify-between font-bold mb-1">
+          <span class="text-slate-300">WATER TEMP (≥98℃で赤警告点滅)</span>
+          <span id="lblSimWater" class="mono text-emerald-300">88 ℃</span>
+        </div>
+        <input id="sldWater" type="range" min="60" max="115" step="1" value="88" class="w-full accent-rose-500" />
+      </div>
+
+      <div>
+        <div class="flex justify-between font-bold mb-1">
+          <span class="text-slate-300">STEERING ANGLE</span>
+          <span id="lblSimSteer" class="mono text-amber-300">-12°</span>
+        </div>
+        <input id="sldSteer" type="range" min="-180" max="180" step="1" value="-12" class="w-full accent-amber-400" />
+      </div>
+
+      <div>
+        <div class="flex justify-between font-bold mb-1">
+          <span class="text-emerald-400">THROTTLE (%)</span>
+          <span id="lblSimThr" class="mono text-emerald-300">85%</span>
+        </div>
+        <input id="sldThr" type="range" min="0" max="100" step="1" value="85" class="w-full accent-emerald-400" />
+      </div>
+
+      <div>
+        <div class="flex justify-between font-bold mb-1">
+          <span class="text-rose-400">BRAKE (%)</span>
+          <span id="lblSimBrk" class="mono text-rose-300">0%</span>
+        </div>
+        <input id="sldBrk" type="range" min="0" max="100" step="1" value="0" class="w-full accent-rose-500" />
+      </div>
+    </div>
+
+    <button id="btnResetPeaks" class="w-full py-2 bg-slate-800 hover:bg-slate-700 text-cyan-300 font-extrabold rounded border border-cyan-500/30">
+      ↺ PEAK HOLD リセット
+    </button>
+  </aside>
+
+  <!-- =========================================================================
+       5. APPLICATION LOGIC & 60FPS CANVAS RENDERING
+       ========================================================================= -->
+  <script>
+    const state = {
+      currentPage: 1,
+      tachoSlopeMode: true,
+      layoutEditMode: false,
+      autoSim: true,
+      rpm: 6480,
+      peakRpm: 7420,
+      revLimit: 7000,
+      speed: 148,
+      maxSpeed: 194,
+      gear: 4,
+      thr: 85,
+      brk: 0,
+      peakBrk: 94,
+      steer: -12,
+      waterTemp: 88,
+      peakWaterTemp: 91,
+      oilTemp: 112,
+      oilPress: 448,
+      latG: -0.71,
+      lonG: 0.15,
+      lapCount: 8,
+      sector: 2,
+      lapTime: 64.280,
+      bestLap: 114.596,
+      lastLap: 115.016,
+      s1Time: 24.699,
+      s2Time: 42.780,
+      s3Time: 46.456,
+      deltaBest: -0.342,
+      sessionRemainSec: 600,
+      timerRunning: true
+    };
+
+    const gHistoryTrail = [];
+    for (let i = 0; i < 20; i++) {
+      gHistoryTrail.push({ gx: 0, gy: 0 });
+    }
+
+    // --- Build Top 15 Shift LEDs & P2 11 Cluster Dots ---
+    const shiftLedsContainer = document.getElementById('shiftLedsContainer');
+    const topShiftLeds = [];
+    for (let i = 0; i < 15; i++) {
+      const d = document.createElement('div');
+      d.className = 'h-full rounded-sm bg-slate-800/80 border border-white/10 transition-colors duration-50';
+      shiftLedsContainer.appendChild(d);
+      topShiftLeds.push(d);
+    }
+
+    const fl5ClusterDotsContainer = document.getElementById('fl5ClusterDots');
+    const p2ShiftDots = [];
+    for (let i = 0; i < 11; i++) {
+      const dot = document.createElement('div');
+      dot.className = 'w-4 h-4 rounded-full bg-slate-800/90 border border-white/20 transition-all duration-50';
+      fl5ClusterDotsContainer.appendChild(dot);
+      p2ShiftDots.push(dot);
+    }
+
+    function updateShiftIndicators(rpm) {
+      const startRpm = Math.max(3000, state.revLimit - 2200);
+      const ratio = Math.max(0, Math.min(1, (rpm - startRpm) / Math.max(200, state.revLimit - startRpm)));
+      const isOverRev = rpm >= state.revLimit;
+
+      const topBar = document.getElementById('topShiftIndicatorBar');
+      topBar.classList.toggle('shift-bar-strobe', isOverRev);
+
+      const activeTopCount = Math.round(ratio * topShiftLeds.length);
+      topShiftLeds.forEach((led, idx) => {
+        if (isOverRev) {
+          led.style.backgroundColor = '#00f0ff';
+          led.style.boxShadow = '0 0 12px #00f0ff';
+        } else if (idx < activeTopCount) {
+          if (idx < 6) {
+            led.style.backgroundColor = '#10b981';
+            led.style.boxShadow = '0 0 8px rgba(16,185,129,0.8)';
+          } else if (idx < 11) {
+            led.style.backgroundColor = '#ff9e00';
+            led.style.boxShadow = '0 0 8px rgba(255,158,0,0.85)';
+          } else {
+            led.style.backgroundColor = '#ff1e38';
+            led.style.boxShadow = '0 0 10px rgba(255,30,56,0.95)';
+          }
+        } else {
+          led.style.backgroundColor = 'rgba(30, 41, 59, 0.75)';
+          led.style.boxShadow = 'none';
+        }
+      });
+
+      const activeP2Count = Math.round(ratio * p2ShiftDots.length);
+      p2ShiftDots.forEach((dot, idx) => {
+        if (isOverRev) {
+          dot.style.backgroundColor = '#ff1e38';
+          dot.style.boxShadow = '0 0 14px #ff1e38';
+          dot.style.borderColor = '#ffffff';
+        } else if (idx < activeP2Count) {
+          const col = idx < 4 ? '#f59e0b' : idx < 8 ? '#f97316' : '#ef4444';
+          dot.style.backgroundColor = col;
+          dot.style.boxShadow = `0 0 10px ${col}`;
+          dot.style.borderColor = '#fde047';
+        } else {
+          dot.style.backgroundColor = 'rgba(30, 41, 59, 0.8)';
+          dot.style.boxShadow = 'none';
+          dot.style.borderColor = 'rgba(255, 255, 255, 0.18)';
+        }
+      });
+    }
+
+    // --- Formatting Helpers ---
+    function fmtLapQuote(sec) {
+      if (sec === null || sec === undefined || isNaN(sec)) return "--'--.---";
+      const m = Math.floor(sec / 60);
+      const s = (sec % 60).toFixed(3).padStart(6, '0');
+      return `${m}'${s}`;
+    }
+
+    function fmtCountdown(sec) {
+      const s = Math.max(0, Math.ceil(sec));
+      const m = String(Math.floor(s / 60)).padStart(2, '0');
+      const r = String(s % 60).padStart(2, '0');
+      return `${m}:${r}`;
+    }
+
+    // --- Rev Limit Synchronization ---
+    function setRevLimit(val) {
+      const clamped = Math.max(5000, Math.min(8500, Math.round(Number(val) || 7000)));
+      state.revLimit = clamped;
+      document.getElementById('numRevLimitTop').value = clamped;
+      document.getElementById('sldRevLimit').value = clamped;
+      document.getElementById('lblSimRev').textContent = `${clamped} RPM`;
+      document.getElementById('shiftAlertText').textContent = `${clamped.toLocaleString()} RPM LIMIT`;
+      document.getElementById('p1RevLimitTag').textContent = `▼ REV ${clamped.toLocaleString()} RPM`;
+      document.getElementById('p2Fl5RevLimitTxt').textContent = String(clamped);
+    }
+
+    document.getElementById('numRevLimitTop').addEventListener('input', (e) => setRevLimit(e.target.value));
+    document.getElementById('sldRevLimit').addEventListener('input', (e) => setRevLimit(e.target.value));
+
+    // --- Page Navigation (P1 / P2 / P3) ---
+    const pageButtons = document.querySelectorAll('.page-tab-btn');
+    const pages = {
+      1: document.getElementById('dashPage1'),
+      2: document.getElementById('dashPage2'),
+      3: document.getElementById('dashPage3')
+    };
+
+    pageButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const target = Number(btn.dataset.page);
+        state.currentPage = target;
+        Object.entries(pages).forEach(([k, el]) => {
+          el.classList.toggle('hidden', Number(k) !== target);
+        });
+        pageButtons.forEach(b => {
+          const active = Number(b.dataset.page) === target;
+          b.className = active
+            ? 'page-tab-btn px-3 py-0.5 rounded text-xs font-black tracking-wider bg-rose-600 text-white transition'
+            : 'page-tab-btn px-3 py-0.5 rounded text-xs font-black tracking-wider text-slate-300 hover:text-white transition';
+        });
+        setTimeout(refreshAllWidgetScales, 20);
+      });
+    });
+
+    // --- Session Countdown Timer Controls (10m / 15m / 20m / 30m) ---
+    document.querySelectorAll('.timer-preset-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const mins = Number(btn.dataset.preset) || 10;
+        state.sessionRemainSec = mins * 60;
+        document.querySelectorAll('.timer-preset-btn').forEach(b => {
+          const isMatch = Number(b.dataset.preset) === mins;
+          b.className = isMatch
+            ? 'timer-preset-btn px-2 py-0.5 bg-amber-500/30 border border-amber-400/60 text-amber-200 rounded text-[11px] mono font-extrabold'
+            : 'timer-preset-btn px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[11px] mono font-bold';
+        });
+      });
+    });
+
+    function toggleSessionTimer() {
+      state.timerRunning = !state.timerRunning;
+      const label = state.timerRunning ? 'PAUSE' : 'START';
+      document.getElementById('btnTopTimerToggle').textContent = label;
+      document.getElementById('btnTimerToggleP1').textContent = label;
+    }
+
+    document.getElementById('btnTopTimerToggle').addEventListener('click', toggleSessionTimer);
+    document.getElementById('btnTimerToggleP1').addEventListener('click', toggleSessionTimer);
+    document.getElementById('btnTimerResetP1').addEventListener('click', () => {
+      state.sessionRemainSec = 600;
+    });
+
+    // --- Page 1 Tachometer Mode Toggle ---
+    document.getElementById('btnTachoMode').addEventListener('click', (e) => {
+      state.tachoSlopeMode = !state.tachoSlopeMode;
+      e.currentTarget.textContent = state.tachoSlopeMode
+        ? '📊 P1 TACHO: ARCH'
+        : '📊 P1 TACHO: CENTER-IN';
+    });
+
+    // --- Shared Sloped Hockey-Stick Tachometer Arch Helper (Used by both P1 & P2) ---
+    function drawSlopedTachometerArch(ctx, w, h, options = {}) {
+      const x0 = w * (options.x0Ratio || 0.045);
+      const y0 = h * (options.y0Ratio || 0.72);
+      const x3 = w * (options.x3Ratio || 0.22);
+      const yTop = h * (options.yTopRatio || 0.14);
+      const x8 = w * (options.x8Ratio || 0.96);
+      const barThick = Math.max(18, h * (options.barThickRatio || 0.28));
+
+      function getPointAtRpm(rpm) {
+        const r = Math.max(0, Math.min(8000, rpm)) / 1000;
+        if (r <= 3.0) {
+          const t = r / 3.0;
+          const easeY = 1 - Math.pow(1 - t, 1.45);
+          return {
+            x: x0 + (x3 - x0) * t,
+            y: y0 + (yTop - y0) * easeY
+          };
+        } else {
+          const t = (r - 3.0) / 5.0;
+          return {
+            x: x3 + (x8 - x3) * t,
+            y: yTop
+          };
+        }
+      }
+
+      function traceRpmBandPath(rpmA, rpmB, steps = 32) {
+        ctx.beginPath();
+        for (let i = 0; i <= steps; i++) {
+          const r = rpmA + (rpmB - rpmA) * (i / steps);
+          const p = getPointAtRpm(r);
+          if (i === 0) ctx.moveTo(p.x, p.y);
+          else ctx.lineTo(p.x, p.y);
+        }
+        for (let i = steps; i >= 0; i--) {
+          const r = rpmA + (rpmB - rpmA) * (i / steps);
+          const p = getPointAtRpm(r);
+          ctx.lineTo(p.x, p.y + barThick);
+        }
+        ctx.closePath();
+      }
+
+      // 1. Dark Tachometer Track & Metallic Silver Top Bevel Line
+      traceRpmBandPath(0, 8000, 44);
+      ctx.fillStyle = 'rgba(18, 20, 26, 0.95)';
+      ctx.fill();
+
+      ctx.beginPath();
+      for (let i = 0; i <= 44; i++) {
+        const p = getPointAtRpm((8000 * i) / 44);
+        if (i === 0) ctx.moveTo(p.x - 4, p.y - 2.5);
+        else ctx.lineTo(p.x, p.y - 2.5);
+      }
+      ctx.strokeStyle = 'rgba(226, 232, 240, 0.8)';
+      ctx.lineWidth = 2.6;
+      ctx.stroke();
+
+      // 2. Red Honeycomb Dot-Matrix Redzone from state.revLimit to 8,000 RPM
+      const clampedRev = Math.min(8000, state.revLimit);
+      if (clampedRev < 8000) {
+        ctx.save();
+        traceRpmBandPath(clampedRev, 8000, 18);
+        ctx.clip();
+        ctx.fillStyle = 'rgba(105, 10, 20, 0.9)';
+        ctx.fillRect(x0, 0, x8 - x0 + 20, h);
+
+        const pRev = getPointAtRpm(clampedRev);
+        const hexR = Math.max(2.8, barThick * 0.11);
+        const dx = hexR * 2.15;
+        const dy = hexR * 1.9;
+        ctx.fillStyle = '#f43f5e';
+        for (let row = 0, py = yTop + 3; py < yTop + barThick - 1; row++, py += dy) {
+          const offset = (row % 2) * (dx / 2);
+          for (let px = pRev.x + offset; px <= x8 - 2; px += dx) {
+            ctx.beginPath();
+            ctx.arc(px, py, hexR * 0.78, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+        ctx.restore();
+      }
+
+      // 3. Warm Gold/Amber Gradient Fill Bar (0 to state.rpm) + Bright Leading Edge Cursor
+      if (state.rpm > 50) {
+        const drawRpm = Math.min(8000, state.rpm);
+        ctx.save();
+        traceRpmBandPath(0, drawRpm, 38);
+        const pCur = getPointAtRpm(drawRpm);
+        const barGrad = ctx.createLinearGradient(x0, 0, pCur.x, 0);
+        barGrad.addColorStop(0, 'rgba(130, 80, 25, 0.45)');
+        barGrad.addColorStop(0.55, 'rgba(225, 175, 45, 0.92)');
+        barGrad.addColorStop(0.92, '#fde047');
+        barGrad.addColorStop(1, '#ffffff');
+        ctx.fillStyle = barGrad;
+        ctx.fill();
+
+        ctx.strokeStyle = '#fef08a';
+        ctx.shadowColor = '#facc15';
+        ctx.shadowBlur = 14;
+        ctx.lineWidth = 3.5;
+        ctx.beginPath();
+        ctx.moveTo(pCur.x, pCur.y);
+        ctx.lineTo(pCur.x, pCur.y + barThick);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // 4. Distinct "▼" Rev Limit Marker on the Arch
+      const pLim = getPointAtRpm(clampedRev);
+      ctx.save();
+      ctx.strokeStyle = '#00f0ff';
+      ctx.fillStyle = '#00f0ff';
+      ctx.shadowColor = '#00f0ff';
+      ctx.shadowBlur = 10;
+      ctx.lineWidth = 2.6;
+      ctx.beginPath();
+      ctx.moveTo(pLim.x, Math.max(1, pLim.y - 4));
+      ctx.lineTo(pLim.x, pLim.y + barThick + 4);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(pLim.x - 6, Math.max(0, pLim.y - 9));
+      ctx.lineTo(pLim.x + 6, Math.max(0, pLim.y - 9));
+      ctx.lineTo(pLim.x, pLim.y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+
+      // 5. Scale Tick Marks & Large Numbers (0, 1, 2, 3, 4, 5, 6, 7, 8)
+      const numFontPx = Math.max(13, Math.round(h * (options.numFontRatio || 0.21)));
+      for (let i = 0; i <= 80; i += 2) {
+        const rpmVal = i * 100;
+        const p = getPointAtRpm(rpmVal);
+        const isMajor = (i % 10 === 0);
+        ctx.strokeStyle = rpmVal >= clampedRev ? '#f43f5e' : 'rgba(226, 232, 240, 0.85)';
+        ctx.lineWidth = isMajor ? 2.2 : 1.1;
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y + barThick);
+        ctx.lineTo(p.x, p.y + barThick + (isMajor ? 6 : 3));
+        ctx.stroke();
+
+        if (isMajor) {
+          const num = i / 10;
+          ctx.fillStyle = rpmVal >= clampedRev ? '#fda4af' : '#ffffff';
+          ctx.font = `700 ${numFontPx}px "Inter", sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.fillText(String(num), p.x + (num < 3 ? 6 : 0), Math.min(h - 2, p.y + barThick + numFontPx + 4));
+        }
+      }
+    }
+
+    // --- Page 1 Sloped Digital Tachometer Canvas Renderer ---
+    const tachoCanvas = document.getElementById('fl5TachoCanvas');
+    const tachoCtx = tachoCanvas.getContext('2d');
+
+    function renderPage1Tachometer() {
+      const rect = tachoCanvas.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return;
+      const dpr = window.devicePixelRatio || 1;
+      tachoCanvas.width = rect.width * dpr;
+      tachoCanvas.height = rect.height * dpr;
+      tachoCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      const w = rect.width;
+      const h = rect.height;
+      tachoCtx.clearRect(0, 0, w, h);
+
+      if (state.tachoSlopeMode) {
+        drawSlopedTachometerArch(tachoCtx, w, h, {
+          x0Ratio: 0.03,
+          y0Ratio: 0.56,
+          x3Ratio: 0.20,
+          yTopRatio: 0.12,
+          x8Ratio: 0.975,
+          barThickRatio: 0.34,
+          numFontRatio: 0.22
+        });
+      } else {
+        const maxRpm = 8500;
+        const ratio = Math.max(0, Math.min(1, state.rpm / maxRpm));
+        const revRatio = Math.max(0, Math.min(1, state.revLimit / maxRpm));
+        const warnRatio = Math.max(0, revRatio - 0.11);
+        const skew = 8;
+        const halfSegs = 25;
+        const gap = 3;
+        const segW = (w / 2 - 16 - gap * halfSegs) / halfSegs;
+        const activeHalf = Math.round(ratio * halfSegs);
+
+        for (let i = 0; i < halfSegs; i++) {
+          const segRatio = i / halfSegs;
+          let color = segRatio >= revRatio ? 'rgba(255, 30, 56, 0.22)' : 'rgba(255, 255, 255, 0.08)';
+          if (i < activeHalf) {
+            if (segRatio < warnRatio) color = '#f8fafc';
+            else if (segRatio < revRatio) color = '#ff9e00';
+            else color = '#ff1e38';
+          }
+          tachoCtx.fillStyle = color;
+
+          const yTop = 4, yBot = h - 4;
+          const lx = 6 + i * (segW + gap);
+          tachoCtx.beginPath();
+          tachoCtx.moveTo(lx + skew, yTop);
+          tachoCtx.lineTo(lx + segW + skew, yTop);
+          tachoCtx.lineTo(lx + segW, yBot);
+          tachoCtx.lineTo(lx, yBot);
+          tachoCtx.closePath();
+          tachoCtx.fill();
+
+          const rx = w - 6 - (i + 1) * segW - i * gap;
+          tachoCtx.beginPath();
+          tachoCtx.moveTo(rx - skew, yTop);
+          tachoCtx.lineTo(rx + segW - skew, yTop);
+          tachoCtx.lineTo(rx + segW, yBot);
+          tachoCtx.lineTo(rx, yBot);
+          tachoCtx.closePath();
+          tachoCtx.fill();
+        }
+      }
+    }
+
+    // --- Page 2 Cluster Renderer (Sloped Tachometer + Center Red Gear Cradle) ---
+    const fl5AuthCanvas = document.getElementById('fl5AuthenticClusterCanvas');
+    const fl5AuthCtx = fl5AuthCanvas.getContext('2d');
+    const fl5GCanvas = document.getElementById('fl5GForceCanvas');
+    const fl5GCtx = fl5GCanvas.getContext('2d');
+
+    function renderPage2AuthenticFl5Cluster() {
+      const rect = fl5AuthCanvas.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return;
+      const dpr = window.devicePixelRatio || 1;
+      fl5AuthCanvas.width = rect.width * dpr;
+      fl5AuthCanvas.height = rect.height * dpr;
+      fl5AuthCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      const w = rect.width;
+      const h = rect.height;
+      const ctx = fl5AuthCtx;
+      ctx.clearRect(0, 0, w, h);
+
+      drawSlopedTachometerArch(ctx, w, h, {
+        x0Ratio: 0.055,
+        y0Ratio: 0.58,
+        x3Ratio: 0.22,
+        yTopRatio: 0.07,
+        x8Ratio: 0.76,
+        barThickRatio: 0.155,
+        numFontRatio: 0.10
+      });
+
+      const cx = w * 0.5;
+      const horizonY = h * 0.66;
+      const bowlBottomY = h * 0.96;
+      const bowlHalfTop = w * 0.14;
+      const bowlHalfBot = w * 0.062;
+
+      const cradleGrad = ctx.createRadialGradient(cx, h * 0.72, 6, cx, h * 0.72, w * 0.155);
+      cradleGrad.addColorStop(0, 'rgba(225, 20, 42, 0.65)');
+      cradleGrad.addColorStop(0.55, 'rgba(130, 10, 22, 0.30)');
+      cradleGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = cradleGrad;
+      ctx.beginPath();
+      ctx.arc(cx, h * 0.72, w * 0.16, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.save();
+      ctx.strokeStyle = '#dc2626';
+      ctx.shadowColor = '#ef4444';
+      ctx.shadowBlur = 12;
+      ctx.lineWidth = 2.8;
+      ctx.beginPath();
+      ctx.moveTo(w * 0.03, horizonY);
+      ctx.lineTo(cx - bowlHalfTop, horizonY);
+      ctx.bezierCurveTo(
+        cx - bowlHalfTop * 0.55, horizonY,
+        cx - bowlHalfBot * 1.4, bowlBottomY,
+        cx - bowlHalfBot, bowlBottomY
+      );
+      ctx.lineTo(cx + bowlHalfBot, bowlBottomY);
+      ctx.bezierCurveTo(
+        cx + bowlHalfBot * 1.4, bowlBottomY,
+        cx + bowlHalfTop * 0.55, horizonY,
+        cx + bowlHalfTop, horizonY
+      );
+      ctx.lineTo(w * 0.97, horizonY);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // --- Page 2 G-Force Radar Circle Renderer ---
+    function renderPage2Fl5GForceMeter() {
+      const rect = fl5GCanvas.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return;
+      const dpr = window.devicePixelRatio || 1;
+      fl5GCanvas.width = rect.width * dpr;
+      fl5GCanvas.height = rect.height * dpr;
+      fl5GCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      const w = rect.width;
+      const h = rect.height;
+      const ctx = fl5GCtx;
+      ctx.clearRect(0, 0, w, h);
+
+      const cx = w * 0.52;
+      const cy = h * 0.46;
+      const r = Math.min(w, h) * 0.33;
+
+      ctx.fillStyle = 'rgba(20, 24, 34, 0.85)';
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = 'rgba(148, 163, 184, 0.42)';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(cx, cy, r * 0.55, 0, Math.PI * 2); ctx.stroke();
+
+      ctx.save();
+      ctx.setLineDash([3, 3]);
+      ctx.strokeStyle = 'rgba(226, 232, 240, 0.65)';
+      ctx.beginPath();
+      ctx.moveTo(cx - r, cy); ctx.lineTo(cx + r, cy);
+      ctx.moveTo(cx, cy - r); ctx.lineTo(cx, cy + r);
+      ctx.stroke();
+      ctx.restore();
+
+      const fontSz = Math.max(13, Math.round(h * 0.105));
+      ctx.fillStyle = '#f8fafc';
+      ctx.font = `600 ${fontSz}px "Inter", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillText('0.0', cx, cy - r - 6);
+      ctx.textAlign = 'right';
+      ctx.fillText('0.0', cx - r - 7, cy + fontSz * 0.35);
+      ctx.textAlign = 'left';
+      ctx.fillText('0.0', cx + r + 7, cy + fontSz * 0.35);
+
+      ctx.fillStyle = '#cbd5e1';
+      ctx.font = `600 ${Math.max(11, Math.round(h * 0.08))}px "Inter", sans-serif`;
+      ctx.fillText('1.5G', cx - r - 36, cy + r * 0.86);
+
+      const totalG = Math.hypot(state.latG, state.lonG).toFixed(2);
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = 'center';
+      ctx.font = `700 ${Math.max(16, Math.round(h * 0.13))}px "Inter", sans-serif`;
+      ctx.fillText(`${totalG} G`, cx, cy + r + fontSz + 8);
+
+      for (let i = 0; i < gHistoryTrail.length; i++) {
+        const pt = gHistoryTrail[i];
+        const px = cx + Math.max(-1, Math.min(1, pt.gy / 1.5)) * (r - 4);
+        const py = cy - Math.max(-1, Math.min(1, pt.gx / 1.5)) * (r - 4);
+        const alpha = ((i + 1) / gHistoryTrail.length) * 0.55;
+        ctx.fillStyle = `rgba(226, 232, 240, ${alpha.toFixed(2)})`;
+        ctx.beginPath();
+        ctx.arc(px, py, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      const curX = cx + Math.max(-1, Math.min(1, state.latG / 1.5)) * (r - 4);
+      const curY = cy - Math.max(-1, Math.min(1, state.lonG / 1.5)) * (r - 4);
+      ctx.save();
+      ctx.fillStyle = '#facc15';
+      ctx.shadowColor = '#facc15';
+      ctx.shadowBlur = 12;
+      ctx.beginPath();
+      ctx.arc(curX, curY, 5.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // --- Page 3 Graphics-First Steering Outer 270° Ring Gauge + Center Hub G-BALL Renderer ---
+    const p3SteerArcCanvas = document.getElementById('p3SteerArcCanvas');
+    const p3SteerArcCtx = p3SteerArcCanvas.getContext('2d');
+    const p3HubGBallCanvas = document.getElementById('p3HubGBallCanvas');
+    const p3HubGBallCtx = p3HubGBallCanvas.getContext('2d');
+
+    function renderPage3SteeringAndHubGBall() {
+      const rect = p3SteerArcCanvas.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        const dpr = window.devicePixelRatio || 1;
+        p3SteerArcCanvas.width = rect.width * dpr;
+        p3SteerArcCanvas.height = rect.height * dpr;
+        p3SteerArcCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        const w = rect.width;
+        const h = rect.height;
+        const ctx = p3SteerArcCtx;
+        ctx.clearRect(0, 0, w, h);
+
+        const cx = w / 2;
+        const cy = h / 2;
+        const r = Math.min(w, h) * 0.45;
+        const topAngle = -Math.PI / 2;
+
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.lineWidth = 16;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, topAngle - Math.PI * 0.75, topAngle + Math.PI * 0.75);
+        ctx.stroke();
+
+        const clampedSteer = Math.max(-180, Math.min(180, state.steer));
+        const sweepRad = (clampedSteer / 180) * (Math.PI * 0.75);
+        if (Math.abs(sweepRad) > 0.01) {
+          ctx.save();
+          ctx.strokeStyle = clampedSteer < 0 ? '#00f0ff' : '#ff9e00';
+          ctx.shadowColor = clampedSteer < 0 ? '#00f0ff' : '#ff9e00';
+          ctx.shadowBlur = 16;
+          ctx.lineWidth = 16;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.arc(cx, cy, r, topAngle, topAngle + sweepRad, sweepRad < 0);
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+
+      const gRect = p3HubGBallCanvas.getBoundingClientRect();
+      if (gRect.width > 0 && gRect.height > 0) {
+        const dpr = window.devicePixelRatio || 1;
+        p3HubGBallCanvas.width = gRect.width * dpr;
+        p3HubGBallCanvas.height = gRect.height * dpr;
+        p3HubGBallCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        const gw = gRect.width;
+        const gh = gRect.height;
+        const gctx = p3HubGBallCtx;
+        gctx.clearRect(0, 0, gw, gh);
+
+        const gcx = gw / 2;
+        const gcy = gh / 2;
+        const gr = Math.min(gw, gh) * 0.38;
+
+        gctx.strokeStyle = 'rgba(148, 163, 184, 0.32)';
+        gctx.lineWidth = 1.2;
+        gctx.beginPath(); gctx.arc(gcx, gcy, gr * 0.33, 0, Math.PI * 2); gctx.stroke();
+        gctx.beginPath(); gctx.arc(gcx, gcy, gr * 0.66, 0, Math.PI * 2); gctx.stroke();
+        gctx.strokeStyle = 'rgba(56, 189, 248, 0.5)';
+        gctx.lineWidth = 1.6;
+        gctx.beginPath(); gctx.arc(gcx, gcy, gr, 0, Math.PI * 2); gctx.stroke();
+
+        gctx.save();
+        gctx.setLineDash([3, 3]);
+        gctx.strokeStyle = 'rgba(226, 232, 240, 0.45)';
+        gctx.beginPath();
+        gctx.moveTo(gcx - gr, gcy); gctx.lineTo(gcx + gr, gcy);
+        gctx.moveTo(gcx, gcy - gr); gctx.lineTo(gcx, gcy + gr);
+        gctx.stroke();
+        gctx.restore();
+
+        for (let i = 0; i < gHistoryTrail.length; i++) {
+          const pt = gHistoryTrail[i];
+          const px = gcx + Math.max(-1, Math.min(1, pt.gy / 1.5)) * (gr - 4);
+          const py = gcy - Math.max(-1, Math.min(1, pt.gx / 1.5)) * (gr - 4);
+          const alpha = ((i + 1) / gHistoryTrail.length) * 0.55;
+          gctx.fillStyle = `rgba(56, 189, 248, ${alpha.toFixed(2)})`;
+          gctx.beginPath();
+          gctx.arc(px, py, 3.2, 0, Math.PI * 2);
+          gctx.fill();
+        }
+
+        const curX = gcx + Math.max(-1, Math.min(1, state.latG / 1.5)) * (gr - 4);
+        const curY = gcy - Math.max(-1, Math.min(1, state.lonG / 1.5)) * (gr - 4);
+        gctx.save();
+        gctx.fillStyle = '#facc15';
+        gctx.shadowColor = '#facc15';
+        gctx.shadowBlur = 12;
+        gctx.beginPath();
+        gctx.arc(curX, curY, 6, 0, Math.PI * 2);
+        gctx.fill();
+        gctx.restore();
+      }
+    }
+
+    // --- Layout Edit Mode (Drag & 2D Proportional Resizing) ---
+    const initialWidgetStyles = {};
+
+    function updateWidgetScale(widget) {
+      const baseW = parseFloat(widget.dataset.baseW) || 300;
+      const baseH = parseFloat(widget.dataset.baseH) || 200;
+      const rect = widget.getBoundingClientRect();
+      const curW = rect.width;
+      const curH = rect.height;
+
+      if (curW > 0 && curH > 0) {
+        const scaleX = curW / baseW;
+        const scaleY = curH / baseH;
+        widget.style.setProperty('--scale-x', scaleX.toFixed(3));
+        widget.style.setProperty('--scale-y', scaleY.toFixed(3));
+
+        if (widget.dataset.scaleMode === 'sector2d') {
+          // 2D Scaling for Sector Time Board: scales font size AND vertical stretch when made taller or wider
+          const baseScale = Math.max(0.65, Math.min(3.0, Math.min(scaleX, scaleY) * 0.55 + Math.max(scaleX, scaleY) * 0.45));
+          const stretchY = Math.max(0.85, Math.min(2.1, scaleY / Math.max(0.55, scaleX)));
+          widget.style.setProperty('--ui-scale', baseScale.toFixed(3));
+          widget.querySelectorAll('.sector-2d-text').forEach(el => {
+            el.style.transform = `scaleY(${stretchY.toFixed(3)})`;
+          });
+        } else {
+          const uniScale = Math.max(0.62, Math.min(2.6, Math.min(scaleX, scaleY * 1.15)));
+          widget.style.setProperty('--ui-scale', uniScale.toFixed(3));
+        }
+      }
+    }
+
+    function refreshAllWidgetScales() {
+      document.querySelectorAll('.dash-widget').forEach(updateWidgetScale);
+    }
+
+    function initCustomizableWidgets() {
+      const widgets = document.querySelectorAll('.dash-widget');
+      widgets.forEach(w => {
+        initialWidgetStyles[w.id] = w.getAttribute('style');
+        updateWidgetScale(w);
+
+        let isDragging = false;
+        let isResizing = false;
+        let startX = 0, startY = 0;
+        let startLeft = 0, startTop = 0, startW = 0, startH = 0;
+
+        w.addEventListener('pointerdown', (e) => {
+          if (!state.layoutEditMode) return;
+          const parentRect = w.parentElement.getBoundingClientRect();
+          const rect = w.getBoundingClientRect();
+
+          startX = e.clientX;
+          startY = e.clientY;
+          startLeft = rect.left - parentRect.left;
+          startTop = rect.top - parentRect.top;
+          startW = rect.width;
+          startH = rect.height;
+
+          w.style.left = `${startLeft}px`;
+          w.style.top = `${startTop}px`;
+          w.style.width = `${startW}px`;
+          w.style.height = `${startH}px`;
+          w.style.right = 'auto';
+          w.style.bottom = 'auto';
+
+          if (e.target.classList.contains('widget-resize-handle')) {
+            isResizing = true;
+          } else {
+            isDragging = true;
+          }
+          w.setPointerCapture(e.pointerId);
+          e.stopPropagation();
+        });
+
+        w.addEventListener('pointermove', (e) => {
+          if (!isDragging && !isResizing) return;
+          const dx = e.clientX - startX;
+          const dy = e.clientY - startY;
+
+          if (isDragging) {
+            w.style.left = `${Math.round(startLeft + dx)}px`;
+            w.style.top = `${Math.round(startTop + dy)}px`;
+          } else if (isResizing) {
+            const minW = parseFloat(w.dataset.minW) || 140;
+            const minH = parseFloat(w.dataset.minH) || 80;
+            w.style.width = `${Math.max(minW, Math.round(startW + dx))}px`;
+            w.style.height = `${Math.max(minH, Math.round(startH + dy))}px`;
+            updateWidgetScale(w);
+          }
+        });
+
+        w.addEventListener('pointerup', (e) => {
+          if (isDragging || isResizing) {
+            isDragging = false;
+            isResizing = false;
+            try { w.releasePointerCapture(e.pointerId); } catch (_) {}
+          }
+        });
+      });
+    }
+
+    const btnEditLayout = document.getElementById('btnEditLayout');
+    btnEditLayout.addEventListener('click', () => {
+      state.layoutEditMode = !state.layoutEditMode;
+      document.body.classList.toggle('edit-mode', state.layoutEditMode);
+      btnEditLayout.textContent = state.layoutEditMode ? '🛠 レイアウト編集: ON' : '🛠 レイアウト編集: OFF';
+      btnEditLayout.className = state.layoutEditMode
+        ? 'px-2.5 py-0.5 rounded bg-amber-500 text-black font-black text-[11px] shadow'
+        : 'px-2.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-amber-300 font-extrabold text-[11px] border border-amber-500/40';
+    });
+
+    document.getElementById('btnResetLayout').addEventListener('click', () => {
+      document.querySelectorAll('.dash-widget').forEach(w => {
+        if (initialWidgetStyles[w.id]) {
+          w.setAttribute('style', initialWidgetStyles[w.id]);
+          w.querySelectorAll('.sector-2d-text').forEach(el => {
+            el.style.transform = '';
+          });
+        }
+      });
+      setTimeout(refreshAllWidgetScales, 20);
+    });
+
+    // --- Simulator Slide-Over Drawer Controls ---
+    const simDrawer = document.getElementById('simDrawer');
+    document.getElementById('btnToggleSim').addEventListener('click', () => {
+      simDrawer.classList.toggle('translate-x-full');
+    });
+    document.getElementById('btnCloseSim').addEventListener('click', () => {
+      simDrawer.classList.add('translate-x-full');
+    });
+
+    const chkAutoSim = document.getElementById('chkAutoSim');
+    chkAutoSim.addEventListener('change', (e) => {
+      state.autoSim = e.target.checked;
+    });
+
+    function bindSimSlider(id, key, labelId, suffix = '') {
+      const el = document.getElementById(id);
+      el.addEventListener('input', (e) => {
+        state.autoSim = false;
+        chkAutoSim.checked = false;
+        const val = parseFloat(e.target.value);
+        state[key] = val;
+        document.getElementById(labelId).textContent = `${val}${suffix}`;
+      });
+    }
+
+    bindSimSlider('sldRpm', 'rpm', 'lblSimRpm', ' RPM');
+    bindSimSlider('sldSpd', 'speed', 'lblSimSpd', ' km/h');
+    bindSimSlider('sldGear', 'gear', 'lblSimGear', '');
+    bindSimSlider('sldWater', 'waterTemp', 'lblSimWater', ' ℃');
+    bindSimSlider('sldSteer', 'steer', 'lblSimSteer', '°');
+    bindSimSlider('sldThr', 'thr', 'lblSimThr', '%');
+    bindSimSlider('sldBrk', 'brk', 'lblSimBrk', '%');
+
+    document.getElementById('btnResetPeaks').addEventListener('click', () => {
+      state.peakRpm = state.rpm;
+      state.maxSpeed = state.speed;
+      state.peakWaterTemp = state.waterTemp;
+      state.peakBrk = state.brk;
+    });
+
+    // --- Main 60FPS Telemetry & Rendering Loop ---
+    let lastTickMs = performance.now();
+    let simPhase = 0;
+
+    function tick(nowMs) {
+      requestAnimationFrame(tick);
+      const dt = Math.min(0.1, Math.max(0.001, (nowMs - lastTickMs) / 1000));
+      lastTickMs = nowMs;
+
+      if (state.autoSim) {
+        simPhase += dt * 0.95;
+        const cycle = simPhase % 14;
+
+        if (cycle < 5.2) {
+          // Full-throttle acceleration up the straight
+          state.thr = 100;
+          state.brk = 0;
+          state.speed = Math.min(198, Math.round(115 + cycle * 16));
+          state.gear = state.speed > 172 ? 5 : state.speed > 134 ? 4 : 3;
+          state.rpm = Math.min(7650, Math.round(4800 + ((state.speed % 44) * 66)));
+          state.steer = Number((Math.sin(simPhase * 2.2) * 3).toFixed(0));
+          state.latG = Number((Math.sin(simPhase * 2.2) * 0.12).toFixed(2));
+          state.lonG = Number((0.25 - cycle * 0.02).toFixed(2));
+        } else if (cycle < 8.4) {
+          // Hard braking & trail-brake turn-in
+          const p = cycle - 5.2;
+          state.thr = 0;
+          state.brk = Math.max(0, Math.round(94 - p * 26));
+          state.speed = Math.max(72, Math.round(198 - p * 39));
+          state.gear = state.speed > 125 ? 3 : 2;
+          state.rpm = Math.round(4300 + (state.speed % 35) * 65);
+          state.steer = Number((-Math.min(115, Math.max(0, (p - 0.4) * 55))).toFixed(0));
+          state.latG = Number((-Math.min(1.25, p * 0.42)).toFixed(2));
+          state.lonG = Number((-Math.min(1.18, (state.brk / 100) * 1.18)).toFixed(2));
+        } else {
+          // Corner exit acceleration
+          const p = cycle - 8.4;
+          state.brk = 0;
+          state.thr = Math.min(100, Math.round(p * 26));
+          state.speed = Math.round(72 + p * 15);
+          state.gear = state.speed > 108 ? 3 : 2;
+          state.rpm = Math.min(7550, Math.round(4500 + p * 520));
+          state.steer = Number((-Math.max(0, 110 - p * 24)).toFixed(0));
+          state.latG = Number((-Math.max(0.08, 1.20 - p * 0.22)).toFixed(2));
+          state.lonG = Number((Math.min(0.35, (state.thr / 100) * 0.35)).toFixed(2));
+        }
+
+        const prevLapTime = state.lapTime;
+        state.lapTime = (state.lapTime + dt) % 114.2;
+        if (state.lapTime < prevLapTime) {
+          state.lapCount++;
+        }
+        state.deltaBest = Number((Math.sin(simPhase * 0.45) * 0.52 - 0.18).toFixed(3));
+        state.sector = state.lapTime < 25 ? 1 : state.lapTime < 68 ? 2 : 3;
+      }
+
+      // Push G-Force sample into trail buffer
+      if (Math.random() < 0.35) {
+        gHistoryTrail.shift();
+        gHistoryTrail.push({ gx: state.lonG, gy: state.latG });
+      }
+
+      // Update Peak Hold Memories
+      if (state.rpm > state.peakRpm) state.peakRpm = state.rpm;
+      if (state.speed > state.maxSpeed) state.maxSpeed = state.speed;
+      if (state.waterTemp > state.peakWaterTemp) state.peakWaterTemp = state.waterTemp;
+      if (state.brk > state.peakBrk) state.peakBrk = state.brk;
+
+      // Countdown Session Timer
+      if (state.timerRunning && state.sessionRemainSec > 0) {
+        state.sessionRemainSec = Math.max(0, state.sessionRemainSec - dt);
+      }
+
+      // 1. Update Shift Lights & Canvas Tachometers
+      updateShiftIndicators(state.rpm);
+      document.getElementById('p1RpmNum').innerHTML = `${Math.round(state.rpm).toLocaleString()} <span class="text-[0.5em] text-slate-400">RPM</span>`;
+      document.getElementById('p1RpmPeak').textContent = Math.round(state.peakRpm).toLocaleString();
+
+      if (state.currentPage === 1) {
+        renderPage1Tachometer();
+      } else if (state.currentPage === 2) {
+        renderPage2AuthenticFl5Cluster();
+        renderPage2Fl5GForceMeter();
+      } else if (state.currentPage === 3) {
+        renderPage3SteeringAndHubGBall();
+      }
+
+      // 2. Lap Count Badges
+      const lapStr = String(state.lapCount).padStart(2, '0');
+      document.getElementById('topBarLapBadge').textContent = `LAP ${lapStr}`;
+      document.getElementById('p1LapCount').textContent = lapStr;
+      document.getElementById('p2Fl5LapNum').textContent = lapStr;
+      document.getElementById('p3LapCount').textContent = lapStr;
+
+      // 3. Speed, Gear & Mini Bars
+      document.getElementById('p1Speed').textContent = Math.round(state.speed);
+      document.getElementById('p1MaxSpeed').textContent = Math.round(state.maxSpeed);
+      document.getElementById('p1Gear').textContent = state.gear;
+      document.getElementById('p1MiniThr').style.width = `${state.thr}%`;
+      document.getElementById('p1MiniThrTxt').textContent = `${Math.round(state.thr)}%`;
+      document.getElementById('p1MiniBrk').style.width = `${state.brk}%`;
+      document.getElementById('p1MiniBrkTxt').textContent = `${Math.round(state.brk)}%`;
+
+      document.getElementById('p2Fl5Speed').textContent = Math.round(state.speed);
+      document.getElementById('p2Fl5Gear').textContent = state.gear;
+      document.getElementById('p3Speed').textContent = Math.round(state.speed);
+      document.getElementById('p3Gear').textContent = state.gear;
+
+      // 4. Lap Times, Sector Times & Best Delta (Synchronized across P1, P2, P3)
+      const curLapQuote = fmtLapQuote(state.lapTime);
+      document.getElementById('p1LiveLap').textContent = curLapQuote;
+      document.getElementById('p2Fl5CurLap').textContent = curLapQuote;
+      document.getElementById('p3LiveLap').textContent = curLapQuote;
+      document.getElementById('p1CurSectorBadge').textContent = `SECTOR ${state.sector}`;
+      document.getElementById('p2Fl5SecBadge').textContent = `SECTOR ${state.sector}`;
+
+      // Update P1 & P2 6-Row Sector Boards identically
+      const s1Str = fmtLapQuote(state.s1Time);
+      const s2Str = fmtLapQuote(state.s2Time);
+      const s3Str = fmtLapQuote(state.s3Time);
+      const lastStr = fmtLapQuote(state.lastLap);
+      const bestStr = fmtLapQuote(state.bestLap);
+      const optStr = fmtLapQuote(state.s1Time + state.s2Time + state.s3Time);
+
+      document.getElementById('p1S1Time').textContent = s1Str;
+      document.getElementById('p1S2Time').textContent = s2Str;
+      document.getElementById('p1S3Time').textContent = s3Str;
+      document.getElementById('p1LastTime').textContent = lastStr;
+      document.getElementById('p1BestLap').textContent = bestStr;
+      document.getElementById('p1BoardBest').textContent = bestStr;
+      document.getElementById('p1BoardOpt').textContent = optStr;
+
+      document.getElementById('p2S1Time').textContent = s1Str;
+      document.getElementById('p2S2Time').textContent = s2Str;
+      document.getElementById('p2S3Time').textContent = s3Str;
+      document.getElementById('p2LastTime').textContent = lastStr;
+      document.getElementById('p2Fl5BestLap').textContent = bestStr;
+      document.getElementById('p2BoardOpt').textContent = optStr;
+
+      const isFaster = state.deltaBest <= 0;
+      const sign = state.deltaBest > 0 ? '+' : '';
+      const deltaFormatted = `${sign}${state.deltaBest.toFixed(3)}`;
+
+      const dEl1 = document.getElementById('p1DeltaNum');
+      const dEl2 = document.getElementById('p2Fl5Delta');
+      const dEl3 = document.getElementById('p3DeltaNum');
+      dEl1.textContent = deltaFormatted;
+      dEl2.textContent = deltaFormatted;
+      dEl3.textContent = `${deltaFormatted}s`;
+      dEl1.className = isFaster
+        ? 'text-[4.1em] font-black mono text-emerald-400 leading-none tracking-tight defi-cyan-glow'
+        : 'text-[4.1em] font-black mono text-rose-500 leading-none tracking-tight';
+      dEl2.className = isFaster
+        ? 'text-[2.1rem] font-extrabold text-[#00e676] tracking-tight leading-none mt-0.5 mono'
+        : 'text-[2.1rem] font-extrabold text-[#ff3b4e] tracking-tight leading-none mt-0.5 mono';
+      dEl3.className = isFaster
+        ? 'text-[2.15em] font-black mono text-emerald-400 leading-none mt-0.5'
+        : 'text-[2.15em] font-black mono text-rose-500 leading-none mt-0.5';
+
+      const dBar = document.getElementById('p1DeltaBarFill');
+      const barPct = Math.min(50, (Math.abs(state.deltaBest) / 1.5) * 50);
+      if (isFaster) {
+        dBar.style.left = 'auto'; dBar.style.right = '50%'; dBar.style.width = `${barPct}%`;
+        dBar.className = 'absolute top-0 bottom-0 bg-emerald-400 transition-all duration-75';
+      } else {
+        dBar.style.right = 'auto'; dBar.style.left = '50%'; dBar.style.width = `${barPct}%`;
+        dBar.className = 'absolute top-0 bottom-0 bg-rose-500 transition-all duration-75';
+      }
+
+      // 5. Water Temp & >=98°C Defi Red Flashing Warning
+      const isWaterHot = state.waterTemp >= 98;
+      document.getElementById('w_p1_water').classList.toggle('temp-warn-active', isWaterHot);
+      document.getElementById('p2WaterCell').classList.toggle('temp-warn-active', isWaterHot);
+      document.getElementById('p1WaterTemp').textContent = Math.round(state.waterTemp);
+      document.getElementById('p1WaterPeak').textContent = Math.round(state.peakWaterTemp);
+      document.getElementById('p2Fl5Water').textContent = Math.round(state.waterTemp);
+
+      const waterStatus = document.getElementById('p1WaterStatus');
+      if (isWaterHot) {
+        waterStatus.textContent = '⚠ WARNING (高温危険)';
+        waterStatus.className = 'px-2 py-0.5 rounded bg-rose-600 text-white font-black text-[0.9em]';
+      } else if (state.waterTemp >= 92) {
+        waterStatus.textContent = 'WARM (やや高め)';
+        waterStatus.className = 'px-2 py-0.5 rounded bg-amber-500/25 text-amber-300 border border-amber-400/50 font-black text-[0.9em]';
+      } else {
+        waterStatus.textContent = 'NORMAL (適温)';
+        waterStatus.className = 'px-2 py-0.5 rounded bg-cyan-950/90 text-cyan-300 border border-cyan-500/40 font-black text-[0.9em]';
+      }
+      const waterPct = Math.max(5, Math.min(100, ((state.waterTemp - 50) / 70) * 100));
+      document.getElementById('p1WaterBar').style.width = `${waterPct}%`;
+
+      // 6. Session Countdown Timer & Clock
+      const cdStr = fmtCountdown(state.sessionRemainSec);
+      const timerEl = document.getElementById('p1SessionTimer');
+      timerEl.textContent = cdStr;
+      document.getElementById('p2Fl5Timer').textContent = cdStr;
+      timerEl.className = state.sessionRemainSec <= 180
+        ? 'text-[3.3em] font-black mono text-amber-400 leading-none tracking-tight animate-pulse'
+        : 'text-[3.3em] font-black mono text-white leading-none tracking-tight';
+
+      const nowDate = new Date();
+      const clockStr = nowDate.toTimeString().slice(0, 8);
+      document.getElementById('p1ClockTime').textContent = clockStr;
+      document.getElementById('p2Fl5Clock').textContent = clockStr.slice(0, 5);
+
+      // 7. Page 3 Visual-First Steering (with Hub G-Ball) & Pedal Bars
+      document.getElementById('steeringWheelSvg').style.transform = `rotate(${state.steer}deg)`;
+      document.getElementById('p3SteerAngle').textContent = `${state.steer > 0 ? '+' : ''}${Math.round(state.steer)}°`;
+      document.getElementById('p3SteerDir').textContent = state.steer < -1 ? 'LEFT ◀' : state.steer > 1 ? '▶ RIGHT' : 'CENTER';
+      document.getElementById('p3HubGTotal').textContent = `${Math.hypot(state.latG, state.lonG).toFixed(2)}G`;
+
+      document.getElementById('p3ThrVal').innerHTML = `${Math.round(state.thr)}<span class="text-[0.42em] ml-0.5">%</span>`;
+      document.getElementById('p3BrkVal').innerHTML = `${Math.round(state.brk)}<span class="text-[0.42em] ml-0.5">%</span>`;
+      document.getElementById('p3BrkMpa').textContent = `${(state.brk * 0.085).toFixed(1)} MPa`;
+      document.getElementById('p3ThrState').textContent = state.thr >= 95 ? 'FULL OPEN' : state.thr > 5 ? 'PARTIAL' : 'CLOSED';
+      document.getElementById('p3BrkPeakTxt').textContent = `${Math.round(state.peakBrk)}%`;
+      document.getElementById('p3BrkPeakLine').style.bottom = `${Math.min(96, state.peakBrk)}%`;
+
+      document.getElementById('p3ThrBar').style.height = `${state.thr}%`;
+      document.getElementById('p3BrkBar').style.height = `${state.brk}%`;
+    }
+
+    window.addEventListener('resize', refreshAllWidgetScales);
+    window.addEventListener('load', () => {
+      setRevLimit(state.revLimit);
+      initCustomizableWidgets();
+      requestAnimationFrame(tick);
+    });
+  </script>
+</body>
+</html>
