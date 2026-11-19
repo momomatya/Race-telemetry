@@ -92,6 +92,9 @@
       <button id="btnConnectCar" class="px-2.5 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-[11px] rounded tracking-wider shadow">
         LINKED 📡
       </button>
+      <button id="btnSaveDir" class="px-2 py-0.5 bg-[#161f33] hover:bg-slate-700 text-amber-300 text-[11px] font-extrabold rounded border border-amber-500/40" title="録画ファイル・ログの保存先フォルダを指定">
+        📁 保存先: 標準
+      </button>
       <button id="btnAutoRec" class="px-2 py-0.5 bg-cyan-600/30 hover:bg-cyan-600/50 text-cyan-300 text-[11px] font-extrabold rounded border border-cyan-400/50" title="車速連動の自動録画開始・自動停止">
         ⚡ AUTO: ON
       </button>
@@ -225,7 +228,7 @@
         <div class="grid grid-cols-12 items-center">
           <span class="col-span-3 text-amber-400 text-[calc(0.48rem*var(--ui-scale))]">OPT.</span>
           <span id="timeOpt" class="col-span-6 text-right pr-1 text-amber-400 text-[calc(0.52rem*var(--ui-scale))]">1'54.120</span>
-          <span class="col-span-3 text-right text-slate-500 text-[calc(0.45rem*var(--ui-scale))]">IDEAL</span>
+          <span id="labelOpt" class="col-span-3 text-right text-slate-500 text-[calc(0.45rem*var(--ui-scale))]">IDEAL</span>
         </div>
       </div>
       <div class="resize-handle">⤡</div>
@@ -244,9 +247,9 @@
       <div class="resize-handle">⤡</div>
     </div>
 
-    <!-- 4. 右上：GPS サーキットマップ -->
+    <!-- 4. 右上：GPS サーキットマップ（いったん非表示） -->
     <div id="panelGpsMap" data-base-w="88" data-base-h="68" data-min-w="70" data-min-h="55"
-         class="absolute pointer-events-auto gt-panel rounded-sm p-1.5 flex flex-col justify-between"
+         class="hidden absolute pointer-events-auto gt-panel rounded-sm p-1.5 flex-col justify-between"
          style="top: 14px; right: 162px; width: 88px; height: 68px; --ui-scale: 1;">
       <div class="hud-handle flex justify-between items-center text-[calc(0.45rem*var(--ui-scale))] font-bold">
         <span class="text-cyan-400">● GPS</span>
@@ -271,14 +274,14 @@
       <div class="resize-handle">⤡</div>
     </div>
 
-    <!-- 6. 下部：4chテレメトリ・トレース（THR / BRK / SPD / BEST Δ・細線2.0px仕様） -->
+    <!-- 6. 下部：4chテレメトリ・トレース（LAST 30s・5倍低速＆滑らか曲線仕様） -->
     <div id="panelPedals" data-base-w="880" data-base-h="66" data-min-w="420" data-min-h="50"
          class="absolute pointer-events-auto gt-panel rounded-sm px-3 py-1.5 flex flex-col justify-between"
          style="bottom: 10px; left: 50%; transform: translateX(-50%); width: 880px; height: 66px; --ui-scale: 1;">
 
       <div class="hud-handle flex justify-between items-center text-[calc(0.66rem*var(--ui-scale))] font-extrabold tracking-wide">
         <div class="flex items-center gap-3">
-          <span class="text-white flex items-center gap-1"><span class="text-cyan-400">⠿</span>•TELEMETRY TRACE (LAST 6s)</span>
+          <span class="text-white flex items-center gap-1"><span class="text-cyan-400">⠿</span>•TELEMETRY TRACE (LAST 30s)</span>
           <span class="text-emerald-400">■ THR: <span id="labelThr" class="mono">0%</span></span>
           <span class="text-rose-400">■ BRK: <span id="labelBrk" class="mono">59% (5.0 MPa)</span></span>
           <span class="text-sky-400">■ SPD: <span id="labelSpd" class="mono">92 km/h</span></span>
@@ -312,9 +315,9 @@
         <div class="relative flex-1 h-full bg-[#060911]/90 rounded-sm border border-white/10 overflow-hidden">
           <canvas id="oscilloCanvas" class="w-full h-full block"></canvas>
           <div class="absolute inset-x-2 bottom-0.5 flex justify-between text-[calc(0.55rem*var(--ui-scale))] mono font-bold text-slate-400 pointer-events-none">
-            <span>-6s</span>
-            <span>-4s</span>
-            <span>-2s</span>
+            <span>-30s</span>
+            <span>-20s</span>
+            <span>-10s</span>
             <span class="text-cyan-400 font-extrabold">0s (NOW)</span>
           </div>
         </div>
@@ -387,10 +390,16 @@
       </div>
     </div>
 
-    <!-- 3. 自動録画トリガー設定 -->
+    <!-- 3. 録画保存先フォルダ ＆ 自動録画トリガー設定 -->
     <div class="space-y-2 bg-slate-900/90 p-2.5 rounded border border-white/15">
-      <div class="font-extrabold text-slate-200">3. ⚡ 自動録画トリガー (SmartyCam式)</div>
-      <div class="flex items-center justify-between">
+      <div class="font-extrabold text-slate-200">3. ⚡ 保存先 & 自動録画トリガー</div>
+      <button id="btnSaveDirDrawer" class="w-full py-1.5 bg-amber-600 hover:bg-amber-500 text-white font-extrabold rounded shadow">
+        📁 録画ファイル保存フォルダを選択
+      </button>
+      <div id="saveDirStatus" class="text-[10px] mono text-amber-300 bg-slate-950 p-1.5 rounded border border-white/10">
+        保存先: ブラウザ標準のダウンロードフォルダ
+      </div>
+      <div class="flex items-center justify-between pt-1">
         <span class="text-slate-300">開始車速 (1.5秒維持):</span>
         <div class="flex items-center gap-1">
           <input id="inputAutoStartSpd" type="number" value="10" min="3" max="60" class="w-14 bg-slate-950 border border-white/20 rounded px-1.5 py-0.5 text-right mono font-bold text-emerald-400" />
@@ -400,9 +409,9 @@
       <div class="flex items-center justify-between">
         <span class="text-slate-300">停止車速 / 待機秒数:</span>
         <div class="flex items-center gap-1">
-          <input id="inputAutoStopSpd" type="number" value="5" min="1" max="30" class="w-12 bg-slate-950 border border-white/20 rounded px-1 py-0.5 text-right mono font-bold text-rose-400" />
+          <input id="inputAutoStopSpd" type="number" value="5" min="1" max="30" class="w-12 bg-slate-950 border border-white/20 rounded px-1.5 py-0.5 text-right mono font-bold text-rose-400" />
           <span class="text-slate-400">km/h /</span>
-          <input id="inputAutoStopSec" type="number" value="10" min="3" max="60" class="w-12 bg-slate-950 border border-white/20 rounded px-1 py-0.5 text-right mono font-bold text-amber-400" />
+          <input id="inputAutoStopSec" type="number" value="10" min="3" max="60" class="w-12 bg-slate-950 border border-white/20 rounded px-1.5 py-0.5 text-right mono font-bold text-amber-400" />
           <span class="text-slate-400">秒</span>
         </div>
       </div>
@@ -523,6 +532,50 @@
       lastFrameMs: performance.now()
     };
 
+    // --- 保存先フォルダ選択（File System Access API） ---
+    let saveDirHandle = null;
+
+    async function pickSaveDirectory() {
+      if (!window.showDirectoryPicker) {
+        alert('このブラウザはフォルダ直接指定に対応していません（Chrome / Edge推奨）。標準のダウンロードフォルダに保存されます。');
+        return;
+      }
+      try {
+        saveDirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+        const dirName = saveDirHandle.name;
+        document.getElementById('btnSaveDir').textContent = `📁 ${dirName}`;
+        document.getElementById('btnSaveDir').className =
+          'px-2 py-0.5 bg-emerald-700/40 hover:bg-emerald-700/60 text-emerald-300 text-[11px] font-extrabold rounded border border-emerald-400/50';
+        document.getElementById('saveDirStatus').textContent = `保存先フォルダ: ${dirName}/ (直接保存ON)`;
+      } catch (err) {
+        // キャンセル時は何もしない
+      }
+    }
+
+    document.getElementById('btnSaveDir').addEventListener('click', pickSaveDirectory);
+    document.getElementById('btnSaveDirDrawer').addEventListener('click', pickSaveDirectory);
+
+    async function saveBlobToTarget(blob, filename) {
+      if (saveDirHandle) {
+        try {
+          const perm = await saveDirHandle.queryPermission({ mode: 'readwrite' });
+          if (perm === 'granted' || (await saveDirHandle.requestPermission({ mode: 'readwrite' })) === 'granted') {
+            const fileHandle = await saveDirHandle.getFileHandle(filename, { create: true });
+            const writable = await fileHandle.createWritable();
+            await writable.write(blob);
+            await writable.close();
+            return;
+          }
+        } catch (err) {
+          console.warn('フォルダ書き込み失敗、通常ダウンロードへフォールバック:', err);
+        }
+      }
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+    }
+
     function formatLapTime(sec) {
       if (sec === null || sec === undefined || isNaN(sec) || sec < 0) return "--'--.---";
       const mins = Math.floor(sec / 60);
@@ -586,7 +639,8 @@
       const opt = sessionBestSectors.s1 + sessionBestSectors.s2 + sessionBestSectors.s3;
       document.getElementById('timeOpt').textContent = formatLapTime(opt);
       document.getElementById('headerCourseBadge').textContent = `📍 ${courseConfig.short} (${courseConfig.length.toLocaleString()}m)`;
-      document.getElementById('hudCourseShort').textContent = courseConfig.short;
+      const shortEl = document.getElementById('hudCourseShort');
+      if (shortEl) shortEl.textContent = courseConfig.short;
       document.getElementById('sectorRangeText').textContent =
         `S1: 0〜${courseConfig.s1End}m | S2: ${courseConfig.s1End}〜${courseConfig.s2End}m | S3: ${courseConfig.s2End}〜${courseConfig.length}m`;
     }
@@ -648,19 +702,13 @@
       }
       document.getElementById('gpsDetectStatus').textContent = '📡 GPSで現在地を取得中...';
       navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          selectNearestCourseByCoords(pos.coords.latitude, pos.coords.longitude);
-        },
-        () => {
-          document.getElementById('gpsDetectStatus').textContent = '⚠ GPS取得失敗: 手動でコースを選択してください。';
-        },
+        (pos) => selectNearestCourseByCoords(pos.coords.latitude, pos.coords.longitude),
+        () => document.getElementById('gpsDetectStatus').textContent = '⚠ GPS取得失敗: 手動でコースを選択してください。',
         { enableHighAccuracy: true, timeout: 6000 }
       );
     });
 
-    document.getElementById('selectCourse').addEventListener('change', (e) => {
-      applyCourseSelection(e.target.value);
-    });
+    document.getElementById('selectCourse').addEventListener('change', (e) => applyCourseSelection(e.target.value));
 
     ['inputS1End', 'inputS2End', 'inputCourseLen'].forEach(id => {
       document.getElementById(id).addEventListener('change', () => {
@@ -807,8 +855,12 @@
       lap: undefined, distM: undefined, lapTime: undefined, lastLap: undefined, lat: undefined, lon: undefined
     };
 
+    // --- オシロスコープ履歴（125ms間隔 × 240点 ＝ 30秒分：従来の約5倍のゆっくりスクロール） ---
     const oscilloHistory = [];
     const MAX_HISTORY = 240;
+    const TRACE_INTERVAL_MS = 125;
+    let lastTracePushMs = 0;
+
     for (let i = 0; i < MAX_HISTORY; i++) {
       const p = i * 0.06;
       const w = Math.sin(p);
@@ -916,7 +968,6 @@
         dataConn.on('data', (data) => {
           if (data && typeof data.spd !== 'undefined' && !isReviewMode) {
             telem = { ...telem, ...data };
-            // Solo 2 DLからのGPS座標(lat, lon)を受信したら初回に最寄りサーキットを自動選択
             if (data.lat && data.lon && Math.abs(data.lat) > 20 && !window._autoCourseDetected) {
               window._autoCourseDetected = true;
               selectNearestCourseByCoords(data.lat, data.lon);
@@ -990,24 +1041,24 @@
         if (e.data && e.data.size > 0) recordedChunks.push(e.data);
       };
 
-      mediaRecorder.onstop = () => {
+      mediaRecorder.onstop = async () => {
         const ext = (mediaRecorder.mimeType && mediaRecorder.mimeType.includes('mp4')) ? 'mp4' : 'webm';
         const videoBlob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || 'video/mp4' });
         const videoUrl = URL.createObjectURL(videoBlob);
         const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
         const suffix = lastRecWasBurned ? 'HUD_BURNED' : 'RAW';
 
-        downloadBlob(videoBlob, `ND27_${courseConfig.short}_${suffix}_${stamp}.${ext}`);
+        await saveBlobToTarget(videoBlob, `ND27_${courseConfig.short}_${suffix}_${stamp}.${ext}`);
 
         const jsonBlob = new Blob([JSON.stringify(recordedTelemetryLog)], { type: 'application/json' });
-        downloadBlob(jsonBlob, `ND27_${courseConfig.short}_TELEM_${stamp}.json`);
+        await saveBlobToTarget(jsonBlob, `ND27_${courseConfig.short}_TELEM_${stamp}.json`);
 
         const csvHeader = 'Time_s,Speed_kmh,RPM,Gear,Throttle_pct,Brake_pct,Delta_s,LonG,LatG,Steer_deg,LapDist_m,Sector,Lap\n';
         const csvRows = recordedTelemetryLog.map(r =>
           `${(r.offsetMs / 1000).toFixed(3)},${r.spd},${r.rpm},${r.gear},${r.thr},${r.brk},${(r.delta || 0).toFixed(3)},${r.gx},${r.gy},${r.steer},${Math.round(r.distM || 0)},${r.sector || 1},${r.lapNum || 1}`
         ).join('\n');
         const csvBlob = new Blob([csvHeader + csvRows], { type: 'text/csv' });
-        downloadBlob(csvBlob, `ND27_${courseConfig.short}_LOG_${stamp}.csv`);
+        await saveBlobToTarget(csvBlob, `ND27_${courseConfig.short}_LOG_${stamp}.csv`);
 
         enterReviewModeWithUrl(videoUrl, lastRecWasBurned);
       };
@@ -1031,13 +1082,6 @@
       document.getElementById('recTimerBadge').textContent = '720p 60FPS';
     }
 
-    function downloadBlob(blob, filename) {
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = filename;
-      a.click();
-    }
-
     function evaluateAutoRecording(nowMs) {
       if (!isAutoRecEnabled || isReviewMode) return;
       if (!isCarLinked && !isSimTrackOutTest && !isRecording) return;
@@ -1055,9 +1099,7 @@
             const held = nowMs - aboveSpeedSince;
             const remain = Math.max(0, (startHoldMs - held) / 1000);
             document.getElementById('recTimerBadge').textContent = `⚡ AUTO-START ${remain.toFixed(1)}s`;
-            if (held >= startHoldMs) {
-              startSessionRecording();
-            }
+            if (held >= startHoldMs) startSessionRecording();
           }
         } else {
           if (aboveSpeedSince !== null) {
@@ -1073,9 +1115,7 @@
             const held = nowMs - belowSpeedSince;
             const remain = Math.max(0, (stopHoldMs - held) / 1000);
             document.getElementById('recTimerBadge').textContent = `⏳ AUTO-STOP ${remain.toFixed(1)}s`;
-            if (held >= stopHoldMs) {
-              stopSessionRecording();
-            }
+            if (held >= stopHoldMs) stopSessionRecording();
           }
         } else {
           belowSpeedSince = null;
@@ -1083,7 +1123,6 @@
       }
     }
 
-    // --- Solo 2 DLのライン通過トリガー ＆ 距離・セクター同期エンジン ---
     function finalizeLapOnLineCross(confirmedLapTimeSec) {
       const fullLap = confirmedLapTimeSec > 5 ? confirmedLapTimeSec : lapState.lapElapsedSec;
       const s12 = (lapState.s1Time || refBestData.s1) + (lapState.s2Time || refBestData.s2);
@@ -1123,7 +1162,6 @@
         const curDist = telem.distM;
         const incomingLap = telem.lap || lapState.currentLapNum;
 
-        // 1. コントロールライン通過検知（Solo 2 DLのLap番号増加、または距離が後半から0m付近へリセットされた瞬間）
         const crossedStartFinish =
           (incomingLap > lapState.currentLapNum) ||
           (prevDist > courseConfig.length * 0.65 && curDist < courseConfig.length * 0.15);
@@ -1137,7 +1175,6 @@
         lapState.lapDistM = curDist;
         lapState.lapElapsedSec = telem.lapTime;
 
-        // 2. S1 通過確定（Solo 2 DLの距離がs1Endを超えた瞬間）
         if (!lapState.s1DoneThisLap && prevDist < courseConfig.s1End && curDist >= courseConfig.s1End) {
           lapState.s1DoneThisLap = true;
           lapState.s1Time = lapState.lapElapsedSec;
@@ -1147,7 +1184,6 @@
           sessionBestSectors.s1 = Math.min(sessionBestSectors.s1, lapState.s1Time);
         }
 
-        // 3. S2 通過確定（Solo 2 DLの距離がs2Endを超えた瞬間）
         if (!lapState.s2DoneThisLap && prevDist < courseConfig.s2End && curDist >= courseConfig.s2End) {
           lapState.s2DoneThisLap = true;
           lapState.s2Time = lapState.lapElapsedSec - (lapState.s1Time || refBestData.s1);
@@ -1158,7 +1194,6 @@
         }
 
       } else {
-        // 机上SIM / 車速積分フォールバックモード
         document.getElementById('soloSyncBadge').textContent = isAutoSim ? 'SOLO2: SIM' : 'SOLO2: SPD-CALC';
         document.getElementById('soloSyncBadge').className = 'mono text-amber-400 font-bold';
 
@@ -1229,9 +1264,7 @@
     const revTimeLabel = document.getElementById('revTimeLabel');
     const revSpeed = document.getElementById('revSpeed');
 
-    btnReviewMode.addEventListener('click', () => {
-      reviewBar.classList.toggle('hidden');
-    });
+    btnReviewMode.addEventListener('click', () => reviewBar.classList.toggle('hidden'));
 
     btnToggleLiveHud.addEventListener('click', () => {
       const isHidden = hudContainer.style.opacity === '0';
@@ -1268,9 +1301,7 @@
       }
     });
 
-    revSpeed.addEventListener('change', (e) => {
-      remoteVideo.playbackRate = parseFloat(e.target.value) || 1.0;
-    });
+    revSpeed.addEventListener('change', (e) => remoteVideo.playbackRate = parseFloat(e.target.value) || 1.0);
 
     revSeek.addEventListener('input', (e) => {
       if (remoteVideo.duration) {
@@ -1293,9 +1324,7 @@
       if (!file) return;
       const reader = new FileReader();
       reader.onload = (ev) => {
-        try {
-          recordedTelemetryLog = JSON.parse(ev.target.result);
-        } catch (err) {}
+        try { recordedTelemetryLog = JSON.parse(ev.target.result); } catch (err) {}
       };
       reader.readAsText(file);
     });
@@ -1320,11 +1349,8 @@
       if (!recordedTelemetryLog || recordedTelemetryLog.length === 0) return;
       let idx = 0;
       for (let i = 0; i < recordedTelemetryLog.length; i++) {
-        if (recordedTelemetryLog[i].offsetMs <= currentMs) {
-          idx = i;
-        } else {
-          break;
-        }
+        if (recordedTelemetryLog[i].offsetMs <= currentMs) idx = i;
+        else break;
       }
       const frame = recordedTelemetryLog[idx];
       if (frame) {
@@ -1333,7 +1359,7 @@
         if (frame.delta !== undefined) lapState.liveDeltaSec = frame.delta;
         if (frame.lapNum !== undefined) lapState.currentLapNum = frame.lapNum;
         for (let j = 0; j < MAX_HISTORY; j++) {
-          const histIdx = idx - (MAX_HISTORY - 1 - j);
+          const histIdx = idx - (MAX_HISTORY - 1 - j) * 5;
           if (histIdx >= 0 && recordedTelemetryLog[histIdx]) {
             oscilloHistory[j] = {
               thr: recordedTelemetryLog[histIdx].thr ?? 0,
@@ -1420,9 +1446,26 @@
     const oscCtx = oscilloCanvas.getContext('2d');
     const gCanvas = document.getElementById('gCanvas');
     const gCtx = gCanvas.getContext('2d');
-    const gpsCanvas = document.getElementById('gpsCanvas');
-    const gpsCtx = gpsCanvas.getContext('2d');
     const sCtx = simCanvas.getContext('2d');
+
+    // --- 滑らか曲線（二次ベジェ補間）描画ヘルパー ---
+    function drawSmoothTrace(ctx, points, color, lineWidth) {
+      if (points.length < 2) return;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = lineWidth;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.moveTo(points[0].x, points[0].y);
+      for (let i = 1; i < points.length - 1; i++) {
+        const xc = (points[i].x + points[i + 1].x) * 0.5;
+        const yc = (points[i].y + points[i + 1].y) * 0.5;
+        ctx.quadraticCurveTo(points[i].x, points[i].y, xc, yc);
+      }
+      const last = points[points.length - 1];
+      ctx.lineTo(last.x, last.y);
+      ctx.stroke();
+    }
 
     function renderBurnInCompositeFrame() {
       const CW = 1280, CH = 720;
@@ -1569,15 +1612,7 @@
       compCtx.font = `900 ${Math.round(bLap.h * 0.56)}px "JetBrains Mono", monospace`;
       compCtx.fillText(document.getElementById('hudLapTime').textContent, bLap.x + bLap.w * 0.34, bLap.y + bLap.h * 0.72);
 
-      // パネル4: GPS マップ
-      const bGps = getBox('panelGpsMap');
-      drawPanelBg(bGps);
-      compCtx.fillStyle = '#22d3ee';
-      compCtx.font = `bold ${Math.round(bGps.h * 0.14)}px "Barlow Condensed", sans-serif`;
-      compCtx.fillText(`● GPS ${courseConfig.short}`, bGps.x + 6, bGps.y + bGps.h * 0.20);
-      compCtx.drawImage(gpsCanvas, bGps.x + 4, bGps.y + bGps.h * 0.24, bGps.w - 8, bGps.h * 0.72);
-
-      // パネル5: G-BALL
+      // パネル5: G-BALL（※GPSコース図は非表示のためスキップ）
       const bG = getBox('panelGBall');
       drawPanelBg(bG);
       compCtx.fillStyle = '#cbd5e1';
@@ -1600,7 +1635,7 @@
       drawPanelBg(bPed);
       compCtx.font = `800 ${Math.round(bPed.h * 0.18)}px "Barlow Condensed", sans-serif`;
       compCtx.fillStyle = '#ffffff';
-      compCtx.fillText('⠿•TELEMETRY TRACE (LAST 6s)', bPed.x + 10, bPed.y + bPed.h * 0.25);
+      compCtx.fillText('⠿•TELEMETRY TRACE (LAST 30s)', bPed.x + 10, bPed.y + bPed.h * 0.25);
 
       const thrTxt = `■ THR: ${Math.round(telem.thr)}%`;
       const brkTxt = `■ BRK: ${Math.round(telem.brk)}% (${(telem.brk * 0.085).toFixed(1)} MPa)`;
@@ -1646,9 +1681,9 @@
 
       compCtx.fillStyle = '#94a3b8';
       compCtx.font = `bold ${Math.round(bPed.h * 0.14)}px "JetBrains Mono", monospace`;
-      compCtx.fillText('-6s', oscX + 6, oscY + oscH - 3);
-      compCtx.fillText('-4s', oscX + oscW * 0.33, oscY + oscH - 3);
-      compCtx.fillText('-2s', oscX + oscW * 0.66, oscY + oscH - 3);
+      compCtx.fillText('-30s', oscX + 6, oscY + oscH - 3);
+      compCtx.fillText('-20s', oscX + oscW * 0.33, oscY + oscH - 3);
+      compCtx.fillText('-10s', oscX + oscW * 0.66, oscY + oscH - 3);
       compCtx.fillStyle = '#22d3ee';
       compCtx.textAlign = 'right';
       compCtx.fillText('0s (NOW)', oscX + oscW - 6, oscY + oscH - 3);
@@ -1669,7 +1704,7 @@
         }
       } else {
         if (isAutoSim) {
-          simPhase += 0.03;
+          simPhase += 0.008; // デモ波形もゆったり見やすく
           const wave = Math.sin(simPhase);
           const brk = wave < -0.2 ? Math.min(100, Math.round((-wave - 0.2) * 135)) : 0;
           const thr = brk === 0 ? Math.min(100, Math.max(0, Math.round((wave + 0.25) * 88))) : 0;
@@ -1687,10 +1722,7 @@
           };
         }
 
-        // Solo 2 DLのライン通過トリガー・セクタータイム・比較ベストとのデルタ更新
         updateLapAndSectorTiming(nowMs);
-
-        // 自動録画の開始・停止トリガー判定
         evaluateAutoRecording(nowMs);
 
         const currentDelta = isAutoSim
@@ -1698,13 +1730,19 @@
           : lapState.liveDeltaSec;
         lapState.liveDeltaSec = currentDelta;
 
-        oscilloHistory.shift();
-        oscilloHistory.push({
-          thr: telem.thr,
-          brk: telem.brk,
-          spd: telem.spd,
-          delta: currentDelta
-        });
+        // 125msごとに1サンプル追加（約5倍ゆっくりスクロール）
+        if (nowMs - lastTracePushMs >= TRACE_INTERVAL_MS) {
+          lastTracePushMs = nowMs;
+          const prev = oscilloHistory[oscilloHistory.length - 1] || { thr: 0, brk: 0, spd: 0, delta: 0 };
+          // 軽いスムージングで細かなギザつきを軽減
+          oscilloHistory.shift();
+          oscilloHistory.push({
+            thr: prev.thr * 0.25 + telem.thr * 0.75,
+            brk: prev.brk * 0.25 + telem.brk * 0.75,
+            spd: prev.spd * 0.25 + telem.spd * 0.75,
+            delta: prev.delta * 0.3 + currentDelta * 0.7
+          });
+        }
 
         if (isRecording) {
           const elapsedMs = Math.round(nowMs - recStartTime);
@@ -1744,71 +1782,44 @@
       document.getElementById('hudGLat').textContent = telem.gy.toFixed(2);
       document.getElementById('hudGLon').textContent = telem.gx.toFixed(2);
 
-      // --- 4ch オシロスコープ描画 (細線 2.0px) ---
-      oscilloCanvas.width = oscilloCanvas.offsetWidth;
-      oscilloCanvas.height = oscilloCanvas.offsetHeight;
-      const w = oscilloCanvas.width, h = oscilloCanvas.height;
-      oscCtx.clearRect(0, 0, w, h);
+      // --- 4ch オシロスコープ描画 (HiDPI対応 ＋ 滑らか曲線) ---
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const cssW = oscilloCanvas.offsetWidth;
+      const cssH = oscilloCanvas.offsetHeight;
+      if (oscilloCanvas.width !== Math.round(cssW * dpr) || oscilloCanvas.height !== Math.round(cssH * dpr)) {
+        oscilloCanvas.width = Math.round(cssW * dpr);
+        oscilloCanvas.height = Math.round(cssH * dpr);
+      }
+      oscCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      oscCtx.clearRect(0, 0, cssW, cssH);
 
       oscCtx.save();
       oscCtx.strokeStyle = 'rgba(255, 255, 255, 0.14)';
       oscCtx.lineWidth = 1;
       oscCtx.setLineDash([4, 4]);
       oscCtx.beginPath();
-      oscCtx.moveTo(0, h * 0.5);
-      oscCtx.lineTo(w, h * 0.5);
+      oscCtx.moveTo(0, cssH * 0.5);
+      oscCtx.lineTo(cssW, cssH * 0.5);
       oscCtx.stroke();
       oscCtx.restore();
 
-      oscCtx.lineCap = 'round';
-      oscCtx.lineJoin = 'round';
-      const TRACE_WIDTH = 2.0;
-
-      // 1. 車速 SPD (水色)
-      oscCtx.strokeStyle = '#38bdf8';
-      oscCtx.lineWidth = TRACE_WIDTH;
-      oscCtx.beginPath();
-      for (let i = 0; i < oscilloHistory.length; i++) {
-        const x = (i / (oscilloHistory.length - 1)) * w;
-        const normSpd = Math.min(1, Math.max(0, (oscilloHistory[i].spd || 0) / 220));
-        const y = h - normSpd * (h - 6) - 3;
-        if (i === 0) oscCtx.moveTo(x, y); else oscCtx.lineTo(x, y);
+      const n = oscilloHistory.length;
+      const ptsSpd = [], ptsThr = [], ptsBrk = [], ptsDel = [];
+      for (let i = 0; i < n; i++) {
+        const x = (i / (n - 1)) * cssW;
+        const item = oscilloHistory[i];
+        const normSpd = Math.min(1, Math.max(0, (item.spd || 0) / 220));
+        ptsSpd.push({ x, y: cssH - normSpd * (cssH - 8) - 4 });
+        ptsThr.push({ x, y: cssH - ((item.thr || 0) / 100) * (cssH - 8) - 4 });
+        ptsBrk.push({ x, y: cssH - ((item.brk || 0) / 100) * (cssH - 8) - 4 });
+        const d = Math.max(-2.0, Math.min(2.0, item.delta || 0));
+        ptsDel.push({ x, y: (cssH * 0.5) + (d / 2.0) * (cssH * 0.42) });
       }
-      oscCtx.stroke();
 
-      // 2. アクセル THR (緑)
-      oscCtx.strokeStyle = '#10b981';
-      oscCtx.lineWidth = TRACE_WIDTH;
-      oscCtx.beginPath();
-      for (let i = 0; i < oscilloHistory.length; i++) {
-        const x = (i / (oscilloHistory.length - 1)) * w;
-        const y = h - ((oscilloHistory[i].thr || 0) / 100) * (h - 6) - 3;
-        if (i === 0) oscCtx.moveTo(x, y); else oscCtx.lineTo(x, y);
-      }
-      oscCtx.stroke();
-
-      // 3. ブレーキ BRK (赤)
-      oscCtx.strokeStyle = '#f43f5e';
-      oscCtx.lineWidth = TRACE_WIDTH;
-      oscCtx.beginPath();
-      for (let i = 0; i < oscilloHistory.length; i++) {
-        const x = (i / (oscilloHistory.length - 1)) * w;
-        const y = h - ((oscilloHistory[i].brk || 0) / 100) * (h - 6) - 3;
-        if (i === 0) oscCtx.moveTo(x, y); else oscCtx.lineTo(x, y);
-      }
-      oscCtx.stroke();
-
-      // 4. ベストタイム比 Δ DELTA (黄)
-      oscCtx.strokeStyle = '#fbbf24';
-      oscCtx.lineWidth = TRACE_WIDTH;
-      oscCtx.beginPath();
-      for (let i = 0; i < oscilloHistory.length; i++) {
-        const x = (i / (oscilloHistory.length - 1)) * w;
-        const d = Math.max(-2.0, Math.min(2.0, oscilloHistory[i].delta || 0));
-        const y = (h * 0.5) + (d / 2.0) * (h * 0.44);
-        if (i === 0) oscCtx.moveTo(x, y); else oscCtx.lineTo(x, y);
-      }
-      oscCtx.stroke();
+      drawSmoothTrace(oscCtx, ptsSpd, '#38bdf8', 2.0);
+      drawSmoothTrace(oscCtx, ptsThr, '#10b981', 2.0);
+      drawSmoothTrace(oscCtx, ptsBrk, '#f43f5e', 2.0);
+      drawSmoothTrace(oscCtx, ptsDel, '#fbbf24', 2.0);
 
       // G-BALL描画
       gCanvas.width = gCanvas.offsetWidth;
@@ -1828,36 +1839,6 @@
       gCtx.beginPath();
       gCtx.arc(Math.max(3, Math.min(gw - 3, bx)), Math.max(3, Math.min(gh - 3, by)), 3.5, 0, Math.PI * 2);
       gCtx.fill();
-
-      // GPSコースマップ描画
-      gpsCanvas.width = gpsCanvas.offsetWidth;
-      gpsCanvas.height = gpsCanvas.offsetHeight;
-      const pw = gpsCanvas.width, ph = gpsCanvas.height;
-      gpsCtx.clearRect(0, 0, pw, ph);
-
-      const trk = courseConfig.track;
-      gpsCtx.strokeStyle = 'rgba(255,255,255,0.38)';
-      gpsCtx.lineWidth = 2;
-      gpsCtx.lineJoin = 'round';
-      gpsCtx.beginPath();
-      trk.forEach((pt, idx) => {
-        const x = pt[0] * pw, y = pt[1] * ph;
-        if (idx === 0) gpsCtx.moveTo(x, y); else gpsCtx.lineTo(x, y);
-      });
-      gpsCtx.stroke();
-
-      const progress = Math.max(0, Math.min(0.999, lapState.lapDistM / Math.max(1, courseConfig.length)));
-      const floatIdx = progress * (trk.length - 1);
-      const i0 = Math.floor(floatIdx);
-      const i1 = Math.min(trk.length - 1, i0 + 1);
-      const frac = floatIdx - i0;
-      const dotX = (trk[i0][0] + (trk[i1][0] - trk[i0][0]) * frac) * pw;
-      const dotY = (trk[i0][1] + (trk[i1][1] - trk[i0][1]) * frac) * ph;
-
-      gpsCtx.fillStyle = '#38bdf8';
-      gpsCtx.beginPath();
-      gpsCtx.arc(dotX, dotY, 3.5, 0, Math.PI * 2);
-      gpsCtx.fill();
 
       if (simCanvas.style.opacity !== '0') {
         simCanvas.width = simCanvas.offsetWidth;
