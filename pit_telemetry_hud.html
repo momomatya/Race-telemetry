@@ -1,395 +1,707 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>IN-CAR TELEMETRY TX</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,800;1,700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>38Racing - Pit Telemetry HUD (Receiver & Auto Recorder)</title>
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
   <style>
-    body {
-      font-family: 'Barlow Condensed', sans-serif;
-      background-color: #05070a;
-      color: #f1f5f9;
-      overflow: hidden;
-      touch-action: manipulation;
+    :root {
+      --bg: #05070b;
+      --panel: rgba(12, 17, 26, 0.84);
+      --border: rgba(88, 114, 152, 0.42);
+      --text: #f3f6fc;
+      --muted: #8fa3bf;
+      --cyan: #22d3ee;
+      --gold: #fbbf24;
+      --amber: #f59e0b;
+      --red: #ef4444;
+      --green: #22c55e;
+      --blue: #2563eb;
     }
-    .mono { font-family: 'JetBrains Mono', monospace; }
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', 'Hiragino Kaku Gothic ProN', sans-serif;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* 上部コントロールバー */
+    .topbar {
+      height: 52px;
+      background: #0b1019;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+      gap: 10px;
+      z-index: 20;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+    }
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      background: #1e293b;
+      color: var(--muted);
+    }
+    .status-pill.online { background: rgba(34, 197, 94, 0.18); color: var(--green); border: 1px solid rgba(34, 197, 94, 0.5); }
+    .status-pill.rec { background: rgba(239, 68, 68, 0.22); color: #ff6b6b; border: 1px solid var(--red); animation: pulse 1s infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }
+
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .input-group {
+      display: flex;
+      align-items: center;
+      background: #131b29;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 3px 8px;
+      font-size: 12px;
+    }
+    .input-group span { color: var(--muted); margin-right: 6px; font-weight: 700; }
+    .input-group input, .input-group select {
+      background: transparent;
+      border: none;
+      color: var(--cyan);
+      font-weight: 800;
+      font-size: 13px;
+      width: 72px;
+      outline: none;
+    }
+    .input-group select { width: 130px; color: var(--text); }
+    button {
+      border: 1px solid var(--border);
+      background: #162033;
+      color: var(--text);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: 0.15s;
+    }
+    button:hover { filter: brightness(1.15); }
+    button.primary { background: #1d4ed8; border-color: #3b82f6; }
+    button.active { background: rgba(34, 197, 94, 0.22); border-color: var(--green); color: var(--green); }
+    button.danger { background: rgba(239, 68, 68, 0.22); border-color: var(--red); color: #fca5a5; }
+
+    /* メイン映像＋HUDステージ */
+    .stage {
+      position: relative;
+      flex: 1;
+      width: 100%;
+      background: radial-gradient(circle at center, #0e1522 0%, #040609 100%);
+      overflow: hidden;
+    }
+    #remoteVideo {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      background: #000;
+    }
+    #hudCanvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+    .wait-banner {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(8, 12, 20, 0.86);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 22px 32px;
+      text-align: center;
+      pointer-events: none;
+      backdrop-filter: blur(6px);
+    }
+    .wait-banner h2 { font-size: 18px; color: var(--cyan); margin-bottom: 8px; }
+    .wait-banner p { font-size: 13px; color: var(--muted); line-height: 1.6; }
   </style>
 </head>
-<body class="h-screen w-screen flex flex-col justify-between select-none">
+<body>
 
-  <div class="relative flex-1 bg-black overflow-hidden flex items-center justify-center">
-    <video id="cameraPreview" class="w-full h-full object-contain" autoplay playsinline muted></video>
-
-    <div class="absolute top-3 left-3 right-3 flex flex-wrap items-center justify-between gap-2 bg-slate-950/80 backdrop-blur-md border border-white/15 px-3 py-2 rounded">
-      <div class="flex items-center gap-2">
-        <span id="txDot" class="w-3 h-3 rounded-full bg-slate-500"></span>
-        <span id="txStatus" class="text-sm font-bold tracking-wider uppercase">STANDBY</span>
-      </div>
-      <div class="flex items-center gap-2 text-xs mono">
-        <span id="lensBadge" class="px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-500/30">LENS: AUTO</span>
-        <span id="bleBadge" class="px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-white/10">M5 BLE: OFF</span>
-        <span id="pitBadge" class="px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-white/10">PIT PC: 0</span>
-      </div>
+  <div class="topbar">
+    <div class="brand">
+      <span style="color:#ef4444;font-style:italic;">38RACING</span>
+      <span style="font-size:13px;color:#cbd5e1;">PIT TELEMETRY HUD</span>
+      <span id="connStatus" class="status-pill">● PIT STANDBY</span>
+      <span id="recStatus" class="status-pill">REC: IDLE</span>
     </div>
 
-    <div class="absolute bottom-3 left-3 right-3 bg-slate-950/85 backdrop-blur-md border border-white/10 p-2 rounded grid grid-cols-6 gap-1.5 text-center">
-      <div>
-        <div class="text-[10px] text-slate-400">SPEED</div>
-        <div id="valSpd" class="text-xl font-extrabold italic text-white mono">0</div>
+    <div class="controls">
+      <div class="input-group">
+        <span>CIRCUIT</span>
+        <select id="circuitSelect">
+          <option value="FSW">富士スピードウェイ (FSW)</option>
+          <option value="MOTEGI">モビリティリゾートもてぎ</option>
+          <option value="TSUKUBA">筑波サーキット TC2000</option>
+          <option value="NIKKO">日光サーキット</option>
+          <option value="SODEGAURA">袖ヶ浦フォレスト</option>
+        </select>
       </div>
-      <div>
-        <div class="text-[10px] text-slate-400">RPM</div>
-        <div id="valRpm" class="text-xl font-extrabold italic text-cyan-400 mono">0</div>
+
+      <div class="input-group">
+        <span>ROOM</span>
+        <input id="roomInput" type="text" value="ND-27" />
       </div>
-      <div>
-        <div class="text-[10px] text-slate-400">THR %</div>
-        <div id="valThr" class="text-xl font-extrabold italic text-emerald-400 mono">0</div>
-      </div>
-      <div>
-        <div class="text-[10px] text-slate-400">BRK %</div>
-        <div id="valBrk" class="text-xl font-extrabold italic text-rose-500 mono">0</div>
-      </div>
-      <div>
-        <div class="text-[10px] text-slate-400">SOLO LAP</div>
-        <div id="valLap" class="text-lg font-extrabold text-amber-400 mono">L1</div>
-      </div>
-      <div>
-        <div class="text-[10px] text-slate-400">DIST (m)</div>
-        <div id="valDist" class="text-sm font-bold text-slate-200 mono mt-1">0m</div>
-      </div>
+
+      <button id="btnLink" class="primary" onclick="connectToCar()">LINK CAR</button>
+      <button id="btnAutoRec" class="active" onclick="toggleAutoRec()">AUTO REC: ON</button>
+      <button id="btnManualRec" onclick="toggleManualRec()">● REC</button>
+      <button id="btnExportCsv" onclick="exportCsvLog()">CSV保存</button>
+      <button id="btnSim" onclick="toggleSim()">SIM: OFF</button>
     </div>
   </div>
 
-  <div class="bg-slate-900 border-t border-white/15 p-3 space-y-2">
-    <div class="flex items-center gap-1.5">
-      <div class="flex items-center bg-slate-950 border border-white/15 rounded px-2 py-1.5 flex-1">
-        <span class="text-xs text-slate-400 mr-1.5 font-bold">ROOM:</span>
-        <input id="roomInput" type="text" value="ND-27" class="bg-transparent text-cyan-400 font-bold mono text-base w-full focus:outline-none uppercase" />
-      </div>
-      <button id="btnWideLens" class="px-2.5 py-2 bg-cyan-700 hover:bg-cyan-600 active:bg-cyan-800 text-white text-xs font-extrabold rounded border border-cyan-400/40 shadow">
-        📐 広角レンズ切替
-      </button>
-      <button id="btnDemo" class="px-2.5 py-2 bg-amber-500/20 border border-amber-400/50 text-amber-300 text-xs font-bold rounded">
-        DEMO: ON
-      </button>
-    </div>
+  <div class="stage" id="stage">
+    <video id="remoteVideo" autoplay playsinline muted></video>
+    <canvas id="hudCanvas"></canvas>
 
-    <div class="grid grid-cols-2 gap-2">
-      <button id="btnBle" class="py-2.5 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-bold text-sm rounded tracking-wider shadow">
-        1. CONNECT M5 BLE
-      </button>
-      <button id="btnStartTx" class="py-2.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-extrabold text-base rounded tracking-wider shadow-lg">
-        2. START TX (配信開始)
-      </button>
+    <div class="wait-banner" id="waitBanner">
+      <h2>PIT RECEIVER READY (受信待機中)</h2>
+      <p>
+        車載スマホの <b>incar_transmitter.html</b> で「2. START TX」を押し、<br>
+        上の <b>「LINK CAR」</b> をクリックするとオンボード映像とテレメトリを受信します。<br>
+        <span style="color:#fbbf24;">※右上の「SIM: OFF」を押すと単体でHUD表示テストができます</span>
+      </p>
     </div>
-    <div id="logBox" class="text-[11px] mono text-slate-400 truncate">Solo 2 DLのライン通過・距離・ラップタイムも自動中継します。</div>
   </div>
 
-  <script>
-    const NUS_SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
-    const NUS_TX_CHAR_UUID = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
-
-    const PEER_CONFIG = {
-      debug: 1,
-      config: {
-        iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun1.l.google.com:19302' },
-          { urls: 'stun:stun2.l.google.com:19302' }
-        ]
-      }
-    };
-
-    let localStream = null;
-    let videoDevices = [];
-    let currentDeviceIndex = -1;
-    let peer = null;
-    let activeDataConns = [];
-    let isDemoMode = true;
-    let bleConnected = false;
-    let demoPhase = 0;
-
-    let latestTelemetry = {
-      spd: 0, rpm: 850, gear: 1, thr: 0, brk: 0, gx: 0, gy: 0, steer: 0,
-      wtemp: 85, lap: undefined, distM: undefined, lapTime: undefined, lastLap: undefined, lat: undefined, lon: undefined
-    };
-
-    function logMsg(msg) {
-      console.log(msg);
-      document.getElementById('logBox').textContent = msg;
+<script>
+  // --- サーキット簡易コース座標（正規化 0..1） ---
+  const CIRCUITS = {
+    FSW: {
+      name: "FUJI SPEEDWAY",
+      len: 4563,
+      pts: [[0.15,0.48],[0.78,0.48],[0.86,0.42],[0.82,0.32],[0.64,0.33],[0.55,0.42],[0.45,0.28],[0.32,0.28],[0.38,0.52],[0.26,0.62],[0.18,0.72],[0.08,0.64],[0.15,0.48]]
+    },
+    MOTEGI: {
+      name: "MOBILITY RESORT MOTEGI",
+      len: 4801,
+      pts: [[0.20,0.65],[0.62,0.65],[0.72,0.55],[0.60,0.42],[0.78,0.32],[0.88,0.45],[0.82,0.74],[0.48,0.78],[0.35,0.55],[0.16,0.50],[0.20,0.65]]
+    },
+    TSUKUBA: {
+      name: "TSUKUBA CIRCUIT TC2000",
+      len: 2045,
+      pts: [[0.22,0.70],[0.65,0.70],[0.78,0.58],[0.66,0.46],[0.45,0.52],[0.35,0.35],[0.76,0.28],[0.86,0.42],[0.40,0.78],[0.18,0.76],[0.22,0.70]]
+    },
+    NIKKO: {
+      name: "NIKKO CIRCUIT",
+      len: 1052,
+      pts: [[0.20,0.68],[0.75,0.68],[0.84,0.52],[0.68,0.36],[0.52,0.50],[0.36,0.34],[0.18,0.46],[0.20,0.68]]
+    },
+    SODEGAURA: {
+      name: "SODEGAURA FOREST RACEWAY",
+      len: 2436,
+      pts: [[0.18,0.62],[0.72,0.62],[0.84,0.48],[0.74,0.30],[0.52,0.34],[0.44,0.50],[0.28,0.36],[0.14,0.50],[0.18,0.62]]
     }
+  };
 
-    async function loadVideoDevices() {
+  // --- テレメトリ状態 ---
+  let telem = {
+    spd: 0, rpm: 900, gear: 1, thr: 0, brk: 0,
+    gx: 0, gy: 0, steer: 0, wtemp: 86,
+    lap: 1, distM: 0, lapTime: 0, lastLap: 115.016, bestLap: 114.596,
+    s1: 24.699, s2: 42.780, s3: 46.456,
+    dS1: -0.11, dS2: -0.34, dS3: -0.21, liveDelta: -0.18,
+    lat: 35.3717, lon: 138.9272
+  };
+
+  const traceHist = []; // 4ch オシロスコープ履歴 (thr, brk, spd, gx)
+  const MAX_TRACE = 180;
+  const csvRows = ["timestamp,lap,distM,lapTime,spd,rpm,gear,thr,brk,gx,gy,steer,wtemp"];
+
+  let peer = null;
+  let dataConn = null;
+  let mediaCall = null;
+  let hasVideoStream = false;
+  let simActive = false;
+  let simPhase = 0;
+
+  // --- 自動録画関連 ---
+  let autoRecEnabled = true;
+  let isRecording = false;
+  let mediaRecorder = null;
+  let recordedChunks = [];
+  let belowSpeedSince = null;
+
+  const videoEl = document.getElementById("remoteVideo");
+  const canvas = document.getElementById("hudCanvas");
+  const ctx = canvas.getContext("2d");
+
+  function resizeCanvas() {
+    const stage = document.getElementById("stage");
+    canvas.width = stage.clientWidth;
+    canvas.height = stage.clientHeight;
+  }
+  window.addEventListener("resize", resizeCanvas);
+  resizeCanvas();
+
+  // --- WebRTC / PeerJS 接続（着信待機 ＋ 車載側への発信の両面対応） ---
+  function initPeer() {
+    if (peer) { try { peer.destroy(); } catch (e) {} }
+    const room = document.getElementById("roomInput").value.trim() || "ND-27";
+    const pitId = `38racing-pit-${room}`;
+
+    peer = new Peer(pitId, { debug: 1 });
+
+    peer.on("open", (id) => {
+      setConnStatus(`● PIT READY (${room})`, false);
+    });
+
+    // 車載スマホ側から発信された場合
+    peer.on("connection", (conn) => {
+      bindDataConnection(conn);
+    });
+
+    peer.on("call", (call) => {
+      call.answer();
+      bindMediaCall(call);
+    });
+
+    peer.on("error", (err) => {
+      if (err.type === "unavailable-id") {
+        // ID重複時はランダムsuffixで起動し、発信接続で繋ぐ
+        peer = new Peer(undefined, { debug: 1 });
+        peer.on("open", () => setConnStatus(`● PIT CLIENT (${room})`, false));
+      }
+    });
+  }
+
+  function connectToCar() {
+    if (!peer || peer.disconnected) initPeer();
+    const room = document.getElementById("roomInput").value.trim() || "ND-27";
+    setConnStatus(`● LINKING ${room}...`, false);
+
+    // 車載側が待機している可能性のあるPeer ID候補へ接続を試行
+    const candidateIds = [
+      `38racing-car-${room}`,
+      `incar-${room}`,
+      `car-${room}`,
+      `${room}-car`
+    ];
+
+    candidateIds.forEach((targetId) => {
       try {
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const allCams = devices.filter(d => d.kind === 'videoinput');
-        const backCams = allCams.filter(d => !d.label.toLowerCase().includes('front') && !d.label.toLowerCase().includes('前面'));
-        videoDevices = backCams.length > 0 ? backCams : allCams;
-
-        const ultraIdx = videoDevices.findIndex(d => {
-          const l = d.label.toLowerCase();
-          return l.includes('ultra') || l.includes('超広角') || l.includes('0.5') || l.includes('wide');
+        const conn = peer.connect(targetId, { reliable: false });
+        conn.on("open", () => {
+          bindDataConnection(conn);
+          // 映像ストリーム要求用のダミーコール
+          const emptyCanvas = document.createElement("canvas");
+          emptyCanvas.width = 16; emptyCanvas.height = 16;
+          const dummyStream = emptyCanvas.captureStream(1);
+          const call = peer.call(targetId, dummyStream);
+          if (call) bindMediaCall(call);
         });
-        if (ultraIdx !== -1 && currentDeviceIndex === -1) {
-          currentDeviceIndex = ultraIdx;
-        } else if (currentDeviceIndex === -1 && videoDevices.length > 0) {
-          currentDeviceIndex = 0;
-        }
       } catch (e) {}
-    }
+    });
+  }
 
-    async function startCamera(specificDeviceId = null) {
-      if (localStream) {
-        localStream.getTracks().forEach(t => t.stop());
-      }
+  function bindDataConnection(conn) {
+    dataConn = conn;
+    const room = document.getElementById("roomInput").value.trim() || "ND-27";
+    setConnStatus(`● LINKED (${room})`, true);
+    document.getElementById("waitBanner").style.display = "none";
+
+    conn.on("data", (raw) => {
       try {
-        const videoConstraints = {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          frameRate: { ideal: 30 }
-        };
+        const d = (typeof raw === "string") ? JSON.parse(raw) : raw;
+        Object.assign(telem, d);
+        simActive = false;
+        document.getElementById("btnSim").textContent = "SIM: OFF";
+        document.getElementById("btnSim").classList.remove("active");
+        recordTelemetrySample();
+      } catch (e) {}
+    });
 
-        if (specificDeviceId) {
-          videoConstraints.deviceId = { exact: specificDeviceId };
-        } else {
-          videoConstraints.facingMode = { ideal: 'environment' };
-        }
+    conn.on("close", () => {
+      setConnStatus(`● DISCONNECTED (${room})`, false);
+    });
+  }
 
-        localStream = await navigator.mediaDevices.getUserMedia({
-          video: videoConstraints,
-          audio: false
-        });
+  function bindMediaCall(call) {
+    mediaCall = call;
+    call.on("stream", (stream) => {
+      videoEl.srcObject = stream;
+      hasVideoStream = true;
+      document.getElementById("waitBanner").style.display = "none";
+    });
+  }
 
-        if (videoDevices.length === 0) {
-          await loadVideoDevices();
-        }
+  function setConnStatus(text, isOnline) {
+    const el = document.getElementById("connStatus");
+    el.textContent = text;
+    el.className = isOnline ? "status-pill online" : "status-pill";
+  }
 
-        const videoTrack = localStream.getVideoTracks()[0];
-        if (videoTrack) {
-          const label = videoTrack.label || `CAM #${currentDeviceIndex + 1}`;
-          document.getElementById('lensBadge').textContent = label.substring(0, 18);
+  // --- 自動録画（車速 10km/h 以上で開始、停止10秒で保存） ---
+  function toggleAutoRec() {
+    autoRecEnabled = !autoRecEnabled;
+    const btn = document.getElementById("btnAutoRec");
+    btn.textContent = autoRecEnabled ? "AUTO REC: ON" : "AUTO REC: OFF";
+    btn.classList.toggle("active", autoRecEnabled);
+  }
 
-          if (videoTrack.getCapabilities) {
-            const caps = videoTrack.getCapabilities();
-            if (caps.zoom && typeof caps.zoom.min === 'number') {
-              await videoTrack.applyConstraints({
-                advanced: [{ zoom: caps.zoom.min }]
-              }).catch(() => {});
-            }
-          }
-        }
+  function toggleManualRec() {
+    if (isRecording) stopRecording();
+    else startRecording();
+  }
 
-        const videoEl = document.getElementById('cameraPreview');
-        videoEl.srcObject = localStream;
-        await videoEl.play().catch(() => {});
+  function startRecording() {
+    if (isRecording) return;
+    try {
+      // HUD合成キャンバスを録画（映像＋HUD焼込）
+      const stream = canvas.captureStream(30);
+      recordedChunks = [];
+      mediaRecorder = new MediaRecorder(stream, { mimeType: "video/webm;codecs=vp9" });
+      mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) recordedChunks.push(e.data); };
+      mediaRecorder.onstop = saveRecordedVideo;
+      mediaRecorder.start(1000);
+      isRecording = true;
+      const pill = document.getElementById("recStatus");
+      pill.textContent = "● REC (HUD BURN-IN)";
+      pill.className = "status-pill rec";
+      document.getElementById("btnManualRec").classList.add("danger");
+    } catch (e) {
+      console.warn("MediaRecorder unavailable:", e);
+    }
+  }
 
-        activeDataConns.forEach(conn => {
-          if (conn.open && peer) {
-            peer.call(conn.peer, localStream);
-          }
-        });
+  function stopRecording() {
+    if (!isRecording || !mediaRecorder) return;
+    isRecording = false;
+    mediaRecorder.stop();
+    const pill = document.getElementById("recStatus");
+    pill.textContent = "REC: SAVED";
+    pill.className = "status-pill";
+    document.getElementById("btnManualRec").classList.remove("danger");
+  }
 
-        return true;
-      } catch (err) {
-        logMsg('Camera Error: ' + err.message);
-        return false;
+  function saveRecordedVideo() {
+    if (recordedChunks.length === 0) return;
+    const blob = new Blob(recordedChunks, { type: "video/webm" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    a.href = url;
+    a.download = `38Racing_Onboard_HUD_${ts}.webm`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function recordTelemetrySample() {
+    traceHist.push({ thr: telem.thr, brk: telem.brk, spd: telem.spd, gx: telem.gx });
+    if (traceHist.length > MAX_TRACE) traceHist.shift();
+
+    csvRows.push([
+      Date.now(), telem.lap, telem.distM.toFixed(1), telem.lapTime.toFixed(3),
+      telem.spd.toFixed(1), telem.rpm, telem.gear, telem.thr, telem.brk,
+      telem.gx.toFixed(2), telem.gy.toFixed(2), telem.steer.toFixed(1), telem.wtemp
+    ].join(","));
+
+    // 車速連動オート録画判定
+    if (autoRecEnabled) {
+      if (telem.spd >= 10) {
+        belowSpeedSince = null;
+        if (!isRecording) startRecording();
+      } else if (isRecording) {
+        if (!belowSpeedSince) belowSpeedSince = Date.now();
+        if (Date.now() - belowSpeedSince > 10000) stopRecording();
       }
     }
+  }
 
-    document.getElementById('btnWideLens').addEventListener('click', async () => {
-      await loadVideoDevices();
-      if (videoDevices.length <= 1) {
-        await startCamera();
-        return;
-      }
-      currentDeviceIndex = (currentDeviceIndex + 1) % videoDevices.length;
-      const targetCam = videoDevices[currentDeviceIndex];
-      await startCamera(targetCam.deviceId);
-    });
+  function exportCsvLog() {
+    const blob = new Blob([csvRows.join("\n")], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `38Racing_Telemetry_${Date.now()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
-    const btnDemo = document.getElementById('btnDemo');
-    btnDemo.addEventListener('click', () => {
-      isDemoMode = !isDemoMode;
-      btnDemo.textContent = isDemoMode ? 'DEMO: ON' : 'DEMO: OFF (0km/h)';
-      btnDemo.className = isDemoMode
-        ? 'px-2.5 py-2 bg-amber-500/20 border border-amber-400/50 text-amber-300 text-xs font-bold rounded'
-        : 'px-2.5 py-2 bg-slate-800 border border-white/10 text-slate-400 text-xs font-bold rounded';
-    });
+  function toggleSim() {
+    simActive = !simActive;
+    const btn = document.getElementById("btnSim");
+    btn.textContent = simActive ? "SIM: ON" : "SIM: OFF";
+    btn.classList.toggle("active", simActive);
+    document.getElementById("waitBanner").style.display = (simActive || hasVideoStream || dataConn) ? "none" : "block";
+  }
 
-    // M5Stack BLE接続（Solo 2 DLのlap / distM / lapTime / lastLap / lat / lonも受信して中継）
-    document.getElementById('btnBle').addEventListener('click', async () => {
-      if (!navigator.bluetooth) {
-        logMsg('Web Bluetooth非対応ブラウザです（Android Chrome / iOS Bluefy推奨）');
-        return;
-      }
-      try {
-        logMsg('M5Stackを検索中...');
-        const device = await navigator.bluetooth.requestDevice({
-          filters: [{ namePrefix: 'M5' }],
-          optionalServices: [NUS_SERVICE_UUID]
-        });
-        const server = await device.gatt.connect();
-        const service = await server.getPrimaryService(NUS_SERVICE_UUID);
-        const char = await service.getCharacteristic(NUS_TX_CHAR_UUID);
-        await char.startNotifications();
+  function formatLap(sec) {
+    const s = Math.max(0, sec || 0);
+    const m = Math.floor(s / 60);
+    const r = (s - m * 60).toFixed(2).padStart(5, "0");
+    return `${m}'${r}`;
+  }
 
-        bleConnected = true;
-        isDemoMode = false;
-        btnDemo.textContent = 'DEMO: OFF';
-        document.getElementById('bleBadge').textContent = 'M5 BLE: LINKED';
-        document.getElementById('bleBadge').className = 'px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 font-bold';
-        logMsg('M5Stack & Solo 2 DL Linked!');
+  function roundRect(c, x, y, w, h, r) {
+    c.beginPath();
+    c.moveTo(x + r, y);
+    c.arcTo(x + w, y, x + w, y + h, r);
+    c.arcTo(x + w, y + h, x, y + h, r);
+    c.arcTo(x, y + h, x, y, r);
+    c.arcTo(x, y, x + w, y, r);
+    c.closePath();
+  }
 
-        let buffer = '';
-        char.addEventListener('characteristicvaluechanged', (e) => {
-          const chunk = new TextDecoder().decode(e.target.value);
-          buffer += chunk;
-          let lines = buffer.split('\n');
-          buffer = lines.pop();
-          for (let line of lines) {
-            if (!line.trim()) continue;
-            try {
-              const d = JSON.parse(line);
-              latestTelemetry = {
-                spd: d.spd ?? 0,
-                rpm: d.rpm ?? 0,
-                gear: d.gear ?? 1,
-                thr: d.thr ?? 0,
-                brk: d.brk ?? 0,
-                gx: d.gx ?? 0,
-                gy: d.gy ?? 0,
-                steer: d.steer ?? 0,
-                wtemp: d.wtemp ?? 85,
-                lap: d.lap,
-                distM: d.distM,
-                lapTime: d.lapTime,
-                lastLap: d.lastLap,
-                lat: d.lat,
-                lon: d.lon
-              };
-            } catch (err) {}
-          }
-        });
-      } catch (err) {
-        logMsg('BLE Error: ' + err.message);
-      }
-    });
+  // --- 60fps GT7風 HUD 描画ループ ---
+  function renderHUD() {
+    const W = canvas.width;
+    const H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
 
-    document.getElementById('btnStartTx').addEventListener('click', async () => {
-      const roomCode = document.getElementById('roomInput').value.trim().toUpperCase();
-      if (!roomCode) return;
-
-      if (!localStream) {
-        const ok = await startCamera();
-        if (!ok) return;
-      }
-
-      if (peer) peer.destroy();
-      activeDataConns = [];
-
-      const peerId = 'RACE-CAR-' + roomCode;
-      peer = new Peer(peerId, PEER_CONFIG);
-
-      peer.on('open', () => {
-        document.getElementById('txDot').className = 'w-3 h-3 rounded-full bg-emerald-400 animate-ping';
-        document.getElementById('txStatus').textContent = 'ON AIR: ' + roomCode;
-        document.getElementById('btnStartTx').textContent = 'TRANSMITTING (配信中)';
-        document.getElementById('btnStartTx').className = 'py-2.5 bg-cyan-600 text-white font-extrabold text-base rounded tracking-wider shadow-lg';
-      });
-
-      peer.on('connection', (conn) => {
-        activeDataConns.push(conn);
-        updatePitCount();
-
-        conn.on('open', () => {
-          if (localStream) {
-            peer.call(conn.peer, localStream);
-          }
-        });
-
-        conn.on('data', (data) => {
-          if (data && data.type === 'REQUEST_VIDEO' && localStream) {
-            peer.call(conn.peer, localStream);
-          }
-        });
-
-        conn.on('close', () => {
-          activeDataConns = activeDataConns.filter(c => c !== conn);
-          updatePitCount();
-        });
-      });
-
-      peer.on('call', (call) => {
-        if (localStream) {
-          call.answer(localStream);
-        }
-      });
-    });
-
-    function updatePitCount() {
-      const count = activeDataConns.filter(c => c.open).length;
-      const badge = document.getElementById('pitBadge');
-      badge.textContent = `PIT PC: ${count}`;
-      badge.className = count > 0
-        ? 'px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-400/50 font-bold'
-        : 'px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-white/10';
+    // 受信映像がある場合はHUDキャンバスにも転写（録画焼込用）
+    if (hasVideoStream && videoEl.readyState >= 2) {
+      ctx.drawImage(videoEl, 0, 0, W, H);
     }
 
-    setInterval(() => {
-      if (!bleConnected) {
-        if (isDemoMode) {
-          demoPhase += 0.05;
-          const wave = Math.sin(demoPhase);
-          const brkZone = wave < -0.25 ? Math.min(100, Math.round((-wave - 0.25) * 145)) : 0;
-          const thrZone = brkZone === 0 ? Math.min(100, Math.max(0, Math.round((wave + 0.3) * 90))) : 0;
-          const spd = Math.round(135 + wave * 65);
-          latestTelemetry = {
-            spd: spd,
-            rpm: Math.round(3800 + (spd % 45) * 80),
-            gear: spd > 175 ? 5 : spd > 135 ? 4 : spd > 95 ? 3 : 2,
-            thr: thrZone,
-            brk: brkZone,
-            gx: Number((brkZone > 0 ? -brkZone * 0.012 : thrZone * 0.004).toFixed(2)),
-            gy: Number((Math.cos(demoPhase * 0.8) * 1.15).toFixed(2)),
-            steer: Math.round(Math.cos(demoPhase * 0.8) * 95)
-          };
-        } else {
-          latestTelemetry = {
-            spd: 0, rpm: 850, gear: 1, thr: 0, brk: 0, gx: 0, gy: 0, steer: 0
-          };
-        }
+    // 1. 最上部 15連シフトLEDバー
+    const ledCount = 15;
+    const ledTotalW = Math.min(760, W * 0.56);
+    const ledStartX = (W - ledTotalW) / 2;
+    const ledGap = 6;
+    const ledW = (ledTotalW - ledGap * (ledCount - 1)) / ledCount;
+    const revLim = 7000;
+    const ratio = telem.rpm / revLim;
+    const flash = (telem.rpm >= revLim) && (Math.floor(Date.now() / 65) % 2 === 0);
+
+    for (let i = 0; i < ledCount; i++) {
+      const thresh = 0.50 + (0.50 * i / (ledCount - 1));
+      let col = "rgba(30,41,59,0.75)";
+      if (telem.rpm >= revLim) {
+        col = flash ? "#ef4444" : "rgba(30,41,59,0.75)";
+      } else if (ratio >= thresh) {
+        col = i < 5 ? "#22c55e" : i < 10 ? "#f59e0b" : "#ef4444";
       }
+      ctx.fillStyle = col;
+      roundRect(ctx, ledStartX + i * (ledW + ledGap), 12, ledW, 14, 4);
+      ctx.fill();
+    }
 
-      document.getElementById('valSpd').textContent = Math.round(latestTelemetry.spd);
-      document.getElementById('valRpm').textContent = Math.round(latestTelemetry.rpm);
-      document.getElementById('valThr').textContent = Math.round(latestTelemetry.thr);
-      document.getElementById('valBrk').textContent = Math.round(latestTelemetry.brk);
-      document.getElementById('valLap').textContent = latestTelemetry.lap ? `L${latestTelemetry.lap}` : 'SIM';
-      document.getElementById('valDist').textContent = latestTelemetry.distM !== undefined ? `${Math.round(latestTelemetry.distM)}m` : '--';
+    // 2. 左上：サーキットコースマップ ＆ 自車ドット
+    const cKey = document.getElementById("circuitSelect").value;
+    const circuit = CIRCUITS[cKey] || CIRCUITS.FSW;
+    const mapX = 20, mapY = 24, mapW = 240, mapH = 175;
+    ctx.fillStyle = "rgba(10, 15, 24, 0.78)";
+    ctx.strokeStyle = "rgba(88, 114, 152, 0.45)";
+    ctx.lineWidth = 1.5;
+    roundRect(ctx, mapX, mapY, mapW, mapH, 10);
+    ctx.fill(); ctx.stroke();
 
-      const payload = {
-        t: Date.now(),
-        ...latestTelemetry
-      };
-      activeDataConns.forEach(conn => {
-        if (conn.open) {
-          conn.send(payload);
-        }
-      });
-    }, 40);
+    ctx.fillStyle = "#22d3ee";
+    ctx.font = "bold 11px sans-serif";
+    ctx.fillText(circuit.name, mapX + 12, mapY + 18);
 
-    window.addEventListener('load', async () => {
-      await startCamera();
-      await loadVideoDevices();
-      if (currentDeviceIndex > 0 && videoDevices[currentDeviceIndex]) {
-        await startCamera(videoDevices[currentDeviceIndex].deviceId);
+    ctx.strokeStyle = "#64748b";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    circuit.pts.forEach((p, idx) => {
+      const px = mapX + 16 + p[0] * (mapW - 32);
+      const py = mapY + 24 + p[1] * (mapH - 36);
+      if (idx === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    });
+    ctx.stroke();
+
+    // 走行距離割合からコース上の自車ドット位置を計算
+    const prog = ((telem.distM || 0) % circuit.len) / circuit.len;
+    const segFloat = prog * (circuit.pts.length - 1);
+    const segIdx = Math.floor(segFloat);
+    const segT = segFloat - segIdx;
+    const pA = circuit.pts[segIdx] || circuit.pts[0];
+    const pB = circuit.pts[segIdx + 1] || circuit.pts[0];
+    const carX = mapX + 16 + (pA[0] + (pB[0] - pA[0]) * segT) * (mapW - 32);
+    const carY = mapY + 24 + (pA[1] + (pB[1] - pA[1]) * segT) * (mapH - 36);
+    ctx.fillStyle = "#fbbf24";
+    ctx.beginPath(); ctx.arc(carX, carY, 6, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.stroke();
+
+    // 3. 右上：ラップ・セクタータイムボード
+    const secW = 290, secH = 215, secX = W - secW - 20, secY = 24;
+    ctx.fillStyle = "rgba(10, 15, 24, 0.80)";
+    ctx.strokeStyle = "rgba(88, 114, 152, 0.45)";
+    roundRect(ctx, secX, secY, secW, secH, 10);
+    ctx.fill(); ctx.stroke();
+
+    ctx.fillStyle = "#22d3ee";
+    ctx.font = "bold 13px sans-serif";
+    ctx.fillText(`LAP ${telem.lap}  (${Math.round(telem.distM)}m)`, secX + 14, secY + 22);
+
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "italic 900 32px sans-serif";
+    ctx.fillText(formatLap(telem.lapTime), secX + 14, secY + 58);
+
+    const dPos = (telem.liveDelta || 0) <= 0;
+    ctx.fillStyle = dPos ? "#2563eb" : "#ef4444";
+    roundRect(ctx, secX + secW - 92, secY + 32, 78, 30, 6);
+    ctx.fill();
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 15px sans-serif";
+    ctx.fillText(`${telem.liveDelta >= 0 ? "+" : ""}${telem.liveDelta.toFixed(2)}`, secX + secW - 84, secY + 52);
+
+    const rows = [
+      { lbl: "S1", val: formatLap(telem.s1), d: telem.dS1 },
+      { lbl: "S2", val: formatLap(telem.s2), d: telem.dS2 },
+      { lbl: "S3", val: formatLap(telem.s3), d: telem.dS3 },
+      { lbl: "LAST", val: formatLap(telem.lastLap), d: null },
+      { lbl: "BEST", val: formatLap(telem.bestLap), d: null }
+    ];
+    rows.forEach((r, idx) => {
+      const ry = secY + 86 + idx * 25;
+      ctx.fillStyle = idx === 4 ? "#22c55e" : "#94a3b8";
+      ctx.font = "bold 13px sans-serif";
+      ctx.fillText(r.lbl, secX + 14, ry);
+
+      ctx.fillStyle = idx === 4 ? "#22c55e" : "#f8fafc";
+      ctx.font = "italic bold 16px sans-serif";
+      ctx.fillText(r.val, secX + 82, ry);
+
+      if (r.d !== null) {
+        ctx.fillStyle = r.d <= 0 ? "#38bdf8" : "#f87171";
+        ctx.font = "bold 13px sans-serif";
+        ctx.fillText(`${r.d >= 0 ? "+" : ""}${r.d.toFixed(2)}`, secX + 215, ry);
       }
     });
-  </script>
+
+    // 4. 下部中央：GT7風スピード・ギア・ペダルバー
+    const hudW = 460, hudH = 136, hudX = (W - hudW) / 2, hudY = H - hudH - 18;
+    ctx.fillStyle = "rgba(10, 15, 24, 0.84)";
+    ctx.strokeStyle = "rgba(88, 114, 152, 0.5)";
+    roundRect(ctx, hudX, hudY, hudW, hudH, 12);
+    ctx.fill(); ctx.stroke();
+
+    // タコメーター横バー
+    const barW = hudW - 32;
+    ctx.fillStyle = "#1e293b";
+    ctx.fillRect(hudX + 16, hudY + 14, barW, 12);
+    ctx.fillStyle = telem.rpm >= revLim ? "#ef4444" : "#fbbf24";
+    ctx.fillRect(hudX + 16, hudY + 14, barW * Math.min(1, telem.rpm / 8000), 12);
+
+    // ギア表示
+    ctx.strokeStyle = "#f59e0b";
+    ctx.lineWidth = 2;
+    roundRect(ctx, hudX + 18, hudY + 38, 72, 82, 8);
+    ctx.stroke();
+    ctx.fillStyle = "#f59e0b";
+    ctx.font = "italic 900 54px sans-serif";
+    ctx.fillText(String(telem.gear || 1), hudX + 36, hudY + 98);
+
+    // 車速 & RPM
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "italic 900 62px sans-serif";
+    ctx.fillText(String(Math.round(telem.spd)).padStart(3, " "), hudX + 110, hudY + 98);
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "bold 14px sans-serif";
+    ctx.fillText("km/h", hudX + 235, hudY + 98);
+    ctx.fillStyle = "#fbbf24";
+    ctx.fillText(`${Math.round(telem.rpm)} rpm  |  WT ${telem.wtemp}°C`, hudX + 112, hudY + 118);
+
+    // ブレーキ（赤）＆ アクセル（緑）縦バー
+    const drawPedalBar = (bx, pct, color, label) => {
+      ctx.fillStyle = "#1e293b";
+      ctx.fillRect(bx, hudY + 38, 28, 82);
+      const fh = 82 * (Math.min(100, Math.max(0, pct)) / 100);
+      ctx.fillStyle = color;
+      ctx.fillRect(bx, hudY + 38 + (82 - fh), 28, fh);
+      ctx.fillStyle = "#cbd5e1";
+      ctx.font = "bold 10px sans-serif";
+      ctx.fillText(label, bx + 3, hudY + 131);
+    };
+    drawPedalBar(hudX + hudW - 92, telem.brk, "#ef4444", "BRK");
+    drawPedalBar(hudX + hudW - 48, telem.thr, "#22c55e", "THR");
+
+    // 5. 左下：Gボール（摩擦円）
+    const gRad = 64, gCx = 94, gCy = H - gRad - 22;
+    ctx.fillStyle = "rgba(10, 15, 24, 0.82)";
+    ctx.beginPath(); ctx.arc(gCx, gCy, gRad, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "rgba(88, 114, 152, 0.5)"; ctx.stroke();
+    ctx.beginPath(); ctx.arc(gCx, gCy, gRad * 0.5, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(gCx - gRad, gCy); ctx.lineTo(gCx + gRad, gCy);
+    ctx.moveTo(gCx, gCy - gRad); ctx.lineTo(gCx, gCy + gRad);
+    ctx.stroke();
+
+    const dotX = gCx + Math.max(-1, Math.min(1, telem.gy / 1.5)) * (gRad - 8);
+    const dotY = gCy - Math.max(-1, Math.min(1, telem.gx / 1.5)) * (gRad - 8);
+    ctx.fillStyle = "#fbbf24";
+    ctx.beginPath(); ctx.arc(dotX, dotY, 7, 0, Math.PI * 2); ctx.fill();
+
+    // 6. 右下：4ch 細線オシロスコープ
+    const oscW = 290, oscH = 128, oscX = W - oscW - 20, oscY = H - oscH - 22;
+    ctx.fillStyle = "rgba(10, 15, 24, 0.82)";
+    ctx.strokeStyle = "rgba(88, 114, 152, 0.45)";
+    roundRect(ctx, oscX, oscY, oscW, oscH, 10);
+    ctx.fill(); ctx.stroke();
+
+    const drawTrace = (getter, color) => {
+      if (traceHist.length < 2) return;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      traceHist.forEach((pt, idx) => {
+        const tx = oscX + 8 + (idx / (MAX_TRACE - 1)) * (oscW - 16);
+        const val = Math.max(0, Math.min(1, getter(pt)));
+        const ty = oscY + oscH - 10 - val * (oscH - 24);
+        if (idx === 0) ctx.moveTo(tx, ty); else ctx.lineTo(tx, ty);
+      });
+      ctx.stroke();
+    };
+    drawTrace(p => p.thr / 100, "#22c55e");
+    drawTrace(p => p.brk / 100, "#ef4444");
+    drawTrace(p => p.spd / 240, "#22d3ee");
+    drawTrace(p => (p.gx + 1.5) / 3.0, "#fbbf24");
+
+    requestAnimationFrame(renderHUD);
+  }
+
+  // --- 単体HUD表示シミュレーション用タイマー ---
+  setInterval(() => {
+    if (!simActive) return;
+    simPhase += 0.04;
+    const w = Math.sin(simPhase);
+    telem.brk = w < -0.25 ? Math.min(100, Math.round((-w - 0.25) * 140)) : 0;
+    telem.thr = telem.brk === 0 ? Math.min(100, Math.round((w + 0.3) * 90)) : 0;
+    telem.spd = 138 + w * 62;
+    telem.rpm = 3800 + Math.abs(Math.sin(simPhase * 1.4)) * 3600;
+    telem.gear = telem.spd > 170 ? 5 : telem.spd > 130 ? 4 : telem.spd > 92 ? 3 : 2;
+    telem.gx = telem.brk > 0 ? -telem.brk * 0.012 : telem.thr * 0.004;
+    telem.gy = Math.cos(simPhase * 0.7) * 1.2;
+    telem.distM += (telem.spd / 3.6) * 0.04;
+    telem.lapTime += 0.04;
+    recordTelemetrySample();
+  }, 40);
+
+  initPeer();
+  renderHUD();
+</script>
 </body>
 </html>
