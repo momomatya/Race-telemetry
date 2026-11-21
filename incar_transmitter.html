@@ -82,10 +82,10 @@
 
     <div class="grid grid-cols-2 gap-2">
       <button id="btnBle" class="py-2.5 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-bold text-sm rounded tracking-wider shadow">
-        1. CONNECT M5 BLE
+1. CONNECT M5 BLE
       </button>
       <button id="btnStartTx" class="py-2.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-extrabold text-base rounded tracking-wider shadow-lg">
-        2. START TX (配信開始)
+2. START TX (配信開始)
       </button>
     </div>
     <div id="logBox" class="text-[11px] mono text-slate-400 truncate">Solo 2 DL優先＋スマホ内蔵GPSでのライン通過自動検知に対応しています。</div>
@@ -106,13 +106,16 @@
       }
     };
 
-    // 各サーキットのコントロールライン（スタート/フィニッシュライン）中心座標・検知半径(m)・最小ラップ秒数
+    // 各サーキットのコントロールライン（スタート/フィニッシュライン）中心座標・検知半径(m)・最小ラップ秒数（8サーキット対応）
     const CIRCUIT_START_LINES = {
       fsw:       { name: 'FSW',       lat: 35.37222, lon: 138.92694, radiusM: 28, minLapSec: 85, lengthM: 4563 },
       motegi:    { name: 'MOTEGI',    lat: 36.53310, lon: 140.22665, radiusM: 28, minLapSec: 90, lengthM: 4801 },
+      sugo:      { name: 'SUGO',      lat: 38.13860, lon: 140.77530, radiusM: 28, minLapSec: 70, lengthM: 3586 },
       nikko:     { name: 'NIKKO',     lat: 36.68755, lon: 139.84062, radiusM: 22, minLapSec: 32, lengthM: 1047 },
       sodegaura: { name: 'SODEGAURA', lat: 35.40835, lon: 140.07115, radiusM: 25, minLapSec: 55, lengthM: 2436 },
-      tsukuba:   { name: 'TC2000',    lat: 36.17975, lon: 139.98895, radiusM: 25, minLapSec: 48, lengthM: 2045 }
+      tsukuba:   { name: 'TC2000',    lat: 36.17975, lon: 139.98895, radiusM: 25, minLapSec: 48, lengthM: 2045 },
+      mobara:    { name: 'MOBARA',    lat: 35.43075, lon: 140.25180, radiusM: 22, minLapSec: 38, lengthM: 1170 },
+      honjo:     { name: 'HONJO',     lat: 36.20390, lon: 139.13170, radiusM: 22, minLapSec: 36, lengthM: 1112 }
     };
 
     let localStream = null;
@@ -143,7 +146,7 @@
 
     let latestTelemetry = {
       spd: 0, rpm: 850, gear: 1, thr: 0, brk: 0, gx: 0, gy: 0, steer: 0,
-      wtemp: 85, lap: 1, distM: 0, lapTime: 0, lastLap: 0, lat: undefined, lon: undefined
+      wtemp: 85, fuel: 0, lap: 1, distM: 0, lapTime: 0, lastLap: 0, lat: undefined, lon: undefined
     };
 
     function logMsg(msg) {
@@ -366,6 +369,7 @@
                 gy: d.gy ?? 0,
                 steer: d.steer ?? 0,
                 wtemp: d.wtemp ?? 85,
+                fuel: d.fuel ?? 0,
                 // Solo 2 DLのタイム・距離・GPSがあれば優先し、無ければスマホ内蔵GPSのライン検知値を使用
                 lap: d.lap ?? phoneGpsState.lap,
                 distM: d.distM ?? phoneGpsState.distM,
