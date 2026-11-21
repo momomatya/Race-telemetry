@@ -348,9 +348,12 @@
       <select id="selectCourse" class="w-full bg-slate-950 border border-white/20 rounded px-2 py-1.5 text-white font-bold">
         <option value="fsw">富士スピードウェイ (FSW - 4,563m)</option>
         <option value="motegi">モビリティリゾートもてぎ (4,801m)</option>
+        <option value="sugo">スポーツランドSUGO (3,586m)</option>
         <option value="nikko">日光サーキット (1,047m)</option>
         <option value="sodegaura">袖ヶ浦フォレストレースウェイ (2,436m)</option>
         <option value="tsukuba">筑波サーキット TC2000 (2,045m)</option>
+        <option value="mobara">茂原ツインサーキット 東 (1,170m)</option>
+        <option value="honjo">本庄サーキット (1,112m)</option>
       </select>
 
       <div class="pt-1.5 border-t border-white/10 space-y-1.5">
@@ -456,6 +459,18 @@
           [0.32, 0.45], [0.20, 0.25]
         ]
       },
+      sugo: {
+        name: 'スポーツランドSUGO',
+        short: 'SUGO',
+        lat: 38.1386, lon: 140.7753,
+        length: 3586, s1End: 1150, s2End: 2350,
+        refS1: 28.500, refS2: 33.200, refS3: 32.800,
+        track: [
+          [0.18, 0.25], [0.78, 0.22], [0.88, 0.42], [0.72, 0.58],
+          [0.82, 0.78], [0.48, 0.85], [0.20, 0.70], [0.12, 0.45],
+          [0.18, 0.25]
+        ]
+      },
       nikko: {
         name: '日光サーキット',
         short: 'NIKKO',
@@ -487,6 +502,28 @@
         track: [
           [0.18, 0.30], [0.72, 0.25], [0.85, 0.45], [0.55, 0.55],
           [0.82, 0.75], [0.30, 0.82], [0.12, 0.58], [0.18, 0.30]
+        ]
+      },
+      mobara: {
+        name: '茂原ツインサーキット 東',
+        short: 'MOBARA',
+        lat: 35.4307, lon: 140.2518,
+        length: 1170, s1End: 390, s2End: 780,
+        refS1: 15.200, refS2: 16.500, refS3: 15.800,
+        track: [
+          [0.18, 0.28], [0.80, 0.28], [0.86, 0.52], [0.62, 0.60],
+          [0.74, 0.80], [0.32, 0.82], [0.14, 0.58], [0.18, 0.28]
+        ]
+      },
+      honjo: {
+        name: '本庄サーキット',
+        short: 'HONJO',
+        lat: 36.2039, lon: 139.1317,
+        length: 1112, s1End: 370, s2End: 740,
+        refS1: 14.500, refS2: 15.800, refS3: 14.900,
+        track: [
+          [0.16, 0.28], [0.82, 0.26], [0.88, 0.50], [0.64, 0.58],
+          [0.78, 0.78], [0.28, 0.80], [0.14, 0.56], [0.16, 0.28]
         ]
       }
     };
