@@ -1005,6 +1005,19 @@
         dataConn.on('data', (data) => {
           if (data && typeof data.spd !== 'undefined' && !isReviewMode) {
             telem = { ...telem, ...data };
+
+            // Tab5側でサーキットが切り替わったらPC側も自動同期
+            if (data.trk && data.trk !== window._lastSyncedTrk) {
+              const matchedEntry = Object.entries(CIRCUIT_DB).find(([k, c]) => c.short === data.trk);
+              if (matchedEntry) {
+                window._lastSyncedTrk = data.trk;
+                window._autoCourseDetected = true; // GPS自動判定による上書きを防止
+                if (matchedEntry[0] !== currentCourseKey) {
+                  applyCourseSelection(matchedEntry[0]);
+                }
+              }
+            }
+
             if (data.lat && data.lon && Math.abs(data.lat) > 20 && !window._autoCourseDetected) {
               window._autoCourseDetected = true;
               selectNearestCourseByCoords(data.lat, data.lon);
