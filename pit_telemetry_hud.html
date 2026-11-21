@@ -67,7 +67,7 @@
   <canvas id="simCanvas" class="absolute inset-0 w-full h-full object-cover z-0"></canvas>
 
   <!-- 録画焼き込み用オフスクリーン合成Canvas（1280x720 HD） -->
-  <canvas id="compositeCanvas" width="1280" height="720" class="hidden"></canvas>
+  <canvas id="compositeCanvas" width="1920" height="1080" class="hidden"></canvas>
 
   <!-- 上部ヘッダーバー -->
   <header class="relative z-30 flex items-center justify-between px-2.5 py-1 bg-[#070a12]/95 border-b border-white/15 text-[11px] font-bold tracking-wider">
@@ -1081,7 +1081,7 @@
 
       try {
         mediaRecorder = selectedMime
-          ? new MediaRecorder(targetStream, { mimeType: selectedMime, videoBitsPerSecond: 6000000 })
+          ? new MediaRecorder(targetStream, { mimeType: selectedMime, videoBitsPerSecond: 8000000 })
           : new MediaRecorder(targetStream);
       } catch (e) {
         mediaRecorder = new MediaRecorder(targetStream);
@@ -1518,7 +1518,7 @@
     }
 
     function renderBurnInCompositeFrame() {
-      const CW = 1280, CH = 720;
+      const CW = 1920, CH = 1080;
       compCtx.fillStyle = '#000000';
       compCtx.fillRect(0, 0, CW, CH);
 
