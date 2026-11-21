@@ -144,26 +144,10 @@
       lastUpdateMs: performance.now()
     };
 
-    latestTelemetry = {
-                spd: d.spd ?? 0,
-                rpm: d.rpm ?? 0,
-                gear: d.gear ?? 1,
-                thr: d.thr ?? 0,
-                brk: d.brk ?? 0,
-                gx: d.gx ?? 0,
-                gy: d.gy ?? 0,
-                steer: d.steer ?? 0,
-                wtemp: d.wtemp ?? 85,
-                fuel: d.fuel ?? 0,
-                trk: d.trk ?? undefined,
-                // Solo 2 DLのタイム・距離・GPSがあれば優先し、無ければスマホ内蔵GPSのライン検知値を使用
-                lap: d.lap ?? phoneGpsState.lap,
-                distM: d.distM ?? phoneGpsState.distM,
-                lapTime: d.lapTime ?? phoneGpsState.lapTime,
-                lastLap: d.lastLap ?? phoneGpsState.lastLap,
-                lat: (d.lat && Math.abs(d.lat) > 20) ? d.lat : phoneGpsState.lat,
-                lon: (d.lon && Math.abs(d.lon) > 20) ? d.lon : phoneGpsState.lon
-              };
+    let latestTelemetry = {
+      spd: 0, rpm: 850, gear: 1, thr: 0, brk: 0, gx: 0, gy: 0, steer: 0,
+      wtemp: 85, fuel: 0, trk: undefined, lap: 1, distM: 0, lapTime: 0, lastLap: 0, lat: undefined, lon: undefined
+    };
 
     function logMsg(msg) {
       console.log(msg);
@@ -386,6 +370,7 @@
                 steer: d.steer ?? 0,
                 wtemp: d.wtemp ?? 85,
                 fuel: d.fuel ?? 0,
+                trk: d.trk ?? undefined,
                 // Solo 2 DLのタイム・距離・GPSがあれば優先し、無ければスマホ内蔵GPSのライン検知値を使用
                 lap: d.lap ?? phoneGpsState.lap,
                 distM: d.distM ?? phoneGpsState.distM,
