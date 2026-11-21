@@ -8,7 +8,7 @@
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,500;0,600;0,700;0,800;0,900;1,700;1,800;1,900&family=JetBrains+Mono:wght@500;600;700;800&family=Oswald:ital,wght@0,600;0,700;1,700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,500;0,600;0,700;0,800;0,900;1,700;1,800;1,900&family=JetBrains+Mono:wght@400;500;600;700;800&family=Oswald:ital,wght@0,400;0,600;0,700;1,700&display=swap" rel="stylesheet">
   <style>
     body {
       font-family: 'Barlow Condensed', sans-serif;
@@ -53,6 +53,9 @@
     .resize-handle:hover {
       color: #38bdf8;
     }
+    .drive-bg {
+      background: #02040a !important;
+    }
   </style>
 </head>
 <body class="w-screen h-screen flex flex-col justify-between overflow-hidden relative bg-black select-none">
@@ -66,7 +69,7 @@
   <!-- カメラ未接続時の背景Canvas -->
   <canvas id="simCanvas" class="absolute inset-0 w-full h-full object-cover z-0"></canvas>
 
-  <!-- 録画焼き込み用オフスクリーン合成Canvas（1280x720 HD） -->
+  <!-- 録画焼き込み用オフスクリーン合成Canvas（1920x1080 Full HD） -->
   <canvas id="compositeCanvas" width="1920" height="1080" class="hidden"></canvas>
 
   <!-- 上部ヘッダーバー -->
@@ -81,7 +84,7 @@
       <span class="text-slate-600">|</span>
       <span id="statLatency" class="mono text-cyan-400 font-bold">244ms</span>
       <span class="text-slate-600">|</span>
-      <span id="recTimerBadge" class="mono text-slate-300">720p 60FPS</span>
+      <span id="recTimerBadge" class="mono text-slate-300">1080p 60FPS</span>
     </div>
 
     <div class="flex items-center gap-1.5">
@@ -90,7 +93,7 @@
         <input id="inputRoomCode" type="text" value="ND-27" class="bg-transparent text-white font-bold mono text-[11px] w-12 focus:outline-none uppercase" />
       </div>
       <button id="btnConnectCar" class="px-2.5 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-[11px] rounded tracking-wider shadow">
-        LINKED 📡
+        CONNECT 📡
       </button>
       <button id="btnSaveDir" class="px-2 py-0.5 bg-[#161f33] hover:bg-slate-700 text-amber-300 text-[11px] font-extrabold rounded border border-amber-500/40" title="録画ファイル・ログの保存先フォルダを指定">
         📁 保存先: 標準
@@ -115,6 +118,9 @@
       </button>
       <button id="btnResetHud" class="px-2 py-0.5 bg-[#161f33] hover:bg-slate-700 text-cyan-300 text-[11px] font-bold rounded border border-cyan-500/30">
         ↺ RESET
+      </button>
+      <button id="btnToggleMode" class="px-2.5 py-0.5 bg-indigo-700 hover:bg-indigo-600 text-white font-extrabold text-[11px] rounded border border-indigo-400/50 tracking-wider shadow">
+        🚘 P4: DRIVE
       </button>
       <button id="btnToggleSim" class="px-2 py-0.5 bg-cyan-900/60 hover:bg-cyan-800 text-cyan-200 text-[11px] font-extrabold rounded border border-cyan-400/40">
         ⚙ コース/設定
@@ -151,179 +157,340 @@
     </button>
   </div>
 
-  <!-- HUDメイン領域 -->
+  <!-- HUDメイン領域 (標準 / ドライブ モード共用) -->
   <main id="hudContainer" class="relative flex-1 w-full h-full overflow-hidden z-20 pointer-events-none">
 
-    <!-- 1. 左上：スピード＆ギアパネル -->
-    <div id="panelSpeedo" data-base-w="115" data-base-h="82" data-min-w="95" data-min-h="65"
-         class="absolute pointer-events-auto gt-panel rounded-sm p-2 flex flex-col justify-between"
-         style="top: 14px; left: 88px; width: 115px; height: 82px; --ui-scale: 1;">
-      <div>
-        <div class="hud-handle flex justify-between items-center text-[calc(0.5rem*var(--ui-scale))] font-bold text-slate-400 tracking-wider mb-0.5">
-          <span>⠿ ENGINE SPEED</span>
-          <span id="hudRpm" class="mono text-slate-200">4,580</span>
-        </div>
-        <div class="w-full bg-slate-800 h-1.5 rounded-sm overflow-hidden">
-          <div id="hudRpmBar" class="bg-gradient-to-r from-cyan-400 via-blue-500 to-rose-500 h-full w-[62%] transition-all duration-75"></div>
-        </div>
-      </div>
-
-      <div class="flex items-end justify-between pt-1">
+    <!-- 通常HUD -->
+    <div id="standardHUD" class="absolute inset-0 pointer-events-none block">
+      <!-- 1. 左上：スピード＆ギアパネル -->
+      <div id="panelSpeedo" data-base-w="115" data-base-h="82" data-min-w="95" data-min-h="65"
+           class="absolute pointer-events-auto gt-panel rounded-sm p-2 flex flex-col justify-between"
+           style="top: 14px; left: 88px; width: 115px; height: 82px; --ui-scale: 1;">
         <div>
-          <div class="flex items-baseline gap-0.5">
-            <span id="hudSpeed" class="text-[calc(2.1rem*var(--ui-scale))] font-black italic oswald text-white leading-none tracking-tight">92</span>
-            <span class="text-[calc(0.5rem*var(--ui-scale))] text-slate-400 font-bold">KM/H</span>
+          <div class="hud-handle flex justify-between items-center text-[calc(0.5rem*var(--ui-scale))] font-bold text-slate-400 tracking-wider mb-0.5">
+            <span>⠿ ENGINE SPEED</span>
+            <span id="hudRpm" class="mono text-slate-200">4,580</span>
+          </div>
+          <div class="w-full bg-slate-800 h-1.5 rounded-sm overflow-hidden">
+            <div id="hudRpmBar" class="bg-gradient-to-r from-cyan-400 via-blue-500 to-rose-500 h-full w-[62%] transition-all duration-75"></div>
           </div>
         </div>
-        <div class="text-right leading-none">
-          <div class="text-[calc(0.45rem*var(--ui-scale))] font-bold text-slate-400">GEAR</div>
-          <span id="hudGear" class="text-[calc(1.75rem*var(--ui-scale))] font-black oswald text-amber-400 leading-none">4</span>
-        </div>
-      </div>
 
-      <div class="absolute left-0 right-0 -bottom-7 flex justify-between text-[calc(0.52rem*var(--ui-scale))] mono text-slate-300 pointer-events-none">
-        <div>
-          <div class="text-[calc(0.42rem*var(--ui-scale))] text-slate-400 font-bold">STEER</div>
-          <div id="hudSteer" class="font-bold text-white">-1.2°</div>
-        </div>
-        <div class="text-right">
-          <div class="text-[calc(0.42rem*var(--ui-scale))] text-slate-400 font-bold">LAP DIST</div>
-          <div id="hudLapDist" class="font-bold text-white">1,637m [S1]</div>
-        </div>
-      </div>
-
-      <div class="resize-handle">⤡</div>
-    </div>
-
-    <!-- 2. 左上隣：GT7風 セクタータイム＆デルタボード -->
-    <div id="panelTimingBoard" data-base-w="115" data-base-h="96" data-min-w="95" data-min-h="75"
-         class="absolute pointer-events-auto gt-panel rounded-sm p-1.5 flex flex-col justify-between"
-         style="top: 14px; left: 204px; width: 115px; height: 96px; --ui-scale: 1;">
-      <div class="hud-handle space-y-[2px] text-[calc(0.58rem*var(--ui-scale))] mono font-bold leading-tight">
-        <div class="grid grid-cols-12 items-center">
-          <span class="col-span-2 text-slate-400 text-center bg-slate-800/80 rounded-sm text-[calc(0.5rem*var(--ui-scale))]">3</span>
-          <span id="timeS3" class="col-span-6 text-right pr-1.5 text-slate-100">0'21.549</span>
-          <span id="badgeS3" class="col-span-4 text-center bg-blue-600 text-white rounded-sm py-[1px] text-[calc(0.52rem*var(--ui-scale))]">-0.210</span>
-        </div>
-        <div class="grid grid-cols-12 items-center">
-          <span class="col-span-2 text-slate-400 text-center bg-slate-800/80 rounded-sm text-[calc(0.5rem*var(--ui-scale))]">2</span>
-          <span id="timeS2" class="col-span-6 text-right pr-1.5 text-slate-100">0'38.183</span>
-          <span id="badgeS2" class="col-span-4 text-center bg-blue-600 text-white rounded-sm py-[1px] text-[calc(0.52rem*var(--ui-scale))]">-0.340</span>
-        </div>
-        <div class="grid grid-cols-12 items-center">
-          <span class="col-span-2 text-slate-200 text-center bg-slate-700 rounded-sm text-[calc(0.5rem*var(--ui-scale))]">1</span>
-          <span id="timeS1" class="col-span-6 text-right pr-1.5 text-white font-extrabold">0'24.699</span>
-          <span id="badgeS1" class="col-span-4 text-center bg-slate-700/80 text-slate-300 rounded-sm py-[1px] text-[calc(0.5rem*var(--ui-scale))]">LIVE</span>
-        </div>
-        <div class="grid grid-cols-12 items-center pt-0.5 border-t border-white/10">
-          <span class="col-span-3 text-slate-400 text-[calc(0.48rem*var(--ui-scale))]">LAST</span>
-          <span id="timeLast" class="col-span-5 text-right pr-1 text-slate-300 text-[calc(0.52rem*var(--ui-scale))]">1'55.016</span>
-          <span id="badgeLast" class="col-span-4 text-center bg-rose-600 text-white rounded-sm py-[1px] text-[calc(0.52rem*var(--ui-scale))]">+0.420</span>
-        </div>
-        <div class="grid grid-cols-12 items-center">
-          <span class="col-span-3 text-emerald-400 text-[calc(0.48rem*var(--ui-scale))]">BEST</span>
-          <span id="timeBest" class="col-span-6 text-right pr-1 text-emerald-400 text-[calc(0.52rem*var(--ui-scale))]">1'54.596</span>
-          <span id="labelBestSource" class="col-span-3 text-right text-slate-500 text-[calc(0.45rem*var(--ui-scale))]">REF</span>
-        </div>
-        <div class="grid grid-cols-12 items-center">
-          <span class="col-span-3 text-amber-400 text-[calc(0.48rem*var(--ui-scale))]">OPT.</span>
-          <span id="timeOpt" class="col-span-6 text-right pr-1 text-amber-400 text-[calc(0.52rem*var(--ui-scale))]">1'54.120</span>
-          <span id="labelOpt" class="col-span-3 text-right text-slate-500 text-[calc(0.45rem*var(--ui-scale))]">IDEAL</span>
-        </div>
-      </div>
-      <div class="resize-handle">⤡</div>
-    </div>
-
-    <!-- 3. 中央上：スリムLIVE LAPタイマー -->
-    <div id="panelLap" data-base-w="145" data-base-h="32" data-min-w="115" data-min-h="26"
-         class="absolute pointer-events-auto gt-panel rounded-sm px-2.5 py-1 flex items-center justify-between"
-         style="top: 14px; left: 50%; transform: translateX(-50%); width: 145px; height: 32px; --ui-scale: 1;">
-      <div class="hud-handle leading-none">
-        <div id="hudLapNum" class="text-[calc(0.44rem*var(--ui-scale))] font-extrabold text-amber-400">LAP 01</div>
-        <div id="hudCurrentSector" class="text-[calc(0.45rem*var(--ui-scale))] font-extrabold text-cyan-400">SECTOR 1</div>
-      </div>
-      <div id="hudLapTime" class="text-[calc(1.05rem*var(--ui-scale))] font-black mono text-white leading-none tracking-tight">0'10.883</div>
-      <span id="hudLiveDeltaBadge" class="px-1 py-[1px] rounded-sm bg-cyan-950 text-cyan-300 mono text-[calc(0.45rem*var(--ui-scale))] font-bold border border-cyan-500/40">LIVE</span>
-      <div class="resize-handle">⤡</div>
-    </div>
-
-    <!-- 4. 右上：GPS サーキットマップ（いったん非表示） -->
-    <div id="panelGpsMap" data-base-w="88" data-base-h="68" data-min-w="70" data-min-h="55"
-         class="hidden absolute pointer-events-auto gt-panel rounded-sm p-1.5 flex-col justify-between"
-         style="top: 14px; right: 162px; width: 88px; height: 68px; --ui-scale: 1;">
-      <div class="hud-handle flex justify-between items-center text-[calc(0.45rem*var(--ui-scale))] font-bold">
-        <span class="text-cyan-400">● GPS</span>
-        <span id="hudCourseShort" class="text-slate-200">FSW</span>
-      </div>
-      <canvas id="gpsCanvas" class="w-full flex-1"></canvas>
-      <div class="resize-handle">⤡</div>
-    </div>
-
-    <!-- 5. 右上端：G-BALL -->
-    <div id="panelGBall" data-base-w="68" data-base-h="68" data-min-w="55" data-min-h="55"
-         class="absolute pointer-events-auto gt-panel rounded-sm p-1.5 flex flex-col justify-between"
-         style="top: 14px; right: 88px; width: 68px; height: 68px; --ui-scale: 1;">
-      <div class="hud-handle flex justify-between items-center text-[calc(0.45rem*var(--ui-scale))] font-bold">
-        <span class="text-slate-300">⠿ G-BALL</span>
-        <span id="hudGTotal" class="mono text-amber-400 font-extrabold">1.14G</span>
-      </div>
-      <canvas id="gCanvas" class="w-full flex-1"></canvas>
-      <div class="absolute left-0 right-0 -bottom-4 text-[calc(0.42rem*var(--ui-scale))] mono text-center text-slate-300 whitespace-nowrap pointer-events-none">
-        LAT:<span id="hudGLat" class="text-cyan-300 font-bold">-0.71</span> LON:<span id="hudGLon" class="text-rose-400 font-bold">-0.15</span>
-      </div>
-      <div class="resize-handle">⤡</div>
-    </div>
-
-    <!-- 6. 下部：4chテレメトリ・トレース（LAST 30s・5倍低速＆滑らか曲線仕様） -->
-    <div id="panelPedals" data-base-w="880" data-base-h="66" data-min-w="420" data-min-h="50"
-         class="absolute pointer-events-auto gt-panel rounded-sm px-3 py-1.5 flex flex-col justify-between"
-         style="bottom: 10px; left: 50%; transform: translateX(-50%); width: 880px; height: 66px; --ui-scale: 1;">
-
-      <div class="hud-handle flex justify-between items-center text-[calc(0.66rem*var(--ui-scale))] font-extrabold tracking-wide">
-        <div class="flex items-center gap-3">
-          <span class="text-white flex items-center gap-1"><span class="text-cyan-400">⠿</span>•TELEMETRY TRACE (LAST 30s)</span>
-          <span class="text-emerald-400">■ THR: <span id="labelThr" class="mono">0%</span></span>
-          <span class="text-rose-400">■ BRK: <span id="labelBrk" class="mono">59% (5.0 MPa)</span></span>
-          <span class="text-sky-400">■ SPD: <span id="labelSpd" class="mono">92 km/h</span></span>
-          <span class="text-amber-400">■ BEST Δ: <span id="labelDelta" class="mono">+0.00s</span></span>
-        </div>
-        <span class="text-slate-400 text-[calc(0.56rem*var(--ui-scale))] tracking-widest">THR / BRK / SPD / DELTA</span>
-      </div>
-
-      <div class="flex items-end gap-2.5 flex-1 pt-1 overflow-hidden">
-        <div class="flex items-end gap-1.5 h-full pb-0.5 shrink-0">
-          <div class="flex flex-col items-center h-full justify-end">
-            <div class="w-4 flex-1 bg-slate-800/90 rounded-sm overflow-hidden flex flex-col justify-end border border-white/10">
-              <div id="barThr" class="w-full bg-emerald-400" style="height: 0%;"></div>
+        <div class="flex items-end justify-between pt-1">
+          <div>
+            <div class="flex items-baseline gap-0.5">
+              <span id="hudSpeed" class="text-[calc(2.1rem*var(--ui-scale))] font-black italic oswald text-white leading-none tracking-tight">92</span>
+              <span class="text-[calc(0.5rem*var(--ui-scale))] text-slate-400 font-bold">KM/H</span>
             </div>
-            <span class="text-[calc(0.55rem*var(--ui-scale))] font-black text-emerald-400 leading-none mt-0.5">THR</span>
           </div>
-          <div class="flex flex-col items-center h-full justify-end">
-            <div class="w-4 flex-1 bg-slate-800/90 rounded-sm overflow-hidden flex flex-col justify-end border border-white/10">
-              <div id="barBrk" class="w-full bg-rose-500" style="height: 59%;"></div>
-            </div>
-            <span class="text-[calc(0.55rem*var(--ui-scale))] font-black text-rose-500 leading-none mt-0.5">BRK</span>
-          </div>
-          <div class="flex flex-col items-center h-full justify-end">
-            <div class="w-4 flex-1 bg-slate-800/90 rounded-sm overflow-hidden flex flex-col justify-end border border-white/10">
-              <div id="barSpd" class="w-full bg-sky-400" style="height: 42%;"></div>
-            </div>
-            <span class="text-[calc(0.55rem*var(--ui-scale))] font-black text-sky-400 leading-none mt-0.5">SPD</span>
+          <div class="text-right leading-none">
+            <div class="text-[calc(0.45rem*var(--ui-scale))] font-bold text-slate-400">GEAR</div>
+            <span id="hudGear" class="text-[calc(1.75rem*var(--ui-scale))] font-black oswald text-amber-400 leading-none">4</span>
           </div>
         </div>
 
-        <div class="relative flex-1 h-full bg-[#060911]/90 rounded-sm border border-white/10 overflow-hidden">
-          <canvas id="oscilloCanvas" class="w-full h-full block"></canvas>
-          <div class="absolute inset-x-2 bottom-0.5 flex justify-between text-[calc(0.55rem*var(--ui-scale))] mono font-bold text-slate-400 pointer-events-none">
-            <span>-30s</span>
-            <span>-20s</span>
-            <span>-10s</span>
-            <span class="text-cyan-400 font-extrabold">0s (NOW)</span>
+        <div class="absolute left-0 right-0 -bottom-7 flex justify-between text-[calc(0.52rem*var(--ui-scale))] mono text-slate-300 pointer-events-none">
+          <div>
+            <div class="text-[calc(0.42rem*var(--ui-scale))] text-slate-400 font-bold">STEER</div>
+            <div id="hudSteer" class="font-bold text-white">-1.2°</div>
+          </div>
+          <div class="text-right">
+            <div class="text-[calc(0.42rem*var(--ui-scale))] text-slate-400 font-bold">LAP DIST</div>
+            <div id="hudLapDist" class="font-bold text-white">1,637m [S1]</div>
           </div>
         </div>
+
+        <div class="resize-handle">⤡</div>
       </div>
 
-      <div class="resize-handle">⤡</div>
+      <!-- 2. 左上隣：GT7風 セクタータイム＆デルタボード -->
+      <div id="panelTimingBoard" data-base-w="115" data-base-h="96" data-min-w="95" data-min-h="75"
+           class="absolute pointer-events-auto gt-panel rounded-sm p-1.5 flex flex-col justify-between"
+           style="top: 14px; left: 204px; width: 115px; height: 96px; --ui-scale: 1;">
+        <div class="hud-handle space-y-[2px] text-[calc(0.58rem*var(--ui-scale))] mono font-bold leading-tight">
+          <div class="grid grid-cols-12 items-center">
+            <span class="col-span-2 text-slate-400 text-center bg-slate-800/80 rounded-sm text-[calc(0.5rem*var(--ui-scale))]">3</span>
+            <span id="timeS3" class="col-span-6 text-right pr-1.5 text-slate-100">0'21.549</span>
+            <span id="badgeS3" class="col-span-4 text-center bg-blue-600 text-white rounded-sm py-[1px] text-[calc(0.52rem*var(--ui-scale))]">-0.210</span>
+          </div>
+          <div class="grid grid-cols-12 items-center">
+            <span class="col-span-2 text-slate-400 text-center bg-slate-800/80 rounded-sm text-[calc(0.5rem*var(--ui-scale))]">2</span>
+            <span id="timeS2" class="col-span-6 text-right pr-1.5 text-slate-100">0'38.183</span>
+            <span id="badgeS2" class="col-span-4 text-center bg-blue-600 text-white rounded-sm py-[1px] text-[calc(0.52rem*var(--ui-scale))]">-0.340</span>
+          </div>
+          <div class="grid grid-cols-12 items-center">
+            <span class="col-span-2 text-slate-200 text-center bg-slate-700 rounded-sm text-[calc(0.5rem*var(--ui-scale))]">1</span>
+            <span id="timeS1" class="col-span-6 text-right pr-1.5 text-white font-extrabold">0'24.699</span>
+            <span id="badgeS1" class="col-span-4 text-center bg-slate-700/80 text-slate-300 rounded-sm py-[1px] text-[calc(0.5rem*var(--ui-scale))]">LIVE</span>
+          </div>
+          <div class="grid grid-cols-12 items-center pt-0.5 border-t border-white/10">
+            <span class="col-span-3 text-slate-400 text-[calc(0.48rem*var(--ui-scale))]">LAST</span>
+            <span id="timeLast" class="col-span-5 text-right pr-1 text-slate-300 text-[calc(0.52rem*var(--ui-scale))]">1'55.016</span>
+            <span id="badgeLast" class="col-span-4 text-center bg-rose-600 text-white rounded-sm py-[1px] text-[calc(0.52rem*var(--ui-scale))]">+0.420</span>
+          </div>
+          <div class="grid grid-cols-12 items-center">
+            <span class="col-span-3 text-emerald-400 text-[calc(0.48rem*var(--ui-scale))]">BEST</span>
+            <span id="timeBest" class="col-span-6 text-right pr-1 text-emerald-400 text-[calc(0.52rem*var(--ui-scale))]">1'54.596</span>
+            <span id="labelBestSource" class="col-span-3 text-right text-slate-500 text-[calc(0.45rem*var(--ui-scale))]">REF</span>
+          </div>
+          <div class="grid grid-cols-12 items-center">
+            <span class="col-span-3 text-amber-400 text-[calc(0.48rem*var(--ui-scale))]">OPT.</span>
+            <span id="timeOpt" class="col-span-6 text-right pr-1 text-amber-400 text-[calc(0.52rem*var(--ui-scale))]">1'54.120</span>
+            <span id="labelOpt" class="col-span-3 text-right text-slate-500 text-[calc(0.45rem*var(--ui-scale))]">IDEAL</span>
+          </div>
+        </div>
+        <div class="resize-handle">⤡</div>
+      </div>
+
+      <!-- 3. 中央上：スリムLIVE LAPタイマー -->
+      <div id="panelLap" data-base-w="145" data-base-h="32" data-min-w="115" data-min-h="26"
+           class="absolute pointer-events-auto gt-panel rounded-sm px-2.5 py-1 flex items-center justify-between"
+           style="top: 14px; left: 50%; transform: translateX(-50%); width: 145px; height: 32px; --ui-scale: 1;">
+        <div class="hud-handle leading-none">
+          <div id="hudLapNum" class="text-[calc(0.44rem*var(--ui-scale))] font-extrabold text-amber-400">LAP 01</div>
+          <div id="hudCurrentSector" class="text-[calc(0.45rem*var(--ui-scale))] font-extrabold text-cyan-400">SECTOR 1</div>
+        </div>
+        <div id="hudLapTime" class="text-[calc(1.05rem*var(--ui-scale))] font-black mono text-white leading-none tracking-tight">0'10.883</div>
+        <span id="hudLiveDeltaBadge" class="px-1 py-[1px] rounded-sm bg-cyan-950 text-cyan-300 mono text-[calc(0.45rem*var(--ui-scale))] font-bold border border-cyan-500/40">LIVE</span>
+        <div class="resize-handle">⤡</div>
+      </div>
+
+      <!-- 4. 右上：GPS サーキットマップ（非表示） -->
+      <div id="panelGpsMap" data-base-w="88" data-base-h="68" data-min-w="70" data-min-h="55"
+           class="hidden absolute pointer-events-auto gt-panel rounded-sm p-1.5 flex-col justify-between"
+           style="top: 14px; right: 162px; width: 88px; height: 68px; --ui-scale: 1;">
+        <div class="hud-handle flex justify-between items-center text-[calc(0.45rem*var(--ui-scale))] font-bold">
+          <span class="text-cyan-400">● GPS</span>
+          <span id="hudCourseShort" class="text-slate-200">FSW</span>
+        </div>
+        <canvas id="gpsCanvas" class="w-full flex-1"></canvas>
+        <div class="resize-handle">⤡</div>
+      </div>
+
+      <!-- 5. 右上端：G-BALL -->
+      <div id="panelGBall" data-base-w="68" data-base-h="68" data-min-w="55" data-min-h="55"
+           class="absolute pointer-events-auto gt-panel rounded-sm p-1.5 flex flex-col justify-between"
+           style="top: 14px; right: 88px; width: 68px; height: 68px; --ui-scale: 1;">
+        <div class="hud-handle flex justify-between items-center text-[calc(0.45rem*var(--ui-scale))] font-bold">
+          <span class="text-slate-300">⠿ G-BALL</span>
+          <span id="hudGTotal" class="mono text-amber-400 font-extrabold">1.14G</span>
+        </div>
+        <canvas id="gCanvas" class="w-full flex-1"></canvas>
+        <div class="absolute left-0 right-0 -bottom-4 text-[calc(0.42rem*var(--ui-scale))] mono text-center text-slate-300 whitespace-nowrap pointer-events-none">
+          LAT:<span id="hudGLat" class="text-cyan-300 font-bold">-0.71</span> LON:<span id="hudGLon" class="text-rose-400 font-bold">-0.15</span>
+        </div>
+        <div class="resize-handle">⤡</div>
+      </div>
+
+      <!-- 6. 下部：4chテレメトリ・トレース（LAST 30s） -->
+      <div id="panelPedals" data-base-w="880" data-base-h="66" data-min-w="420" data-min-h="50"
+           class="absolute pointer-events-auto gt-panel rounded-sm px-3 py-1.5 flex flex-col justify-between"
+           style="bottom: 10px; left: 50%; transform: translateX(-50%); width: 880px; height: 66px; --ui-scale: 1;">
+
+        <div class="hud-handle flex justify-between items-center text-[calc(0.66rem*var(--ui-scale))] font-extrabold tracking-wide">
+          <div class="flex items-center gap-3">
+            <span class="text-white flex items-center gap-1"><span class="text-cyan-400">⠿</span>•TELEMETRY TRACE (LAST 30s)</span>
+            <span class="text-emerald-400">■ THR: <span id="labelThr" class="mono">0%</span></span>
+            <span class="text-rose-400">■ BRK: <span id="labelBrk" class="mono">59% (5.0 MPa)</span></span>
+            <span class="text-sky-400">■ SPD: <span id="labelSpd" class="mono">92 km/h</span></span>
+            <span class="text-amber-400">■ BEST Δ: <span id="labelDelta" class="mono">+0.00s</span></span>
+          </div>
+          <span class="text-slate-400 text-[calc(0.56rem*var(--ui-scale))] tracking-widest">THR / BRK / SPD / DELTA</span>
+        </div>
+
+        <div class="flex items-end gap-2.5 flex-1 pt-1 overflow-hidden">
+          <div class="flex items-end gap-1.5 h-full pb-0.5 shrink-0">
+            <div class="flex flex-col items-center h-full justify-end">
+              <div class="w-4 flex-1 bg-slate-800/90 rounded-sm overflow-hidden flex flex-col justify-end border border-white/10">
+                <div id="barThr" class="w-full bg-emerald-400" style="height: 0%;"></div>
+              </div>
+              <span class="text-[calc(0.55rem*var(--ui-scale))] font-black text-emerald-400 leading-none mt-0.5">THR</span>
+            </div>
+            <div class="flex flex-col items-center h-full justify-end">
+              <div class="w-4 flex-1 bg-slate-800/90 rounded-sm overflow-hidden flex flex-col justify-end border border-white/10">
+                <div id="barBrk" class="w-full bg-rose-500" style="height: 59%;"></div>
+              </div>
+              <span class="text-[calc(0.55rem*var(--ui-scale))] font-black text-rose-500 leading-none mt-0.5">BRK</span>
+            </div>
+            <div class="flex flex-col items-center h-full justify-end">
+              <div class="w-4 flex-1 bg-slate-800/90 rounded-sm overflow-hidden flex flex-col justify-end border border-white/10">
+                <div id="barSpd" class="w-full bg-sky-400" style="height: 42%;"></div>
+              </div>
+              <span class="text-[calc(0.55rem*var(--ui-scale))] font-black text-sky-400 leading-none mt-0.5">SPD</span>
+            </div>
+          </div>
+
+          <div class="relative flex-1 h-full bg-[#060911]/90 rounded-sm border border-white/10 overflow-hidden">
+            <canvas id="oscilloCanvas" class="w-full h-full block"></canvas>
+            <div class="absolute inset-x-2 bottom-0.5 flex justify-between text-[calc(0.55rem*var(--ui-scale))] mono font-bold text-slate-400 pointer-events-none">
+              <span>-30s</span>
+              <span>-20s</span>
+              <span>-10s</span>
+              <span class="text-cyan-400 font-extrabold">0s (NOW)</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="resize-handle">⤡</div>
+      </div>
+    </div>
+
+    <!-- ドライブ専用HUD（🚘 P4: DRIVE 選択時に表示） -->
+    <div id="driveHUD" class="absolute inset-0 pointer-events-none hidden">
+      <div id="panelDrive" data-base-w="960" data-base-h="460" data-min-w="640" data-min-h="320"
+           class="absolute pointer-events-auto bg-slate-950/95 border border-white/15 rounded-md p-4 flex flex-col justify-between"
+           style="top: 50%; left: 50%; transform: translate(-50%, -50%); width: 920px; height: 440px; --ui-scale: 1;">
+        
+        <div class="hud-handle flex justify-between items-center border-b border-white/10 pb-2 mb-2">
+          <div class="flex items-center gap-2">
+            <span class="px-2 py-0.5 rounded bg-indigo-900 border border-indigo-400 text-[10px] font-extrabold">🚘 DRIVE MODE (P4)</span>
+            <span class="text-[12px] font-bold text-slate-300">STREET HUD & VEHICLE VITALS</span>
+          </div>
+          <div class="flex items-center gap-3 text-[11px] mono text-slate-400">
+            <span>TEMP: <span id="drvAmbient" class="text-white font-bold">25°C</span></span>
+            <span>|</span>
+            <span id="drvStatus" class="text-emerald-400 font-extrabold">● SYSTEM OK</span>
+          </div>
+        </div>
+
+        <div class="flex-1 grid grid-cols-12 gap-4 overflow-hidden">
+          <!-- 左エリア：水温・燃料・ステアリング角 -->
+          <div class="col-span-3 flex flex-col justify-around bg-slate-900/40 border border-white/5 rounded-md p-2.5">
+            <div>
+              <div class="flex justify-between items-baseline mb-0.5">
+                <span class="text-[10px] text-slate-400 font-extrabold">WATER TEMP</span>
+                <span id="drvWaterText" class="text-[16px] text-white oswald font-bold">88°C</span>
+              </div>
+              <div class="w-full bg-slate-800 h-2 rounded overflow-hidden">
+                <div id="drvWaterBar" class="bg-white h-full" style="width: 68%;"></div>
+              </div>
+            </div>
+
+            <div class="pt-2">
+              <div class="flex justify-between items-baseline mb-0.5">
+                <span class="text-[10px] text-slate-400 font-extrabold">FUEL</span>
+                <span id="drvFuelText" class="text-[16px] text-white oswald font-bold">74%</span>
+              </div>
+              <div class="w-full bg-slate-800 h-2 rounded overflow-hidden">
+                <div id="drvFuelBar" class="bg-white h-full" style="width: 74%;"></div>
+              </div>
+              <div id="drvFuelReserve" class="text-[9px] text-amber-500 font-bold mt-0.5 hidden animate-pulse">⚠️ RESERVE LOW</div>
+            </div>
+
+            <div class="pt-2 border-t border-white/5 flex items-center justify-between">
+              <div>
+                <span class="text-[9px] text-slate-400 font-extrabold block leading-tight">STEER ANGLE</span>
+                <span id="drvSteerText" class="text-[14px] text-white font-bold mono">-1.2°</span>
+              </div>
+              <svg id="drvSteerSvg" class="w-9 h-9 text-white opacity-90 transition-transform duration-75" viewBox="0 0 100 100" style="transform: rotate(-1.2deg);">
+                <circle cx="50" cy="50" r="42" stroke="currentColor" stroke-width="5" fill="none" stroke-dasharray="10 4" />
+                <line x1="15" y1="50" x2="85" y2="50" stroke="currentColor" stroke-width="7" />
+                <line x1="50" y1="50" x2="50" y2="8" stroke="currentColor" stroke-width="6" />
+                <circle cx="50" cy="50" r="10" fill="currentColor" />
+              </svg>
+            </div>
+          </div>
+
+          <!-- 中央エリア：ホワイトタコ＆スピード・ギア -->
+          <div class="col-span-5 flex flex-col items-center justify-center relative bg-slate-900/20 border border-white/5 rounded-md overflow-hidden p-2">
+            <svg class="w-[205px] h-[205px] -rotate-90 select-none" viewBox="0 0 200 200">
+              <circle cx="100" cy="100" r="88" stroke="rgba(255, 255, 255, 0.08)" stroke-width="12" fill="none" />
+              <circle id="svgTachoBar" cx="100" cy="100" r="88" stroke="#ffffff" stroke-width="12" fill="none" stroke-dasharray="552.92" stroke-dashoffset="240" stroke-linecap="round" />
+              <circle cx="100" cy="100" r="88" stroke="#f43f5e" stroke-width="12" fill="none" stroke-dasharray="69 483" stroke-dashoffset="483" transform="rotate(248 100 100)" />
+              <circle cx="100" cy="100" r="76" fill="#02040a" />
+            </svg>
+
+            <div class="absolute inset-0 flex flex-col justify-center items-center text-center pointer-events-none select-none">
+              <div class="leading-none mt-2 select-none">
+                <span id="drvSpeed" class="text-[54px] font-black oswald italic text-white tracking-tight leading-none">82</span>
+                <span class="text-[12px] text-slate-400 font-extrabold block">KM/H</span>
+              </div>
+              <div class="text-center leading-none mt-1">
+                <span id="drvGear" class="text-[34px] font-black text-white leading-none">4</span>
+                <span class="text-[9px] text-cyan-400 font-bold block tracking-widest mt-0.5">DRIVE</span>
+              </div>
+              <div class="absolute bottom-6 font-bold mono text-[10px] text-slate-400">
+                <span id="drvRpm" class="text-white">4,580</span> RPM
+              </div>
+            </div>
+
+            <div class="absolute inset-0 pointer-events-none text-[11px] font-black mono text-slate-300">
+              <span class="absolute top-[82%] left-[23%]">0</span>
+              <span class="absolute top-[52%] left-[16%]">1</span>
+              <span class="absolute top-[28%] left-[24%]">2</span>
+              <span class="absolute top-[15%] left-[40%]">3</span>
+              <span class="absolute top-[15%] right-[40%]">4</span>
+              <span class="absolute top-[28%] right-[24%]">5</span>
+              <span class="absolute top-[52%] right-[16%]">6</span>
+              <span class="absolute top-[78%] right-[26%]">7</span>
+              <span class="absolute top-[88%] left-[49%] text-rose-500 font-extrabold text-[12px]">8</span>
+            </div>
+          </div>
+
+          <!-- 右エリア：時計・電圧・0.8G Gボール・TRIP -->
+          <div class="col-span-4 flex flex-col justify-between bg-slate-900/40 border border-white/5 rounded-md p-2.5">
+            <div class="flex justify-between items-start border-b border-white/5 pb-2">
+              <div>
+                <div id="drvClock" class="text-[28px] font-bold text-white mono leading-none tracking-wider">22:42</div>
+                <div id="drvClockSub" class="text-[10px] text-slate-400 font-extrabold tracking-widest uppercase mt-0.5">10:42 PM</div>
+              </div>
+              <div class="text-right">
+                <div id="drvVoltage" class="text-[18px] font-bold text-white mono leading-none">14.2V</div>
+                <span class="text-[9px] text-slate-400 font-extrabold">BATTERY</span>
+                <div class="w-14 bg-slate-800 h-1.5 rounded overflow-hidden mt-1 inline-block">
+                  <div id="drvVoltsBar" class="bg-white h-full" style="width: 82%;"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="flex-1 flex items-center gap-3 py-2 overflow-hidden">
+              <div class="relative w-28 h-28 shrink-0 bg-slate-950 rounded-full border border-white/10 flex items-center justify-center">
+                <canvas id="drvGCanvas" class="w-full h-full block"></canvas>
+                <div class="absolute top-1 left-0 right-0 text-center text-[7px] text-slate-400 font-bold uppercase">0.8G MAX</div>
+              </div>
+              <div class="flex-1 space-y-1.5">
+                <div class="text-[9px] text-slate-400 font-extrabold uppercase">ACCELEROMETER</div>
+                <div class="flex items-baseline justify-between">
+                  <span class="text-[10px] text-slate-400">LAT G:</span>
+                  <span id="drvGLat" class="text-[14px] text-white font-bold mono">0.05G</span>
+                </div>
+                <div class="flex items-baseline justify-between">
+                  <span class="text-[10px] text-slate-400">LON G:</span>
+                  <span id="drvGLon" class="text-[14px] text-white font-bold mono">-0.12G</span>
+                </div>
+                <div class="grid grid-cols-2 gap-1.5 pt-1">
+                  <div>
+                    <span class="text-[7px] text-emerald-400 font-black block">THR</span>
+                    <div class="w-full bg-slate-800 h-1 rounded overflow-hidden">
+                      <div id="drvThrBar" class="bg-emerald-400 h-full" style="width: 0%;"></div>
+                    </div>
+                  </div>
+                  <div>
+                    <span class="text-[7px] text-rose-500 font-black block">BRK</span>
+                    <div class="w-full bg-slate-800 h-1 rounded overflow-hidden">
+                      <div id="drvBrkBar" class="bg-rose-500 h-full" style="width: 0%;"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="bg-indigo-950/20 border border-indigo-500/10 rounded p-1.5 flex items-center justify-between pointer-events-auto cursor-pointer active:bg-indigo-900/30"
+                 id="btnResetTrip" title="クリック / タップで走行距離と経過時間をリセット">
+              <div>
+                <span class="text-[8px] text-indigo-300 font-extrabold block leading-tight">📍 TRIP A (TAP TO RESET)</span>
+                <span id="drvTrip" class="text-[20px] text-white font-black oswald tracking-wide">0.0 km</span>
+              </div>
+              <div class="text-right">
+                <span class="text-[8px] text-indigo-300 font-extrabold block leading-tight">🕒 TIME</span>
+                <span id="drvTimeElapsed" class="text-[16px] text-white font-bold mono">0h 00m</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="resize-handle">⤡</div>
+      </div>
     </div>
 
   </main>
@@ -343,7 +510,7 @@
           📍 GPS近隣コース検索
         </button>
       </div>
-      <div id="gpsDetectStatus" class="text-[10px] mono text-slate-400">Solo 2 DLのGPS座標、またはPCのGPSから最寄りコースを自動設定します。</div>
+      <div id="gpsDetectStatus" class="text-[10px] mono text-slate-400">Tab5のコース切替と自動連動します（手動・GPS検索も可）。</div>
 
       <select id="selectCourse" class="w-full bg-slate-950 border border-white/20 rounded px-2 py-1.5 text-white font-bold">
         <option value="fsw">富士スピードウェイ (FSW - 4,563m)</option>
@@ -382,7 +549,7 @@
     <div class="space-y-2 bg-slate-900/90 p-2.5 rounded border border-emerald-500/30">
       <div class="font-extrabold text-emerald-300">2. 比較ベストデータ (REF LOG) 設定</div>
       <div class="text-[11px] text-slate-300 leading-snug">
-        過去の走行ログ（<span class="mono text-amber-300">.json</span> または <span class="mono text-amber-300">.csv</span>）を読み込むと、そのログのタイムと各セクターを「BEST基準」としてリアルタイム比較します。
+        過去の走行ログを読み込むと、そのログのタイムと各セクターを「BEST基準」としてリアルタイム比較します。
       </div>
       <label class="block w-full py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white font-extrabold text-center rounded cursor-pointer shadow">
         📂 過去ログを比較BESTとして読み込む
@@ -569,7 +736,7 @@
       lastFrameMs: performance.now()
     };
 
-    // --- 保存先フォルダ選択（File System Access API） ---
+    // --- 保存先フォルダ選択 ---
     let saveDirHandle = null;
 
     async function pickSaveDirectory() {
@@ -584,9 +751,7 @@
         document.getElementById('btnSaveDir').className =
           'px-2 py-0.5 bg-emerald-700/40 hover:bg-emerald-700/60 text-emerald-300 text-[11px] font-extrabold rounded border border-emerald-400/50';
         document.getElementById('saveDirStatus').textContent = `保存先フォルダ: ${dirName}/ (直接保存ON)`;
-      } catch (err) {
-        // キャンセル時は何もしない
-      }
+      } catch (err) {}
     }
 
     document.getElementById('btnSaveDir').addEventListener('click', pickSaveDirectory);
@@ -604,7 +769,7 @@
             return;
           }
         } catch (err) {
-          console.warn('フォルダ書き込み失敗、通常ダウンロードへフォールバック:', err);
+          console.warn('フォルダ書き込み失敗、ダウンロードへフォールバック:', err);
         }
       }
       const a = document.createElement('a');
@@ -889,10 +1054,47 @@
 
     let telem = {
       spd: 92, rpm: 4580, gear: 4, thr: 0, brk: 59, clt: 0, gx: -0.15, gy: -0.71, steer: -1.2,
-      lap: undefined, distM: undefined, lapTime: undefined, lastLap: undefined, lat: undefined, lon: undefined
+      lap: undefined, distM: undefined, lapTime: undefined, lastLap: undefined, lat: undefined, lon: undefined,
+      water: 88, fuel: 74, volts: 14.2, trk: undefined
     };
 
-    // --- オシロスコープ履歴（125ms間隔 × 240点 ＝ 30秒分：従来の約5倍のゆっくりスクロール） ---
+    // --- ドライブモード独自変数 ---
+    let driveModeActive = false;
+    let tripOM = 0;
+    let driveStartTime = Date.now();
+
+    document.getElementById('btnResetTrip').addEventListener('click', () => {
+      tripOM = 0;
+      driveStartTime = Date.now();
+      const tripText = document.getElementById('drvTrip');
+      if (tripText) {
+        tripText.classList.add('scale-105', 'text-amber-400');
+        setTimeout(() => tripText.classList.remove('scale-105', 'text-amber-400'), 400);
+      }
+    });
+
+    const btnToggleMode = document.getElementById('btnToggleMode');
+    btnToggleMode.addEventListener('click', () => {
+      driveModeActive = !driveModeActive;
+      const standardHUD = document.getElementById('standardHUD');
+      const driveHUD = document.getElementById('driveHUD');
+      
+      if (driveModeActive) {
+        standardHUD.classList.add('hidden');
+        driveHUD.classList.remove('hidden');
+        btnToggleMode.textContent = '⏱ HUD: STD';
+        btnToggleMode.className = 'px-2.5 py-0.5 bg-emerald-700 hover:bg-emerald-600 text-white font-extrabold text-[11px] rounded border border-emerald-400/50 tracking-wider shadow';
+        document.getElementById('statusBadge').innerHTML = '<span class="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span> DRIVE // CAR ND-27';
+      } else {
+        standardHUD.classList.remove('hidden');
+        driveHUD.classList.add('hidden');
+        btnToggleMode.textContent = '🚘 P4: DRIVE';
+        btnToggleMode.className = 'px-2.5 py-0.5 bg-indigo-700 hover:bg-indigo-600 text-white font-extrabold text-[11px] rounded border border-indigo-400/50 tracking-wider shadow';
+        document.getElementById('statusBadge').innerHTML = '<span class="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span> LIVE // CAR ND-27';
+      }
+    });
+
+    // --- オシロスコープ履歴（125ms間隔 × 240点） ---
     const oscilloHistory = [];
     const MAX_HISTORY = 240;
     const TRACE_INTERVAL_MS = 125;
@@ -946,7 +1148,7 @@
       } else {
         isAutoSim = false;
         document.getElementById('chkAutoSim').checked = false;
-        telem = { spd: 0, rpm: 850, gear: 1, thr: 0, brk: 0, clt: 0, gx: 0, gy: 0, steer: 0 };
+        telem = { ...telem, spd: 0, rpm: 850, gear: 1, thr: 0, brk: 0, clt: 0, gx: 0, gy: 0, steer: 0, water: 88, fuel: 74, volts: 14.2 };
         btnSimPitStop.textContent = '🚀 テスト走行開始 (自動録画テスト)';
         btnSimPitStop.className = 'w-full py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold rounded shadow';
       }
@@ -1011,7 +1213,7 @@
               const matchedEntry = Object.entries(CIRCUIT_DB).find(([k, c]) => c.short === data.trk);
               if (matchedEntry) {
                 window._lastSyncedTrk = data.trk;
-                window._autoCourseDetected = true; // GPS自動判定による上書きを防止
+                window._autoCourseDetected = true;
                 if (matchedEntry[0] !== currentCourseKey) {
                   applyCourseSelection(matchedEntry[0]);
                 }
@@ -1129,7 +1331,7 @@
       belowSpeedSince = null;
       btnRec.textContent = '⏺ REC';
       btnRec.className = 'px-2.5 py-0.5 bg-rose-700 hover:bg-rose-600 text-white font-extrabold text-[11px] rounded tracking-wider border border-rose-400/40 shadow';
-      document.getElementById('recTimerBadge').textContent = '720p 60FPS';
+      document.getElementById('recTimerBadge').textContent = '1080p 60FPS';
     }
 
     function evaluateAutoRecording(nowMs) {
@@ -1154,7 +1356,7 @@
         } else {
           if (aboveSpeedSince !== null) {
             aboveSpeedSince = null;
-            document.getElementById('recTimerBadge').textContent = '720p 60FPS';
+            document.getElementById('recTimerBadge').textContent = '1080p 60FPS';
           }
         }
       } else {
@@ -1201,6 +1403,10 @@
     function updateLapAndSectorTiming(nowMs) {
       const dtSec = Math.min(0.2, Math.max(0, (nowMs - lapState.lastFrameMs) / 1000));
       lapState.lastFrameMs = nowMs;
+
+      if (telem.spd > 1) {
+        tripOM += (telem.spd / 3.6) * dtSec;
+      }
 
       const hasSoloMasterData = !isAutoSim && (typeof telem.distM === 'number') && (typeof telem.lapTime === 'number');
 
@@ -1424,7 +1630,7 @@
       }
     }
 
-    const panels = document.querySelectorAll('#hudContainer > div');
+    const panels = document.querySelectorAll('#standardHUD > div, #driveHUD #panelDrive');
 
     function updateScale(panel) {
       const baseW = parseFloat(panel.dataset.baseW) || 150;
@@ -1439,7 +1645,7 @@
       let startX, startY, startLeft, startTop, initW, initH;
 
       panel.addEventListener('mousedown', (e) => {
-        if (e.target.classList.contains('resize-handle')) return;
+        if (e.target.classList.contains('resize-handle') || e.target.closest('#btnResetTrip')) return;
         isDragging = true;
         startX = e.clientX;
         startY = e.clientY;
@@ -1496,9 +1702,10 @@
     const oscCtx = oscilloCanvas.getContext('2d');
     const gCanvas = document.getElementById('gCanvas');
     const gCtx = gCanvas.getContext('2d');
+    const drvGCanvas = document.getElementById('drvGCanvas');
+    const dgCtx = drvGCanvas.getContext('2d');
     const sCtx = simCanvas.getContext('2d');
 
-    // --- 滑らか曲線（二次ベジェ補間）描画ヘルパー ---
     function drawSmoothTrace(ctx, points, color, lineWidth) {
       if (points.length < 2) return;
       ctx.strokeStyle = color;
@@ -1517,6 +1724,7 @@
       ctx.stroke();
     }
 
+    // 録画焼き込み用オフスクリーン合成（1920x1080 Full HD）
     function renderBurnInCompositeFrame() {
       const CW = 1920, CH = 1080;
       compCtx.fillStyle = '#000000';
@@ -1567,182 +1775,321 @@
         compCtx.fillStyle = 'rgba(10, 14, 23, 0.88)';
         compCtx.fillRect(b.x, b.y, b.w, b.h);
         compCtx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
-        compCtx.lineWidth = 1;
+        compCtx.lineWidth = 1.5;
         compCtx.strokeRect(b.x, b.y, b.w, b.h);
       }
 
-      // パネル1: スピード＆ギア
-      const bSpd = getBox('panelSpeedo');
-      drawPanelBg(bSpd);
-      compCtx.fillStyle = '#94a3b8';
-      compCtx.font = `bold ${Math.round(bSpd.h * 0.11)}px "Barlow Condensed", sans-serif`;
-      compCtx.fillText('⠿ ENGINE SPEED', bSpd.x + 8, bSpd.y + bSpd.h * 0.16);
-      compCtx.fillStyle = '#e2e8f0';
-      compCtx.textAlign = 'right';
-      compCtx.font = `bold ${Math.round(bSpd.h * 0.12)}px "JetBrains Mono", monospace`;
-      compCtx.fillText(Math.round(telem.rpm).toLocaleString(), bSpd.x + bSpd.w - 8, bSpd.y + bSpd.h * 0.16);
-      compCtx.textAlign = 'left';
+      if (driveModeActive) {
+        // --- 🚘 P4 DRIVE モードの焼き込み ---
+        const bDrv = getBox('panelDrive');
+        compCtx.fillStyle = 'rgba(10, 14, 23, 0.95)';
+        compCtx.fillRect(bDrv.x, bDrv.y, bDrv.w, bDrv.h);
+        compCtx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+        compCtx.lineWidth = 2;
+        compCtx.strokeRect(bDrv.x, bDrv.y, bDrv.w, bDrv.h);
 
-      const barY = bSpd.y + bSpd.h * 0.22;
-      const barW = bSpd.w - 16;
-      compCtx.fillStyle = '#1e293b';
-      compCtx.fillRect(bSpd.x + 8, barY, barW, 6);
-      const rpmRatio = Math.min(1, telem.rpm / 7500);
-      const grad = compCtx.createLinearGradient(bSpd.x + 8, 0, bSpd.x + 8 + barW, 0);
-      grad.addColorStop(0, '#22d3ee');
-      grad.addColorStop(0.5, '#3b82f6');
-      grad.addColorStop(1, '#f43f5e');
-      compCtx.fillStyle = grad;
-      compCtx.fillRect(bSpd.x + 8, barY, barW * rpmRatio, 6);
+        compCtx.fillStyle = '#6366f1';
+        compCtx.fillRect(bDrv.x + 18, bDrv.y + 18, bDrv.w * 0.16, bDrv.h * 0.045);
+        compCtx.fillStyle = '#ffffff';
+        compCtx.font = `900 ${Math.round(bDrv.h * 0.024)}px "Barlow Condensed", sans-serif`;
+        compCtx.fillText('🚘 DRIVE MODE (P4)', bDrv.x + 26, bDrv.y + bDrv.h * 0.045);
 
-      compCtx.fillStyle = '#ffffff';
-      compCtx.font = `italic 900 ${Math.round(bSpd.h * 0.46)}px "Oswald", sans-serif`;
-      compCtx.fillText(String(Math.round(telem.spd)), bSpd.x + 8, bSpd.y + bSpd.h * 0.86);
-      compCtx.fillStyle = '#94a3b8';
-      compCtx.font = `bold ${Math.round(bSpd.h * 0.11)}px "Barlow Condensed", sans-serif`;
-      compCtx.fillText('KM/H', bSpd.x + bSpd.w * 0.48, bSpd.y + bSpd.h * 0.86);
+        compCtx.fillStyle = '#94a3b8';
+        compCtx.font = `bold ${Math.round(bDrv.h * 0.028)}px "Barlow Condensed", sans-serif`;
+        compCtx.fillText('STREET HUD & VEHICLE VITALS', bDrv.x + bDrv.w * 0.19, bDrv.y + bDrv.h * 0.045);
 
-      compCtx.textAlign = 'right';
-      compCtx.fillStyle = '#94a3b8';
-      compCtx.font = `bold ${Math.round(bSpd.h * 0.10)}px "Barlow Condensed", sans-serif`;
-      compCtx.fillText('GEAR', bSpd.x + bSpd.w - 8, bSpd.y + bSpd.h * 0.50);
-      compCtx.fillStyle = '#fbbf24';
-      compCtx.font = `900 ${Math.round(bSpd.h * 0.38)}px "Oswald", sans-serif`;
-      compCtx.fillText(String(telem.gear), bSpd.x + bSpd.w - 8, bSpd.y + bSpd.h * 0.88);
-      compCtx.textAlign = 'left';
+        const xLeft = bDrv.x + 20;
+        const wLeft = bDrv.w * 0.24;
+        const hCard = bDrv.h * 0.82;
+        const yTop = bDrv.y + bDrv.h * 0.12;
 
-      compCtx.fillStyle = '#cbd5e1';
-      compCtx.font = `bold ${Math.round(bSpd.h * 0.12)}px "JetBrains Mono", monospace`;
-      compCtx.fillText(`STEER ${telem.steer}°`, bSpd.x, bSpd.y + bSpd.h + 14);
-      compCtx.textAlign = 'right';
-      compCtx.fillText(document.getElementById('hudLapDist').textContent, bSpd.x + bSpd.w, bSpd.y + bSpd.h + 14);
-      compCtx.textAlign = 'left';
+        compCtx.fillStyle = 'rgba(15, 23, 42, 0.4)';
+        compCtx.fillRect(xLeft, yTop, wLeft, hCard);
+        compCtx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+        compCtx.strokeRect(xLeft, yTop, wLeft, hCard);
 
-      // パネル2: セクタータイムボード
-      const bTim = getBox('panelTimingBoard');
-      drawPanelBg(bTim);
-      const rows = [
-        { s: '3', t: document.getElementById('timeS3').textContent, d: document.getElementById('badgeS3').textContent, bg: document.getElementById('badgeS3').className.includes('rose') ? '#e11d48' : '#2563eb', c: '#fff' },
-        { s: '2', t: document.getElementById('timeS2').textContent, d: document.getElementById('badgeS2').textContent, bg: document.getElementById('badgeS2').className.includes('rose') ? '#e11d48' : '#2563eb', c: '#fff' },
-        { s: '1', t: document.getElementById('timeS1').textContent, d: document.getElementById('badgeS1').textContent, bg: document.getElementById('badgeS1').className.includes('rose') ? '#e11d48' : '#334155', c: '#fff' },
-        { s: 'LAST', t: document.getElementById('timeLast').textContent, d: document.getElementById('badgeLast').textContent, bg: document.getElementById('badgeLast').className.includes('rose') ? '#e11d48' : '#2563eb', c: '#fff' },
-        { s: 'BEST', t: document.getElementById('timeBest').textContent, d: document.getElementById('labelBestSource').textContent, bg: 'transparent', c: '#34d399' },
-        { s: 'OPT.', t: document.getElementById('timeOpt').textContent, d: 'IDEAL', bg: 'transparent', c: '#fbbf24' }
-      ];
-      const rowH = (bTim.h - 10) / 6;
-      rows.forEach((r, idx) => {
-        const ry = bTim.y + 6 + idx * rowH;
-        compCtx.font = `bold ${Math.round(rowH * 0.68)}px "JetBrains Mono", monospace`;
-        compCtx.fillStyle = r.c === '#34d399' || r.c === '#fbbf24' ? r.c : '#cbd5e1';
-        compCtx.fillText(r.s, bTim.x + 6, ry + rowH * 0.72);
-        compCtx.textAlign = 'right';
-        compCtx.fillText(r.t, bTim.x + bTim.w * 0.64, ry + rowH * 0.72);
-        compCtx.textAlign = 'left';
+        compCtx.fillStyle = '#94a3b8';
+        compCtx.font = `bold ${Math.round(bDrv.h * 0.024)}px "Barlow Condensed", sans-serif`;
+        compCtx.fillText('WATER TEMP', xLeft + 14, yTop + 30);
+        compCtx.fillStyle = '#ffffff';
+        compCtx.font = `bold ${Math.round(bDrv.h * 0.035)}px "Oswald", sans-serif`;
+        compCtx.fillText(`${Math.round(telem.water)}°C`, xLeft + wLeft - 68, yTop + 32);
 
-        if (r.bg !== 'transparent') {
-          compCtx.fillStyle = r.bg;
-          compCtx.fillRect(bTim.x + bTim.w * 0.67, ry + 1, bTim.w * 0.29, rowH - 2);
-        }
-        compCtx.fillStyle = r.c;
-        compCtx.textAlign = 'center';
-        compCtx.fillText(r.d, bTim.x + bTim.w * 0.815, ry + rowH * 0.72);
-        compCtx.textAlign = 'left';
-      });
-
-      // パネル3: 中央LIVE LAP
-      const bLap = getBox('panelLap');
-      drawPanelBg(bLap);
-      compCtx.fillStyle = '#fbbf24';
-      compCtx.font = `bold ${Math.round(bLap.h * 0.26)}px "Barlow Condensed", sans-serif`;
-      compCtx.fillText(document.getElementById('hudLapNum').textContent, bLap.x + 8, bLap.y + bLap.h * 0.42);
-      compCtx.fillStyle = '#22d3ee';
-      compCtx.fillText(document.getElementById('hudCurrentSector').textContent, bLap.x + 8, bLap.y + bLap.h * 0.80);
-
-      compCtx.fillStyle = '#ffffff';
-      compCtx.font = `900 ${Math.round(bLap.h * 0.56)}px "JetBrains Mono", monospace`;
-      compCtx.fillText(document.getElementById('hudLapTime').textContent, bLap.x + bLap.w * 0.34, bLap.y + bLap.h * 0.72);
-
-      // パネル5: G-BALL（※GPSコース図は非表示のためスキップ）
-      const bG = getBox('panelGBall');
-      drawPanelBg(bG);
-      compCtx.fillStyle = '#cbd5e1';
-      compCtx.font = `bold ${Math.round(bG.h * 0.14)}px "Barlow Condensed", sans-serif`;
-      compCtx.fillText('G-BALL', bG.x + 5, bG.y + bG.h * 0.20);
-      compCtx.fillStyle = '#fbbf24';
-      compCtx.textAlign = 'right';
-      compCtx.fillText(document.getElementById('hudGTotal').textContent, bG.x + bG.w - 5, bG.y + bG.h * 0.20);
-      compCtx.textAlign = 'left';
-      compCtx.drawImage(gCanvas, bG.x + 4, bG.y + bG.h * 0.24, bG.w - 8, bG.h * 0.72);
-
-      compCtx.fillStyle = '#cbd5e1';
-      compCtx.font = `bold ${Math.round(bG.h * 0.13)}px "JetBrains Mono", monospace`;
-      compCtx.textAlign = 'center';
-      compCtx.fillText(`LAT:${telem.gy.toFixed(2)} LON:${telem.gx.toFixed(2)}`, bG.x + bG.w / 2, bG.y + bG.h + 12);
-      compCtx.textAlign = 'left';
-
-      // パネル6: 下部4chテレメトリ波形オシロスコープ
-      const bPed = getBox('panelPedals');
-      drawPanelBg(bPed);
-      compCtx.font = `800 ${Math.round(bPed.h * 0.18)}px "Barlow Condensed", sans-serif`;
-      compCtx.fillStyle = '#ffffff';
-      compCtx.fillText('⠿•TELEMETRY TRACE (LAST 30s)', bPed.x + 10, bPed.y + bPed.h * 0.25);
-
-      const thrTxt = `■ THR: ${Math.round(telem.thr)}%`;
-      const brkTxt = `■ BRK: ${Math.round(telem.brk)}% (${(telem.brk * 0.085).toFixed(1)} MPa)`;
-      const spdTxt = `■ SPD: ${Math.round(telem.spd)} km/h`;
-      const dSign = lapState.liveDeltaSec >= 0 ? '+' : '';
-      const dltTxt = `■ BEST Δ: ${dSign}${lapState.liveDeltaSec.toFixed(2)}s`;
-
-      compCtx.fillStyle = '#34d399';
-      compCtx.fillText(thrTxt, bPed.x + 215, bPed.y + bPed.h * 0.25);
-      compCtx.fillStyle = '#fb7185';
-      compCtx.fillText(brkTxt, bPed.x + 305, bPed.y + bPed.h * 0.25);
-      compCtx.fillStyle = '#38bdf8';
-      compCtx.fillText(spdTxt, bPed.x + 465, bPed.y + bPed.h * 0.25);
-      compCtx.fillStyle = '#fbbf24';
-      compCtx.fillText(dltTxt, bPed.x + 585, bPed.y + bPed.h * 0.25);
-
-      const miniX = bPed.x + 10;
-      const miniY = bPed.y + bPed.h * 0.34;
-      const miniH = bPed.h * 0.46;
-      const bars = [
-        { val: telem.thr, col: '#34d399', lbl: 'THR' },
-        { val: telem.brk, col: '#f43f5e', lbl: 'BRK' },
-        { val: (telem.spd / 220) * 100, col: '#38bdf8', lbl: 'SPD' }
-      ];
-      bars.forEach((b, i) => {
-        const bx = miniX + i * 20;
         compCtx.fillStyle = '#1e293b';
-        compCtx.fillRect(bx, miniY, 14, miniH);
-        const hVal = (Math.min(100, Math.max(0, b.val)) / 100) * miniH;
-        compCtx.fillStyle = b.col;
-        compCtx.fillRect(bx, miniY + miniH - hVal, 14, hVal);
-        compCtx.font = `900 ${Math.round(bPed.h * 0.13)}px "Barlow Condensed", sans-serif`;
-        compCtx.fillText(b.lbl, bx, bPed.y + bPed.h * 0.94);
-      });
+        compCtx.fillRect(xLeft + 14, yTop + 45, wLeft - 28, 12);
+        compCtx.fillStyle = '#ffffff';
+        compCtx.fillRect(xLeft + 14, yTop + 45, (wLeft - 28) * (telem.water / 130), 12);
 
-      const oscX = miniX + 68;
-      const oscY = bPed.y + bPed.h * 0.32;
-      const oscW = bPed.w - 80;
-      const oscH = bPed.h * 0.60;
-      compCtx.fillStyle = 'rgba(6, 9, 17, 0.92)';
-      compCtx.fillRect(oscX, oscY, oscW, oscH);
-      compCtx.drawImage(oscilloCanvas, oscX, oscY, oscW, oscH);
+        compCtx.fillStyle = '#94a3b8';
+        compCtx.font = `bold ${Math.round(bDrv.h * 0.024)}px "Barlow Condensed", sans-serif`;
+        compCtx.fillText('FUEL', xLeft + 14, yTop + 98);
+        compCtx.fillStyle = '#ffffff';
+        compCtx.font = `bold ${Math.round(bDrv.h * 0.035)}px "Oswald", sans-serif`;
+        compCtx.fillText(`${Math.round(telem.fuel)}%`, xLeft + wLeft - 58, yTop + 100);
 
-      compCtx.fillStyle = '#94a3b8';
-      compCtx.font = `bold ${Math.round(bPed.h * 0.14)}px "JetBrains Mono", monospace`;
-      compCtx.fillText('-30s', oscX + 6, oscY + oscH - 3);
-      compCtx.fillText('-20s', oscX + oscW * 0.33, oscY + oscH - 3);
-      compCtx.fillText('-10s', oscX + oscW * 0.66, oscY + oscH - 3);
-      compCtx.fillStyle = '#22d3ee';
-      compCtx.textAlign = 'right';
-      compCtx.fillText('0s (NOW)', oscX + oscW - 6, oscY + oscH - 3);
-      compCtx.textAlign = 'left';
+        compCtx.fillStyle = '#1e293b';
+        compCtx.fillRect(xLeft + 14, yTop + 112, wLeft - 28, 12);
+        compCtx.fillStyle = '#ffffff';
+        compCtx.fillRect(xLeft + 14, yTop + 112, (wLeft - 28) * (telem.fuel / 100), 12);
+
+        compCtx.fillStyle = '#94a3b8';
+        compCtx.font = `bold ${Math.round(bDrv.h * 0.024)}px "Barlow Condensed", sans-serif`;
+        compCtx.fillText('STEER ANGLE', xLeft + 14, yTop + 172);
+        compCtx.fillStyle = '#ffffff';
+        compCtx.font = `bold ${Math.round(bDrv.h * 0.032)}px "JetBrains Mono", monospace`;
+        compCtx.fillText(`${telem.steer}°`, xLeft + 14, yTop + 210);
+
+        const xMid = bDrv.x + bDrv.w * 0.27;
+        const wMid = bDrv.w * 0.44;
+        const cx = xMid + wMid / 2;
+        const cy = yTop + hCard / 2 + 8;
+        const radius = bDrv.h * 0.28;
+
+        compCtx.strokeStyle = '#ffffff';
+        compCtx.lineWidth = 18;
+        compCtx.beginPath();
+        compCtx.arc(cx, cy, radius, Math.PI * 0.75, Math.PI * 2.25);
+        compCtx.stroke();
+
+        compCtx.strokeStyle = '#f43f5e';
+        compCtx.lineWidth = 18;
+        compCtx.beginPath();
+        compCtx.arc(cx, cy, radius, Math.PI * 2.06, Math.PI * 2.25);
+        compCtx.stroke();
+
+        compCtx.fillStyle = '#02040a';
+        compCtx.beginPath();
+        compCtx.arc(cx, cy, radius - 9, 0, Math.PI * 2);
+        compCtx.fill();
+
+        compCtx.textAlign = 'center';
+        compCtx.fillStyle = '#ffffff';
+        compCtx.font = `italic 900 ${Math.round(bDrv.h * 0.12)}px "Oswald", sans-serif`;
+        compCtx.fillText(String(Math.round(telem.spd)), cx, cy - 8);
+
+        compCtx.fillStyle = '#94a3b8';
+        compCtx.font = `bold ${Math.round(bDrv.h * 0.024)}px "Barlow Condensed", sans-serif`;
+        compCtx.fillText('KM/H', cx, cy + 18);
+
+        compCtx.fillStyle = '#ffffff';
+        compCtx.font = `900 ${Math.round(bDrv.h * 0.07)}px "Oswald", sans-serif`;
+        compCtx.fillText(String(telem.gear), cx, cy + 62);
+
+        compCtx.fillStyle = '#22d3ee';
+        compCtx.font = `bold ${Math.round(bDrv.h * 0.02)}px "Barlow Condensed", sans-serif`;
+        compCtx.fillText('DRIVE', cx, cy + 82);
+
+        compCtx.textAlign = 'left';
+
+        const xRight = bDrv.x + bDrv.w * 0.73;
+        const wRight = bDrv.w * 0.25;
+
+        compCtx.fillStyle = '#ffffff';
+        compCtx.font = `bold ${Math.round(bDrv.h * 0.06)}px "JetBrains Mono", monospace`;
+        compCtx.fillText(document.getElementById('drvClock').textContent, xRight, yTop + 38);
+        compCtx.fillStyle = '#94a3b8';
+        compCtx.font = `bold ${Math.round(bDrv.h * 0.02)}px "Barlow Condensed", sans-serif`;
+        compCtx.fillText(document.getElementById('drvClockSub').textContent, xRight, yTop + 58);
+
+        compCtx.fillStyle = '#ffffff';
+        compCtx.font = `bold ${Math.round(bDrv.h * 0.045)}px "JetBrains Mono", monospace`;
+        compCtx.fillText(`${telem.volts.toFixed(1)}V`, xRight + wRight - 98, yTop + 30);
+        compCtx.fillStyle = '#94a3b8';
+        compCtx.font = `bold ${Math.round(bDrv.h * 0.02)}px "Barlow Condensed", sans-serif`;
+        compCtx.fillText('BATTERY', xRight + wRight - 98, yTop + 48);
+
+        const gy = yTop + 158;
+        compCtx.drawImage(drvGCanvas, xRight, gy, bDrv.w * 0.11, bDrv.w * 0.11);
+
+        compCtx.fillStyle = '#94a3b8';
+        compCtx.font = `bold ${Math.round(bDrv.h * 0.02)}px "Barlow Condensed", sans-serif`;
+        compCtx.fillText('ACCELEROMETER', xRight + bDrv.w * 0.12, gy + 18);
+        compCtx.fillStyle = '#ffffff';
+        compCtx.font = `bold ${Math.round(bDrv.h * 0.026)}px "JetBrains Mono", monospace`;
+        compCtx.fillText(`LAT G: ${telem.gy.toFixed(2)}G`, xRight + bDrv.w * 0.12, gy + 42);
+        compCtx.fillText(`LON G: ${telem.gx.toFixed(2)}G`, xRight + bDrv.w * 0.12, gy + 64);
+
+        const ty = yTop + 240;
+        compCtx.fillStyle = '#ffffff';
+        compCtx.font = `bold ${Math.round(bDrv.h * 0.045)}px "Oswald", sans-serif`;
+        compCtx.fillText(`TRIP A ${((tripOM || 0)/1000).toFixed(1)} km`, xRight, ty + 18);
+        compCtx.font = `bold ${Math.round(bDrv.h * 0.035)}px "JetBrains Mono", monospace`;
+        compCtx.fillText(`TIME ${document.getElementById('drvTimeElapsed').textContent}`, xRight, ty + 46);
+
+      } else {
+        // --- 通常HUD 焼き込み ---
+        const bSpd = getBox('panelSpeedo');
+        drawPanelBg(bSpd);
+        compCtx.fillStyle = '#94a3b8';
+        compCtx.font = `bold ${Math.round(bSpd.h * 0.11)}px "Barlow Condensed", sans-serif`;
+        compCtx.fillText('⠿ ENGINE SPEED', bSpd.x + 12, bSpd.y + bSpd.h * 0.16);
+        compCtx.fillStyle = '#e2e8f0';
+        compCtx.textAlign = 'right';
+        compCtx.font = `bold ${Math.round(bSpd.h * 0.12)}px "JetBrains Mono", monospace`;
+        compCtx.fillText(Math.round(telem.rpm).toLocaleString(), bSpd.x + bSpd.w - 12, bSpd.y + bSpd.h * 0.16);
+        compCtx.textAlign = 'left';
+
+        const barY = bSpd.y + bSpd.h * 0.22;
+        const barW = bSpd.w - 24;
+        compCtx.fillStyle = '#1e293b';
+        compCtx.fillRect(bSpd.x + 12, barY, barW, 9);
+        const rpmRatio = Math.min(1, telem.rpm / 7500);
+        const grad = compCtx.createLinearGradient(bSpd.x + 12, 0, bSpd.x + 12 + barW, 0);
+        grad.addColorStop(0, '#22d3ee');
+        grad.addColorStop(0.5, '#3b82f6');
+        grad.addColorStop(1, '#f43f5e');
+        compCtx.fillStyle = grad;
+        compCtx.fillRect(bSpd.x + 12, barY, barW * rpmRatio, 9);
+
+        compCtx.fillStyle = '#ffffff';
+        compCtx.font = `italic 900 ${Math.round(bSpd.h * 0.46)}px "Oswald", sans-serif`;
+        compCtx.fillText(String(Math.round(telem.spd)), bSpd.x + 12, bSpd.y + bSpd.h * 0.86);
+        compCtx.fillStyle = '#94a3b8';
+        compCtx.font = `bold ${Math.round(bSpd.h * 0.11)}px "Barlow Condensed", sans-serif`;
+        compCtx.fillText('KM/H', bSpd.x + bSpd.w * 0.48, bSpd.y + bSpd.h * 0.86);
+
+        compCtx.textAlign = 'right';
+        compCtx.fillStyle = '#94a3b8';
+        compCtx.font = `bold ${Math.round(bSpd.h * 0.10)}px "Barlow Condensed", sans-serif`;
+        compCtx.fillText('GEAR', bSpd.x + bSpd.w - 12, bSpd.y + bSpd.h * 0.50);
+        compCtx.fillStyle = '#fbbf24';
+        compCtx.font = `900 ${Math.round(bSpd.h * 0.38)}px "Oswald", sans-serif`;
+        compCtx.fillText(String(telem.gear), bSpd.x + bSpd.w - 12, bSpd.y + bSpd.h * 0.88);
+        compCtx.textAlign = 'left';
+
+        compCtx.fillStyle = '#cbd5e1';
+        compCtx.font = `bold ${Math.round(bSpd.h * 0.12)}px "JetBrains Mono", monospace`;
+        compCtx.fillText(`STEER ${telem.steer}°`, bSpd.x, bSpd.y + bSpd.h + 20);
+        compCtx.textAlign = 'right';
+        compCtx.fillText(document.getElementById('hudLapDist').textContent, bSpd.x + bSpd.w, bSpd.y + bSpd.h + 20);
+        compCtx.textAlign = 'left';
+
+        const bTim = getBox('panelTimingBoard');
+        drawPanelBg(bTim);
+        const rows = [
+          { s: '3', t: document.getElementById('timeS3').textContent, d: document.getElementById('badgeS3').textContent, bg: document.getElementById('badgeS3').className.includes('rose') ? '#e11d48' : '#2563eb', c: '#fff' },
+          { s: '2', t: document.getElementById('timeS2').textContent, d: document.getElementById('badgeS2').textContent, bg: document.getElementById('badgeS2').className.includes('rose') ? '#e11d48' : '#2563eb', c: '#fff' },
+          { s: '1', t: document.getElementById('timeS1').textContent, d: document.getElementById('badgeS1').textContent, bg: document.getElementById('badgeS1').className.includes('rose') ? '#e11d48' : '#334155', c: '#fff' },
+          { s: 'LAST', t: document.getElementById('timeLast').textContent, d: document.getElementById('badgeLast').textContent, bg: document.getElementById('badgeLast').className.includes('rose') ? '#e11d48' : '#2563eb', c: '#fff' },
+          { s: 'BEST', t: document.getElementById('timeBest').textContent, d: document.getElementById('labelBestSource').textContent, bg: 'transparent', c: '#34d399' },
+          { s: 'OPT.', t: document.getElementById('timeOpt').textContent, d: 'IDEAL', bg: 'transparent', c: '#fbbf24' }
+        ];
+        const rowH = (bTim.h - 14) / 6;
+        rows.forEach((r, idx) => {
+          const ry = bTim.y + 8 + idx * rowH;
+          compCtx.font = `bold ${Math.round(rowH * 0.68)}px "JetBrains Mono", monospace`;
+          compCtx.fillStyle = r.c === '#34d399' || r.c === '#fbbf24' ? r.c : '#cbd5e1';
+          compCtx.fillText(r.s, bTim.x + 8, ry + rowH * 0.72);
+          compCtx.textAlign = 'right';
+          compCtx.fillText(r.t, bTim.x + bTim.w * 0.64, ry + rowH * 0.72);
+          compCtx.textAlign = 'left';
+
+          if (r.bg !== 'transparent') {
+            compCtx.fillStyle = r.bg;
+            compCtx.fillRect(bTim.x + bTim.w * 0.67, ry + 1, bTim.w * 0.29, rowH - 3);
+          }
+          compCtx.fillStyle = r.c;
+          compCtx.textAlign = 'center';
+          compCtx.fillText(r.d, bTim.x + bTim.w * 0.815, ry + rowH * 0.72);
+          compCtx.textAlign = 'left';
+        });
+
+        const bLap = getBox('panelLap');
+        drawPanelBg(bLap);
+        compCtx.fillStyle = '#fbbf24';
+        compCtx.font = `bold ${Math.round(bLap.h * 0.26)}px "Barlow Condensed", sans-serif`;
+        compCtx.fillText(document.getElementById('hudLapNum').textContent, bLap.x + 12, bLap.y + bLap.h * 0.42);
+        compCtx.fillStyle = '#22d3ee';
+        compCtx.fillText(document.getElementById('hudCurrentSector').textContent, bLap.x + 12, bLap.y + bLap.h * 0.80);
+
+        compCtx.fillStyle = '#ffffff';
+        compCtx.font = `900 ${Math.round(bLap.h * 0.56)}px "JetBrains Mono", monospace`;
+        compCtx.fillText(document.getElementById('hudLapTime').textContent, bLap.x + bLap.w * 0.34, bLap.y + bLap.h * 0.72);
+
+        const bG = getBox('panelGBall');
+        drawPanelBg(bG);
+        compCtx.fillStyle = '#cbd5e1';
+        compCtx.font = `bold ${Math.round(bG.h * 0.14)}px "Barlow Condensed", sans-serif`;
+        compCtx.fillText('G-BALL', bG.x + 8, bG.y + bG.h * 0.20);
+        compCtx.fillStyle = '#fbbf24';
+        compCtx.textAlign = 'right';
+        compCtx.fillText(document.getElementById('hudGTotal').textContent, bG.x + bG.w - 8, bG.y + bG.h * 0.20);
+        compCtx.textAlign = 'left';
+        compCtx.drawImage(gCanvas, bG.x + 6, bG.y + bG.h * 0.24, bG.w - 12, bG.h * 0.72);
+
+        compCtx.fillStyle = '#cbd5e1';
+        compCtx.font = `bold ${Math.round(bG.h * 0.13)}px "JetBrains Mono", monospace`;
+        compCtx.textAlign = 'center';
+        compCtx.fillText(`LAT:${telem.gy.toFixed(2)} LON:${telem.gx.toFixed(2)}`, bG.x + bG.w / 2, bG.y + bG.h + 18);
+        compCtx.textAlign = 'left';
+
+        const bPed = getBox('panelPedals');
+        drawPanelBg(bPed);
+        compCtx.font = `800 ${Math.round(bPed.h * 0.18)}px "Barlow Condensed", sans-serif`;
+        compCtx.fillStyle = '#ffffff';
+        compCtx.fillText('⠿•TELEMETRY TRACE (LAST 30s)', bPed.x + 14, bPed.y + bPed.h * 0.25);
+
+        const thrTxt = `■ THR: ${Math.round(telem.thr)}%`;
+        const brkTxt = `■ BRK: ${Math.round(telem.brk)}% (${(telem.brk * 0.085).toFixed(1)} MPa)`;
+        const spdTxt = `■ SPD: ${Math.round(telem.spd)} km/h`;
+        const dSign = lapState.liveDeltaSec >= 0 ? '+' : '';
+        const dltTxt = `■ BEST Δ: ${dSign}${lapState.liveDeltaSec.toFixed(2)}s`;
+
+        compCtx.fillStyle = '#34d399';
+        compCtx.fillText(thrTxt, bPed.x + bPed.w * 0.24, bPed.y + bPed.h * 0.25);
+        compCtx.fillStyle = '#fb7185';
+        compCtx.fillText(brkTxt, bPed.x + bPed.w * 0.35, bPed.y + bPed.h * 0.25);
+        compCtx.fillStyle = '#38bdf8';
+        compCtx.fillText(spdTxt, bPed.x + bPed.w * 0.53, bPed.y + bPed.h * 0.25);
+        compCtx.fillStyle = '#fbbf24';
+        compCtx.fillText(dltTxt, bPed.x + bPed.w * 0.67, bPed.y + bPed.h * 0.25);
+
+        const miniX = bPed.x + 14;
+        const miniY = bPed.y + bPed.h * 0.34;
+        const miniH = bPed.h * 0.46;
+        const bars = [
+          { val: telem.thr, col: '#34d399', lbl: 'THR' },
+          { val: telem.brk, col: '#f43f5e', lbl: 'BRK' },
+          { val: (telem.spd / 220) * 100, col: '#38bdf8', lbl: 'SPD' }
+        ];
+        bars.forEach((b, i) => {
+          const bx = miniX + i * 28;
+          compCtx.fillStyle = '#1e293b';
+          compCtx.fillRect(bx, miniY, 20, miniH);
+          const hVal = (Math.min(100, Math.max(0, b.val)) / 100) * miniH;
+          compCtx.fillStyle = b.col;
+          compCtx.fillRect(bx, miniY + miniH - hVal, 20, hVal);
+          compCtx.font = `900 ${Math.round(bPed.h * 0.13)}px "Barlow Condensed", sans-serif`;
+          compCtx.fillText(b.lbl, bx, bPed.y + bPed.h * 0.94);
+        });
+
+        const oscX = miniX + 96;
+        const oscY = bPed.y + bPed.h * 0.32;
+        const oscW = bPed.w - 116;
+        const oscH = bPed.h * 0.60;
+        compCtx.fillStyle = 'rgba(6, 9, 17, 0.92)';
+        compCtx.fillRect(oscX, oscY, oscW, oscH);
+        compCtx.drawImage(oscilloCanvas, oscX, oscY, oscW, oscH);
+
+        compCtx.fillStyle = '#94a3b8';
+        compCtx.font = `bold ${Math.round(bPed.h * 0.14)}px "JetBrains Mono", monospace`;
+        compCtx.fillText('-30s', oscX + 8, oscY + oscH - 4);
+        compCtx.fillText('-20s', oscX + oscW * 0.33, oscY + oscH - 4);
+        compCtx.fillText('-10s', oscX + oscW * 0.66, oscY + oscH - 4);
+        compCtx.fillStyle = '#22d3ee';
+        compCtx.textAlign = 'right';
+        compCtx.fillText('0s (NOW)', oscX + oscW - 8, oscY + oscH - 4);
+        compCtx.textAlign = 'left';
+      }
     }
 
     function animate() {
       requestAnimationFrame(animate);
       const nowMs = performance.now();
+
+      const now = new Date();
+      const timeString = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+      const ampmString = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
 
       if (isReviewMode) {
         if (remoteVideo.duration) {
@@ -1754,12 +2101,13 @@
         }
       } else {
         if (isAutoSim) {
-          simPhase += 0.008; // デモ波形もゆったり見やすく
+          simPhase += 0.008;
           const wave = Math.sin(simPhase);
           const brk = wave < -0.2 ? Math.min(100, Math.round((-wave - 0.2) * 135)) : 0;
           const thr = brk === 0 ? Math.min(100, Math.max(0, Math.round((wave + 0.25) * 88))) : 0;
           const spd = Math.round(125 + wave * 55);
           telem = {
+            ...telem,
             spd: spd,
             rpm: Math.round(3800 + (spd % 45) * 75),
             gear: spd > 165 ? 5 : spd > 125 ? 4 : spd > 88 ? 3 : 2,
@@ -1768,8 +2116,15 @@
             clt: 0,
             gx: Number((brk > 0 ? -brk * 0.011 : thr * 0.004).toFixed(2)),
             gy: Number((Math.cos(simPhase * 0.7) * 0.95).toFixed(2)),
-            steer: Number((Math.cos(simPhase * 0.7) * 15).toFixed(1))
+            steer: Number((Math.cos(simPhase * 0.7) * 15).toFixed(1)),
+            water: Math.round(88 + Math.sin(simPhase * 0.1) * 2),
+            fuel: Math.max(5, Math.round(74 - (tripOM / 4000))),
+            volts: Number((13.8 + Math.sin(simPhase * 0.3) * 0.4).toFixed(1))
           };
+        } else {
+          telem.water = telem.wtemp ?? telem.water ?? 88;
+          telem.fuel = telem.fuel ?? 74;
+          telem.volts = telem.volts ?? 14.2;
         }
 
         updateLapAndSectorTiming(nowMs);
@@ -1780,11 +2135,9 @@
           : lapState.liveDeltaSec;
         lapState.liveDeltaSec = currentDelta;
 
-        // 125msごとに1サンプル追加（約5倍ゆっくりスクロール）
         if (nowMs - lastTracePushMs >= TRACE_INTERVAL_MS) {
           lastTracePushMs = nowMs;
           const prev = oscilloHistory[oscilloHistory.length - 1] || { thr: 0, brk: 0, spd: 0, delta: 0 };
-          // 軽いスムージングで細かなギザつきを軽減
           oscilloHistory.shift();
           oscilloHistory.push({
             thr: prev.thr * 0.25 + telem.thr * 0.75,
@@ -1832,7 +2185,68 @@
       document.getElementById('hudGLat').textContent = telem.gy.toFixed(2);
       document.getElementById('hudGLon').textContent = telem.gx.toFixed(2);
 
-      // --- 4ch オシロスコープ描画 (HiDPI対応 ＋ 滑らか曲線) ---
+      if (driveModeActive) {
+        document.getElementById('drvSpeed').textContent = Math.round(telem.spd);
+        document.getElementById('drvGear').textContent = telem.gear;
+        document.getElementById('drvRpm').textContent = Math.round(telem.rpm).toLocaleString();
+        
+        const offset = 552.92 - (Math.min(8000, telem.rpm) / 8000) * 410;
+        document.getElementById('svgTachoBar').setAttribute('stroke-dashoffset', offset);
+
+        document.getElementById('drvWaterText').textContent = `${Math.round(telem.water)}°C`;
+        document.getElementById('drvWaterBar').style.width = `${Math.min(100, (telem.water / 130) * 100)}%`;
+        
+        document.getElementById('drvFuelText').textContent = `${Math.round(telem.fuel)}%`;
+        document.getElementById('drvFuelBar').style.width = `${telem.fuel}%`;
+        const resAlert = document.getElementById('drvFuelReserve');
+        if (telem.fuel <= 15) {
+          resAlert.classList.remove('hidden');
+        } else {
+          resAlert.classList.add('hidden');
+        }
+
+        document.getElementById('drvSteerText').textContent = `${telem.steer}°`;
+        document.getElementById('drvSteerSvg').style.transform = `rotate(${telem.steer}deg)`;
+
+        document.getElementById('drvClock').textContent = timeString;
+        document.getElementById('drvClockSub').textContent = ampmString;
+
+        document.getElementById('drvVoltage').textContent = `${telem.volts.toFixed(1)}V`;
+        document.getElementById('drvVoltsBar').style.width = `${Math.min(100, ((telem.volts - 10) / 5) * 100)}%`;
+
+        document.getElementById('drvGLat').textContent = `${telem.gy.toFixed(2)}G`;
+        document.getElementById('drvGLon').textContent = `${telem.gx.toFixed(2)}G`;
+
+        document.getElementById('drvTrip').textContent = `${(tripOM / 1000).toFixed(1)} km`;
+        
+        const dtDiffMs = Date.now() - driveStartTime;
+        const diffHrs = Math.floor(dtDiffMs / 3600000);
+        const diffMins = Math.floor((dtDiffMs % 3600000) / 60000);
+        document.getElementById('drvTimeElapsed').textContent = `${diffHrs}h ${String(diffMins).padStart(2, '0')}m`;
+
+        document.getElementById('drvThrBar').style.width = `${telem.thr}%`;
+        document.getElementById('drvBrkBar').style.width = `${telem.brk}%`;
+
+        drvGCanvas.width = drvGCanvas.offsetWidth;
+        drvGCanvas.height = drvGCanvas.offsetHeight;
+        const dgw = drvGCanvas.width, dgh = drvGCanvas.height;
+        const dcx = dgw / 2, dcy = dgh / 2, dr = Math.min(dcx, dcy) - 2;
+        dgCtx.clearRect(0, 0, dgw, dgh);
+        dgCtx.strokeStyle = 'rgba(255,255,255,0.12)';
+        dgCtx.lineWidth = 1;
+        dgCtx.beginPath(); dgCtx.arc(dcx, dcy, dr * 0.4, 0, Math.PI*2); dgCtx.stroke();
+        dgCtx.beginPath(); dgCtx.arc(dcx, dcy, dr * 0.7, 0, Math.PI*2); dgCtx.stroke();
+        dgCtx.beginPath(); dgCtx.arc(dcx, dcy, dr, 0, Math.PI*2); dgCtx.stroke();
+        dgCtx.beginPath(); dgCtx.moveTo(dcx, 0); dgCtx.lineTo(dcx, dgh); dgCtx.moveTo(0, dcy); dgCtx.lineTo(dgw, dcy); dgCtx.stroke();
+
+        const dbx = dcx + (telem.gy / 0.8) * dr;
+        const dby = dcy - (telem.gx / 0.8) * dr;
+        dgCtx.fillStyle = '#f59e0b';
+        dgCtx.beginPath();
+        dgCtx.arc(Math.max(3, Math.min(dgw - 3, dbx)), Math.max(3, Math.min(dgh - 3, dby)), 4, 0, Math.PI * 2);
+        dgCtx.fill();
+      }
+
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const cssW = oscilloCanvas.offsetWidth;
       const cssH = oscilloCanvas.offsetHeight;
@@ -1871,7 +2285,6 @@
       drawSmoothTrace(oscCtx, ptsBrk, '#f43f5e', 2.0);
       drawSmoothTrace(oscCtx, ptsDel, '#fbbf24', 2.0);
 
-      // G-BALL描画
       gCanvas.width = gCanvas.offsetWidth;
       gCanvas.height = gCanvas.offsetHeight;
       const gw = gCanvas.width, gh = gCanvas.height;
