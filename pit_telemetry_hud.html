@@ -1,4 +1,1637 @@
-const HUD_LAYOUT_KEY = 'pit_hud_layout_v1';
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PIT TELEMETRY & STRATEGY HUD</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,500;0,600;0,700;0,800;0,900;1,700;1,800;1,900&family=JetBrains+Mono:wght@400;500;600;700;800&family=Oswald:ital,wght@0,400;0,600;0,700;1,700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Barlow Condensed', sans-serif;
+      background-color: #030712;
+      color: #f8fafc;
+      overflow: hidden;
+      user-select: none;
+    }
+    .mono { font-family: 'JetBrains Mono', monospace; }
+    .oswald { font-family: 'Oswald', sans-serif; }
+    .gt-panel {
+      background: rgba(10, 14, 23, 0.88);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.75);
+      touch-action: none;
+    }
+    .gt-panel:hover {
+      border-color: rgba(56, 189, 248, 0.4);
+    }
+    .hud-handle {
+      cursor: grab;
+    }
+    .hud-handle:active {
+      cursor: grabbing;
+    }
+    .resize-handle {
+      position: absolute;
+      right: 1px;
+      bottom: 1px;
+      width: 12px;
+      height: 12px;
+      cursor: se-resize;
+      z-index: 50;
+      color: rgba(148, 163, 184, 0.5);
+      font-size: 9px;
+      line-height: 12px;
+      text-align: center;
+      touch-action: none;
+    }
+    .resize-handle:hover {
+      color: #38bdf8;
+    }
+    .drive-bg {
+      background: #02040a !important;
+    }
+  </style>
+</head>
+<body class="w-screen h-screen flex flex-col justify-between overflow-hidden relative bg-black select-none">
+
+  <!-- 背景ビデオ（ライブ受信 ＆ 録画レビュー再生共用） -->
+  <video id="remoteVideo" 
+         style="position: absolute !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important; width: 100vw !important; height: 100vh !important; object-fit: contain !important; object-position: center center !important; z-index: 1 !important; background: #000;" 
+         class="pointer-events-none opacity-0" 
+         autoplay playsinline muted></video>
+
+  <!-- カメラ未接続時の背景Canvas -->
+  <canvas id="simCanvas" class="absolute inset-0 w-full h-full object-cover z-0"></canvas>
+
+  <!-- 録画焼き込み用オフスクリーン合成Canvas（1920x1080 Full HD） -->
+  <canvas id="compositeCanvas" width="1920" height="1080" class="hidden"></canvas>
+
+  <!-- 上部ヘッダーバー -->
+  <header class="relative z-30 flex items-center justify-between px-2.5 py-1 bg-[#070a12]/95 border-b border-white/15 text-[11px] font-bold tracking-wider">
+    <div class="flex items-center gap-2">
+      <span id="statusBadge" class="flex items-center gap-1.5 px-2 py-0.5 rounded bg-rose-950/90 border border-rose-500/50 text-rose-400 font-extrabold">
+        <span class="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span> LIVE // CAR ND-27
+      </span>
+      <span id="headerCourseBadge" class="text-cyan-300 font-extrabold tracking-wide">📍 FSW (4,563m)</span>
+      <span class="text-slate-600">|</span>
+      <span id="soloSyncBadge" class="mono text-emerald-400 font-bold">SOLO2: SIM</span>
+      <span class="text-slate-600">|</span>
+      <span id="statLatency" class="mono text-cyan-400 font-bold">244ms</span>
+      <span class="text-slate-600">|</span>
+      <span id="recTimerBadge" class="mono text-slate-300">1080p 60FPS</span>
+    </div>
+
+    <div class="flex items-center gap-1.5">
+      <div class="flex items-center bg-[#0d1322] border border-white/15 rounded px-2 py-0.5">
+        <span class="text-[10px] text-slate-400 mr-1 font-bold">ROOM</span>
+        <input id="inputRoomCode" type="text" value="ND-27" class="bg-transparent text-white font-bold mono text-[11px] w-12 focus:outline-none uppercase" />
+      </div>
+      <button id="btnConnectCar" class="px-2.5 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-[11px] rounded tracking-wider shadow">
+        CONNECT 📡
+      </button>
+      <button id="btnSaveDir" class="px-2 py-0.5 bg-[#161f33] hover:bg-slate-700 text-amber-300 text-[11px] font-extrabold rounded border border-amber-500/40" title="録画ファイル・ログの保存先フォルダを指定">
+        📁 保存先: 標準
+      </button>
+      <button id="btnAutoRec" class="px-2 py-0.5 bg-cyan-600/30 hover:bg-cyan-600/50 text-cyan-300 text-[11px] font-extrabold rounded border border-cyan-400/50" title="車速連動の自動録画開始・自動停止">
+        ⚡ AUTO: ON
+      </button>
+      <button id="btnRec" class="px-2.5 py-0.5 bg-rose-700 hover:bg-rose-600 text-white font-extrabold text-[11px] rounded tracking-wider border border-rose-400/40 shadow">
+        ⏺ REC
+      </button>
+      <button id="btnBurnMode" class="px-2 py-0.5 bg-amber-600/30 hover:bg-amber-600/50 text-amber-300 text-[11px] font-extrabold rounded border border-amber-400/50" title="動画へのHUDメーター焼き込みON/OFF">
+        🔥 焼込: ON
+      </button>
+      <label class="px-2 py-0.5 bg-[#161f33] hover:bg-slate-700 text-emerald-300 text-[11px] font-extrabold rounded border border-emerald-500/40 cursor-pointer" title="過去のログ(.json/.csv)を比較ベストとして読み込む">
+        🏆 REF読込 <input id="inputHeaderRefLog" type="file" accept=".json,.csv" class="hidden" />
+      </label>
+      <button id="btnReviewMode" class="px-2 py-0.5 bg-[#161f33] hover:bg-slate-700 text-amber-300 text-[11px] font-bold rounded border border-amber-500/30">
+        🎬 REVIEW
+      </button>
+      <button id="btnFovMode" class="px-2 py-0.5 bg-[#161f33] hover:bg-slate-700 text-cyan-300 text-[11px] font-bold rounded border border-cyan-500/30" title="映像の表示比率切替">
+        📐 FOV: FULL-WIDE
+      </button>
+      <button id="btnResetHud" class="px-2 py-0.5 bg-[#161f33] hover:bg-slate-700 text-cyan-300 text-[11px] font-bold rounded border border-cyan-500/30">
+        ↺ RESET
+      </button>
+      <button id="btnToggleMode" class="px-2.5 py-0.5 bg-indigo-700 hover:bg-indigo-600 text-white font-extrabold text-[11px] rounded border border-indigo-400/50 tracking-wider shadow">
+        🚘 P4: DRIVE
+      </button>
+      <button id="btnToggleSim" class="px-2 py-0.5 bg-cyan-900/60 hover:bg-cyan-800 text-cyan-200 text-[11px] font-extrabold rounded border border-cyan-400/40">
+        ⚙ コース/設定
+      </button>
+    </div>
+  </header>
+
+  <!-- Data-Movies風 走行後レビュー・シークコントロールバー -->
+  <div id="reviewBar" class="hidden relative z-30 bg-slate-950/95 border-b border-amber-500/40 px-3 py-1.5 flex items-center gap-2.5 text-xs">
+    <span class="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-400/50 text-amber-300 font-extrabold tracking-wider">
+      🎬 DATA-MOVIE REVIEW
+    </span>
+    <button id="btnRevPlay" class="px-2.5 py-0.5 bg-cyan-600 hover:bg-cyan-500 text-white font-extrabold rounded">
+      ⏸ PAUSE
+    </button>
+    <input id="revSeek" type="range" min="0" max="1000" value="0" class="flex-1 accent-amber-400 cursor-pointer" />
+    <span id="revTimeLabel" class="mono text-white font-bold w-28 text-right">00:00.0 / 00:00.0</span>
+    <select id="revSpeed" class="bg-slate-900 border border-white/20 rounded px-1.5 py-0.5 text-cyan-300 mono font-bold text-[11px]">
+      <option value="1">1.0x</option>
+      <option value="0.5">0.5x (SLOW)</option>
+      <option value="0.25">0.25x (ANALYZE)</option>
+    </select>
+    <button id="btnToggleLiveHud" class="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-cyan-300 rounded border border-cyan-500/30 font-bold" title="再生中のHUDオーバーレイ表示切替">
+      👁 HUD重畳: AUTO
+    </button>
+    <label class="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded border border-white/15 cursor-pointer font-bold">
+      📂 動画読込 <input id="inputLoadVideo" type="file" accept="video/*" class="hidden" />
+    </label>
+    <label class="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded border border-white/15 cursor-pointer font-bold">
+      📊 ログ読込(.json) <input id="inputLoadJson" type="file" accept=".json" class="hidden" />
+    </label>
+    <button id="btnExitReview" class="px-2 py-0.5 bg-rose-800 hover:bg-rose-700 text-white font-bold rounded">
+      ✕ LIVEへ戻る
+    </button>
+  </div>
+
+  <!-- HUDメイン領域 (標準 / ドライブ モード共用) -->
+  <main id="hudContainer" class="relative flex-1 w-full h-full overflow-hidden z-20 pointer-events-none">
+
+    <!-- 通常HUD -->
+    <div id="standardHUD" class="absolute inset-0 pointer-events-none block">
+      <!-- 1. 左上：スピード＆ギアパネル -->
+      <div id="panelSpeedo" data-base-w="115" data-base-h="82" data-min-w="95" data-min-h="65"
+           class="absolute pointer-events-auto gt-panel rounded-sm p-2 flex flex-col justify-between"
+           style="top: 14px; left: 88px; width: 115px; height: 82px; --ui-scale: 1;">
+        <div>
+          <div class="hud-handle flex justify-between items-center text-[calc(0.5rem*var(--ui-scale))] font-bold text-slate-400 tracking-wider mb-0.5">
+            <span>⠿ ENGINE SPEED</span>
+            <span id="hudRpm" class="mono text-slate-200">4,580</span>
+          </div>
+          <div class="w-full bg-slate-800 h-1.5 rounded-sm overflow-hidden">
+            <div id="hudRpmBar" class="bg-gradient-to-r from-cyan-400 via-blue-500 to-rose-500 h-full w-[62%] transition-all duration-75"></div>
+          </div>
+        </div>
+
+        <div class="flex items-end justify-between pt-1">
+          <div>
+            <div class="flex items-baseline gap-0.5">
+              <span id="hudSpeed" class="text-[calc(2.1rem*var(--ui-scale))] font-black italic oswald text-white leading-none tracking-tight">92</span>
+              <span class="text-[calc(0.5rem*var(--ui-scale))] text-slate-400 font-bold">KM/H</span>
+            </div>
+          </div>
+          <div class="text-right leading-none">
+            <div class="text-[calc(0.45rem*var(--ui-scale))] font-bold text-slate-400">GEAR</div>
+            <span id="hudGear" class="text-[calc(1.75rem*var(--ui-scale))] font-black oswald text-amber-400 leading-none">4</span>
+          </div>
+        </div>
+
+        <div class="absolute left-0 right-0 -bottom-7 flex justify-between text-[calc(0.52rem*var(--ui-scale))] mono text-slate-300 pointer-events-none">
+          <div>
+            <div class="text-[calc(0.42rem*var(--ui-scale))] text-slate-400 font-bold">STEER</div>
+            <div id="hudSteer" class="font-bold text-white">-1.2°</div>
+          </div>
+          <div class="text-right">
+            <div class="text-[calc(0.42rem*var(--ui-scale))] text-slate-400 font-bold">LAP DIST</div>
+            <div id="hudLapDist" class="font-bold text-white">1,637m [S1]</div>
+          </div>
+        </div>
+
+        <div class="resize-handle">⤡</div>
+      </div>
+
+      <!-- 2. 左上隣：GT7風 セクタータイム＆デルタボード -->
+      <div id="panelTimingBoard" data-base-w="115" data-base-h="96" data-min-w="95" data-min-h="75"
+           class="absolute pointer-events-auto gt-panel rounded-sm p-1.5 flex flex-col justify-between"
+           style="top: 14px; left: 204px; width: 115px; height: 96px; --ui-scale: 1;">
+        <div class="hud-handle space-y-[2px] text-[calc(0.58rem*var(--ui-scale))] mono font-bold leading-tight">
+          <div class="grid grid-cols-12 items-center">
+            <span class="col-span-2 text-slate-400 text-center bg-slate-800/80 rounded-sm text-[calc(0.5rem*var(--ui-scale))]">3</span>
+            <span id="timeS3" class="col-span-6 text-right pr-1.5 text-slate-100">0'21.549</span>
+            <span id="badgeS3" class="col-span-4 text-center bg-blue-600 text-white rounded-sm py-[1px] text-[calc(0.52rem*var(--ui-scale))]">-0.210</span>
+          </div>
+          <div class="grid grid-cols-12 items-center">
+            <span class="col-span-2 text-slate-400 text-center bg-slate-800/80 rounded-sm text-[calc(0.5rem*var(--ui-scale))]">2</span>
+            <span id="timeS2" class="col-span-6 text-right pr-1.5 text-slate-100">0'38.183</span>
+            <span id="badgeS2" class="col-span-4 text-center bg-blue-600 text-white rounded-sm py-[1px] text-[calc(0.52rem*var(--ui-scale))]">-0.340</span>
+          </div>
+          <div class="grid grid-cols-12 items-center">
+            <span class="col-span-2 text-slate-200 text-center bg-slate-700 rounded-sm text-[calc(0.5rem*var(--ui-scale))]">1</span>
+            <span id="timeS1" class="col-span-6 text-right pr-1.5 text-white font-extrabold">0'24.699</span>
+            <span id="badgeS1" class="col-span-4 text-center bg-slate-700/80 text-slate-300 rounded-sm py-[1px] text-[calc(0.5rem*var(--ui-scale))]">LIVE</span>
+          </div>
+          <div class="grid grid-cols-12 items-center pt-0.5 border-t border-white/10">
+            <span class="col-span-3 text-slate-400 text-[calc(0.48rem*var(--ui-scale))]">LAST</span>
+            <span id="timeLast" class="col-span-5 text-right pr-1 text-slate-300 text-[calc(0.52rem*var(--ui-scale))]">1'55.016</span>
+            <span id="badgeLast" class="col-span-4 text-center bg-rose-600 text-white rounded-sm py-[1px] text-[calc(0.52rem*var(--ui-scale))]">+0.420</span>
+          </div>
+          <div class="grid grid-cols-12 items-center">
+            <span class="col-span-3 text-emerald-400 text-[calc(0.48rem*var(--ui-scale))]">BEST</span>
+            <span id="timeBest" class="col-span-6 text-right pr-1 text-emerald-400 text-[calc(0.52rem*var(--ui-scale))]">1'54.596</span>
+            <span id="labelBestSource" class="col-span-3 text-right text-slate-500 text-[calc(0.45rem*var(--ui-scale))]">REF</span>
+          </div>
+          <div class="grid grid-cols-12 items-center">
+            <span class="col-span-3 text-amber-400 text-[calc(0.48rem*var(--ui-scale))]">OPT.</span>
+            <span id="timeOpt" class="col-span-6 text-right pr-1 text-amber-400 text-[calc(0.52rem*var(--ui-scale))]">1'54.120</span>
+            <span id="labelOpt" class="col-span-3 text-right text-slate-500 text-[calc(0.45rem*var(--ui-scale))]">IDEAL</span>
+          </div>
+        </div>
+        <div class="resize-handle">⤡</div>
+      </div>
+
+      <!-- 3. 中央上：スリムLIVE LAPタイマー -->
+      <div id="panelLap" data-base-w="145" data-base-h="32" data-min-w="115" data-min-h="26"
+           class="absolute pointer-events-auto gt-panel rounded-sm px-2.5 py-1 flex items-center justify-between"
+           style="top: 14px; left: 50%; transform: translateX(-50%); width: 145px; height: 32px; --ui-scale: 1;">
+        <div class="hud-handle leading-none">
+          <div id="hudLapNum" class="text-[calc(0.44rem*var(--ui-scale))] font-extrabold text-amber-400">LAP 01</div>
+          <div id="hudCurrentSector" class="text-[calc(0.45rem*var(--ui-scale))] font-extrabold text-cyan-400">SECTOR 1</div>
+        </div>
+        <div id="hudLapTime" class="text-[calc(1.05rem*var(--ui-scale))] font-black mono text-white leading-none tracking-tight">0'10.883</div>
+        <span id="hudLiveDeltaBadge" class="px-1 py-[1px] rounded-sm bg-cyan-950 text-cyan-300 mono text-[calc(0.45rem*var(--ui-scale))] font-bold border border-cyan-500/40">LIVE</span>
+        <div class="resize-handle">⤡</div>
+      </div>
+
+      <!-- 4. 右上：GPS サーキットマップ（非表示） -->
+      <div id="panelGpsMap" data-base-w="88" data-base-h="68" data-min-w="70" data-min-h="55"
+           class="hidden absolute pointer-events-auto gt-panel rounded-sm p-1.5 flex-col justify-between"
+           style="top: 14px; right: 162px; width: 88px; height: 68px; --ui-scale: 1;">
+        <div class="hud-handle flex justify-between items-center text-[calc(0.45rem*var(--ui-scale))] font-bold">
+          <span class="text-cyan-400">● GPS</span>
+          <span id="hudCourseShort" class="text-slate-200">FSW</span>
+        </div>
+        <canvas id="gpsCanvas" class="w-full flex-1"></canvas>
+        <div class="resize-handle">⤡</div>
+      </div>
+
+      <!-- 5. 右上端：G-BALL -->
+      <div id="panelGBall" data-base-w="68" data-base-h="68" data-min-w="55" data-min-h="55"
+           class="absolute pointer-events-auto gt-panel rounded-sm p-1.5 flex flex-col justify-between"
+           style="top: 14px; right: 88px; width: 68px; height: 68px; --ui-scale: 1;">
+        <div class="hud-handle flex justify-between items-center text-[calc(0.45rem*var(--ui-scale))] font-bold">
+          <span class="text-slate-300">⠿ G-BALL</span>
+          <span id="hudGTotal" class="mono text-amber-400 font-extrabold">1.14G</span>
+        </div>
+        <canvas id="gCanvas" class="w-full flex-1"></canvas>
+        <div class="absolute left-0 right-0 -bottom-4 text-[calc(0.42rem*var(--ui-scale))] mono text-center text-slate-300 whitespace-nowrap pointer-events-none">
+          LAT:<span id="hudGLat" class="text-cyan-300 font-bold">-0.71</span> LON:<span id="hudGLon" class="text-rose-400 font-bold">-0.15</span>
+        </div>
+        <div class="resize-handle">⤡</div>
+      </div>
+
+      <!-- 6. 下部：4chテレメトリ・トレース（LAST 30s） -->
+      <div id="panelPedals" data-base-w="880" data-base-h="66" data-min-w="420" data-min-h="50"
+           class="absolute pointer-events-auto gt-panel rounded-sm px-3 py-1.5 flex flex-col justify-between"
+           style="bottom: 10px; left: 50%; transform: translateX(-50%); width: 880px; height: 66px; --ui-scale: 1;">
+
+        <div class="hud-handle flex justify-between items-center text-[calc(0.66rem*var(--ui-scale))] font-extrabold tracking-wide">
+          <div class="flex items-center gap-3">
+            <span class="text-white flex items-center gap-1"><span class="text-cyan-400">⠿</span>•TELEMETRY TRACE (LAST 30s)</span>
+            <span class="text-emerald-400">■ THR: <span id="labelThr" class="mono">0%</span></span>
+            <span class="text-rose-400">■ BRK: <span id="labelBrk" class="mono">59% (5.0 MPa)</span></span>
+            <span class="text-sky-400">■ SPD: <span id="labelSpd" class="mono">92 km/h</span></span>
+            <span class="text-amber-400">■ BEST Δ: <span id="labelDelta" class="mono">+0.00s</span></span>
+          </div>
+          <span class="text-slate-400 text-[calc(0.56rem*var(--ui-scale))] tracking-widest">THR / BRK / SPD / DELTA</span>
+        </div>
+
+        <div class="flex items-end gap-2.5 flex-1 pt-1 overflow-hidden">
+          <div class="flex items-end gap-1.5 h-full pb-0.5 shrink-0">
+            <div class="flex flex-col items-center h-full justify-end">
+              <div class="w-4 flex-1 bg-slate-800/90 rounded-sm overflow-hidden flex flex-col justify-end border border-white/10">
+                <div id="barThr" class="w-full bg-emerald-400" style="height: 0%;"></div>
+              </div>
+              <span class="text-[calc(0.55rem*var(--ui-scale))] font-black text-emerald-400 leading-none mt-0.5">THR</span>
+            </div>
+            <div class="flex flex-col items-center h-full justify-end">
+              <div class="w-4 flex-1 bg-slate-800/90 rounded-sm overflow-hidden flex flex-col justify-end border border-white/10">
+                <div id="barBrk" class="w-full bg-rose-500" style="height: 59%;"></div>
+              </div>
+              <span class="text-[calc(0.55rem*var(--ui-scale))] font-black text-rose-500 leading-none mt-0.5">BRK</span>
+            </div>
+            <div class="flex flex-col items-center h-full justify-end">
+              <div class="w-4 flex-1 bg-slate-800/90 rounded-sm overflow-hidden flex flex-col justify-end border border-white/10">
+                <div id="barSpd" class="w-full bg-sky-400" style="height: 42%;"></div>
+              </div>
+              <span class="text-[calc(0.55rem*var(--ui-scale))] font-black text-sky-400 leading-none mt-0.5">SPD</span>
+            </div>
+          </div>
+
+          <div class="relative flex-1 h-full bg-[#060911]/90 rounded-sm border border-white/10 overflow-hidden">
+            <canvas id="oscilloCanvas" class="w-full h-full block"></canvas>
+            <div class="absolute inset-x-2 bottom-0.5 flex justify-between text-[calc(0.55rem*var(--ui-scale))] mono font-bold text-slate-400 pointer-events-none">
+              <span>-30s</span>
+              <span>-20s</span>
+              <span>-10s</span>
+              <span class="text-cyan-400 font-extrabold">0s (NOW)</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="resize-handle">⤡</div>
+      </div>
+    </div>
+
+    <!-- ドライブ専用HUD（🚘 P4: DRIVE 選択時に表示） -->
+    <div id="driveHUD" class="absolute inset-0 pointer-events-none hidden">
+      <div id="panelDrive" data-base-w="960" data-base-h="460" data-min-w="640" data-min-h="320"
+           class="absolute pointer-events-auto bg-slate-950/95 border border-white/15 rounded-md p-4 flex flex-col justify-between"
+           style="top: 50%; left: 50%; transform: translate(-50%, -50%); width: 920px; height: 440px; --ui-scale: 1;">
+        
+        <div class="hud-handle flex justify-between items-center border-b border-white/10 pb-2 mb-2">
+          <div class="flex items-center gap-2">
+            <span class="px-2 py-0.5 rounded bg-indigo-900 border border-indigo-400 text-[10px] font-extrabold">🚘 DRIVE MODE (P4)</span>
+            <span class="text-[12px] font-bold text-slate-300">STREET HUD & VEHICLE VITALS</span>
+          </div>
+          <div class="flex items-center gap-3 text-[11px] mono text-slate-400">
+            <span>TEMP: <span id="drvAmbient" class="text-white font-bold">25°C</span></span>
+            <span>|</span>
+            <span id="drvStatus" class="text-emerald-400 font-extrabold">● SYSTEM OK</span>
+          </div>
+        </div>
+
+        <div class="flex-1 grid grid-cols-12 gap-4 overflow-hidden">
+          <!-- 左エリア：水温・燃料・ステアリング角 -->
+          <div class="col-span-3 flex flex-col justify-around bg-slate-900/40 border border-white/5 rounded-md p-2.5">
+            <div>
+              <div class="flex justify-between items-baseline mb-0.5">
+                <span class="text-[10px] text-slate-400 font-extrabold">WATER TEMP</span>
+                <span id="drvWaterText" class="text-[16px] text-white oswald font-bold">88°C</span>
+              </div>
+              <div class="w-full bg-slate-800 h-2 rounded overflow-hidden">
+                <div id="drvWaterBar" class="bg-white h-full" style="width: 68%;"></div>
+              </div>
+            </div>
+
+            <div class="pt-2">
+              <div class="flex justify-between items-baseline mb-0.5">
+                <span class="text-[10px] text-slate-400 font-extrabold">FUEL</span>
+                <span id="drvFuelText" class="text-[16px] text-white oswald font-bold">74%</span>
+              </div>
+              <div class="w-full bg-slate-800 h-2 rounded overflow-hidden">
+                <div id="drvFuelBar" class="bg-white h-full" style="width: 74%;"></div>
+              </div>
+              <div id="drvFuelReserve" class="text-[9px] text-amber-500 font-bold mt-0.5 hidden animate-pulse">⚠️ RESERVE LOW</div>
+            </div>
+
+            <div class="pt-2 border-t border-white/5 flex items-center justify-between">
+              <div>
+                <span class="text-[9px] text-slate-400 font-extrabold block leading-tight">STEER ANGLE</span>
+                <span id="drvSteerText" class="text-[14px] text-white font-bold mono">-1.2°</span>
+              </div>
+              <svg id="drvSteerSvg" class="w-9 h-9 text-white opacity-90 transition-transform duration-75" viewBox="0 0 100 100" style="transform: rotate(-1.2deg);">
+                <circle cx="50" cy="50" r="42" stroke="currentColor" stroke-width="5" fill="none" stroke-dasharray="10 4" />
+                <line x1="15" y1="50" x2="85" y2="50" stroke="currentColor" stroke-width="7" />
+                <line x1="50" y1="50" x2="50" y2="8" stroke="currentColor" stroke-width="6" />
+                <circle cx="50" cy="50" r="10" fill="currentColor" />
+              </svg>
+            </div>
+          </div>
+
+          <!-- 中央エリア：ホワイトタコ＆スピード・ギア -->
+          <div class="col-span-5 flex flex-col items-center justify-center relative bg-slate-900/20 border border-white/5 rounded-md overflow-hidden p-2">
+            <svg class="w-[205px] h-[205px] -rotate-90 select-none" viewBox="0 0 200 200">
+              <circle cx="100" cy="100" r="88" stroke="rgba(255, 255, 255, 0.08)" stroke-width="12" fill="none" />
+              <circle id="svgTachoBar" cx="100" cy="100" r="88" stroke="#ffffff" stroke-width="12" fill="none" stroke-dasharray="552.92" stroke-dashoffset="240" stroke-linecap="round" />
+              <circle cx="100" cy="100" r="88" stroke="#f43f5e" stroke-width="12" fill="none" stroke-dasharray="69 483" stroke-dashoffset="483" transform="rotate(248 100 100)" />
+              <circle cx="100" cy="100" r="76" fill="#02040a" />
+            </svg>
+
+            <div class="absolute inset-0 flex flex-col justify-center items-center text-center pointer-events-none select-none">
+              <div class="leading-none mt-2 select-none">
+                <span id="drvSpeed" class="text-[54px] font-black oswald italic text-white tracking-tight leading-none">82</span>
+                <span class="text-[12px] text-slate-400 font-extrabold block">KM/H</span>
+              </div>
+              <div class="text-center leading-none mt-1">
+                <span id="drvGear" class="text-[34px] font-black text-white leading-none">4</span>
+                <span class="text-[9px] text-cyan-400 font-bold block tracking-widest mt-0.5">DRIVE</span>
+              </div>
+              <div class="absolute bottom-6 font-bold mono text-[10px] text-slate-400">
+                <span id="drvRpm" class="text-white">4,580</span> RPM
+              </div>
+            </div>
+
+            <div class="absolute inset-0 pointer-events-none text-[11px] font-black mono text-slate-300">
+              <span class="absolute top-[82%] left-[23%]">0</span>
+              <span class="absolute top-[52%] left-[16%]">1</span>
+              <span class="absolute top-[28%] left-[24%]">2</span>
+              <span class="absolute top-[15%] left-[40%]">3</span>
+              <span class="absolute top-[15%] right-[40%]">4</span>
+              <span class="absolute top-[28%] right-[24%]">5</span>
+              <span class="absolute top-[52%] right-[16%]">6</span>
+              <span class="absolute top-[78%] right-[26%]">7</span>
+              <span class="absolute top-[88%] left-[49%] text-rose-500 font-extrabold text-[12px]">8</span>
+            </div>
+          </div>
+
+          <!-- 右エリア：時計・電圧・0.8G Gボール・TRIP -->
+          <div class="col-span-4 flex flex-col justify-between bg-slate-900/40 border border-white/5 rounded-md p-2.5">
+            <div class="flex justify-between items-start border-b border-white/5 pb-2">
+              <div>
+                <div id="drvClock" class="text-[28px] font-bold text-white mono leading-none tracking-wider">22:42</div>
+                <div id="drvClockSub" class="text-[10px] text-slate-400 font-extrabold tracking-widest uppercase mt-0.5">10:42 PM</div>
+              </div>
+              <div class="text-right">
+                <div id="drvVoltage" class="text-[18px] font-bold text-white mono leading-none">14.2V</div>
+                <span class="text-[9px] text-slate-400 font-extrabold">BATTERY</span>
+                <div class="w-14 bg-slate-800 h-1.5 rounded overflow-hidden mt-1 inline-block">
+                  <div id="drvVoltsBar" class="bg-white h-full" style="width: 82%;"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="flex-1 flex items-center gap-3 py-2 overflow-hidden">
+              <div class="relative w-28 h-28 shrink-0 bg-slate-950 rounded-full border border-white/10 flex items-center justify-center">
+                <canvas id="drvGCanvas" class="w-full h-full block"></canvas>
+                <div class="absolute top-1 left-0 right-0 text-center text-[7px] text-slate-400 font-bold uppercase">0.8G MAX</div>
+              </div>
+              <div class="flex-1 space-y-1.5">
+                <div class="text-[9px] text-slate-400 font-extrabold uppercase">ACCELEROMETER</div>
+                <div class="flex items-baseline justify-between">
+                  <span class="text-[10px] text-slate-400">LAT G:</span>
+                  <span id="drvGLat" class="text-[14px] text-white font-bold mono">0.05G</span>
+                </div>
+                <div class="flex items-baseline justify-between">
+                  <span class="text-[10px] text-slate-400">LON G:</span>
+                  <span id="drvGLon" class="text-[14px] text-white font-bold mono">-0.12G</span>
+                </div>
+                <div class="grid grid-cols-2 gap-1.5 pt-1">
+                  <div>
+                    <span class="text-[7px] text-emerald-400 font-black block">THR</span>
+                    <div class="w-full bg-slate-800 h-1 rounded overflow-hidden">
+                      <div id="drvThrBar" class="bg-emerald-400 h-full" style="width: 0%;"></div>
+                    </div>
+                  </div>
+                  <div>
+                    <span class="text-[7px] text-rose-500 font-black block">BRK</span>
+                    <div class="w-full bg-slate-800 h-1 rounded overflow-hidden">
+                      <div id="drvBrkBar" class="bg-rose-500 h-full" style="width: 0%;"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="bg-indigo-950/20 border border-indigo-500/10 rounded p-1.5 flex items-center justify-between pointer-events-auto cursor-pointer active:bg-indigo-900/30"
+                 id="btnResetTrip" title="クリック / タップで走行距離と経過時間をリセット">
+              <div>
+                <span class="text-[8px] text-indigo-300 font-extrabold block leading-tight">📍 TRIP A (TAP TO RESET)</span>
+                <span id="drvTrip" class="text-[20px] text-white font-black oswald tracking-wide">0.0 km</span>
+              </div>
+              <div class="text-right">
+                <span class="text-[8px] text-indigo-300 font-extrabold block leading-tight">🕒 TIME</span>
+                <span id="drvTimeElapsed" class="text-[16px] text-white font-bold mono">0h 00m</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="resize-handle">⤡</div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- 右側：コース＆セクター設定 / ベスト比較ログ読込 / 自動録画設定ドロワー -->
+  <div id="drawerSim" class="fixed top-9 right-0 bottom-0 w-80 bg-slate-950/95 border-l border-white/15 p-3.5 z-40 transform translate-x-full transition-transform duration-200 overflow-y-auto space-y-3.5 text-xs">
+    <div class="flex items-center justify-between border-b border-white/10 pb-2">
+      <h3 class="font-extrabold text-sm text-cyan-400 tracking-wider">📍 COURSE & SOLO2 / REF LOG</h3>
+      <button id="btnCloseSim" class="text-slate-400 hover:text-white text-sm">✕</button>
+    </div>
+
+    <!-- 1. GPSコース選択 ＆ セクター距離設定 -->
+    <div class="space-y-2 bg-slate-900/90 p-2.5 rounded border border-cyan-500/30">
+      <div class="flex items-center justify-between">
+        <span class="font-extrabold text-cyan-300">1. サーキット選択 & GPS検索</span>
+        <button id="btnDetectGpsCourse" class="px-2 py-0.5 bg-cyan-600 hover:bg-cyan-500 text-white font-extrabold rounded text-[11px] shadow">
+          📍 GPS近隣コース検索
+        </button>
+      </div>
+      <div id="gpsDetectStatus" class="text-[10px] mono text-slate-400">Tab5のコース切替と自動連動します（手動・GPS検索も可）。</div>
+
+      <select id="selectCourse" class="w-full bg-slate-950 border border-white/20 rounded px-2 py-1.5 text-white font-bold">
+        <option value="fsw">富士スピードウェイ (FSW - 4,563m)</option>
+        <option value="motegi">モビリティリゾートもてぎ (4,801m)</option>
+        <option value="sugo">スポーツランドSUGO (3,586m)</option>
+        <option value="nikko">日光サーキット (1,047m)</option>
+        <option value="sodegaura">袖ヶ浦フォレストレースウェイ (2,436m)</option>
+        <option value="tsukuba">筑波サーキット TC2000 (2,045m)</option>
+        <option value="mobara">茂原ツインサーキット 東 (1,170m)</option>
+        <option value="honjo">本庄サーキット (1,112m)</option>
+      </select>
+
+      <div class="pt-1.5 border-t border-white/10 space-y-1.5">
+        <div class="text-[11px] font-bold text-slate-300">コース全長 & セクター境界設定 (m)</div>
+        <div class="grid grid-cols-3 gap-1.5 text-center">
+          <div class="bg-slate-950 p-1.5 rounded border border-white/10">
+            <div class="text-[10px] text-cyan-400 font-bold">S1 終了 (m)</div>
+            <input id="inputS1End" type="number" value="1450" class="w-full bg-transparent text-center mono font-bold text-white focus:outline-none" />
+          </div>
+          <div class="bg-slate-950 p-1.5 rounded border border-white/10">
+            <div class="text-[10px] text-amber-400 font-bold">S2 終了 (m)</div>
+            <input id="inputS2End" type="number" value="3050" class="w-full bg-transparent text-center mono font-bold text-white focus:outline-none" />
+          </div>
+          <div class="bg-slate-950 p-1.5 rounded border border-white/10">
+            <div class="text-[10px] text-emerald-400 font-bold">全長 / S3終了</div>
+            <input id="inputCourseLen" type="number" value="4563" class="w-full bg-transparent text-center mono font-bold text-white focus:outline-none" />
+          </div>
+        </div>
+        <div id="sectorRangeText" class="text-[10px] mono text-slate-400">
+          S1: 0〜1450m | S2: 1450〜3050m | S3: 3050〜4563m
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. 過去ログ（BEST基準データ）読み込み -->
+    <div class="space-y-2 bg-slate-900/90 p-2.5 rounded border border-emerald-500/30">
+      <div class="font-extrabold text-emerald-300">2. 比較ベストデータ (REF LOG) 設定</div>
+      <div class="text-[11px] text-slate-300 leading-snug">
+        過去の走行ログを読み込むと、そのログのタイムと各セクターを「BEST基準」としてリアルタイム比較します。
+      </div>
+      <label class="block w-full py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white font-extrabold text-center rounded cursor-pointer shadow">
+        📂 過去ログを比較BESTとして読み込む
+        <input id="inputRefLogDrawer" type="file" accept=".json,.csv" class="hidden" />
+      </label>
+      <div id="refLogStatus" class="text-[10px] mono text-emerald-400 bg-slate-950 p-1.5 rounded border border-white/10">
+        現在の基準: FSW デフォルト基準 (BEST 1'54.596)
+      </div>
+    </div>
+
+    <!-- 3. 録画保存先フォルダ ＆ 自動録画トリガー設定 -->
+    <div class="space-y-2 bg-slate-900/90 p-2.5 rounded border border-white/15">
+      <div class="font-extrabold text-slate-200">3. ⚡ 保存先 & 自動録画トリガー</div>
+      <button id="btnSaveDirDrawer" class="w-full py-1.5 bg-amber-600 hover:bg-amber-500 text-white font-extrabold rounded shadow">
+        📁 録画ファイル保存フォルダを選択
+      </button>
+      <div id="saveDirStatus" class="text-[10px] mono text-amber-300 bg-slate-950 p-1.5 rounded border border-white/10">
+        保存先: ブラウザ標準のダウンロードフォルダ
+      </div>
+      <div class="flex items-center justify-between pt-1">
+        <span class="text-slate-300">開始車速 (1.5秒維持):</span>
+        <div class="flex items-center gap-1">
+          <input id="inputAutoStartSpd" type="number" value="10" min="3" max="60" class="w-14 bg-slate-950 border border-white/20 rounded px-1.5 py-0.5 text-right mono font-bold text-emerald-400" />
+          <span class="text-slate-400">km/h</span>
+        </div>
+      </div>
+      <div class="flex items-center justify-between">
+        <span class="text-slate-300">停止車速 / 待機秒数:</span>
+        <div class="flex items-center gap-1">
+          <input id="inputAutoStopSpd" type="number" value="5" min="1" max="30" class="w-12 bg-slate-950 border border-white/20 rounded px-1.5 py-0.5 text-right mono font-bold text-rose-400" />
+          <span class="text-slate-400">km/h /</span>
+          <input id="inputAutoStopSec" type="number" value="10" min="3" max="60" class="w-12 bg-slate-950 border border-white/20 rounded px-1.5 py-0.5 text-right mono font-bold text-amber-400" />
+          <span class="text-slate-400">秒</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. 机上テスト用シミュレーター操作 -->
+    <div class="space-y-2 bg-slate-900/90 p-2.5 rounded border border-white/10">
+      <div class="font-extrabold text-slate-300">4. 🏎 机上テスト用シミュレーター</div>
+      <label class="flex items-center gap-2 cursor-pointer">
+        <input id="chkAutoSim" type="checkbox" checked class="rounded" />
+        <span class="font-bold text-slate-200">AUTO DEMO WAVEFORM</span>
+      </label>
+      <button id="btnSimPitStop" class="w-full py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold rounded shadow">
+        🚀 テスト走行 ⇄ ピット停止 (0 km/h)
+      </button>
+    </div>
+  </div>
+
+  <script>
+    const CIRCUIT_DB = {
+      fsw: {
+        name: '富士スピードウェイ',
+        short: 'FSW',
+        lat: 35.3717, lon: 138.9272,
+        length: 4563, s1End: 1450, s2End: 3050,
+        refS1: 24.810, refS2: 43.120, refS3: 46.666,
+        track: [
+          [0.12, 0.25], [0.85, 0.25], [0.90, 0.35], [0.78, 0.48],
+          [0.62, 0.42], [0.52, 0.55], [0.60, 0.75], [0.42, 0.82],
+          [0.28, 0.68], [0.18, 0.78], [0.10, 0.55], [0.12, 0.25]
+        ]
+      },
+      motegi: {
+        name: 'モビリティリゾートもてぎ',
+        short: 'MOTEGI',
+        lat: 36.5328, lon: 140.2269,
+        length: 4801, s1End: 1550, s2End: 3350,
+        refS1: 36.200, refS2: 48.500, refS3: 40.100,
+        track: [
+          [0.20, 0.25], [0.75, 0.20], [0.88, 0.32], [0.70, 0.50],
+          [0.85, 0.68], [0.65, 0.82], [0.30, 0.78], [0.15, 0.60],
+          [0.32, 0.45], [0.20, 0.25]
+        ]
+      },
+      sugo: {
+        name: 'スポーツランドSUGO',
+        short: 'SUGO',
+        lat: 38.1386, lon: 140.7753,
+        length: 3586, s1End: 1150, s2End: 2350,
+        refS1: 28.500, refS2: 33.200, refS3: 32.800,
+        track: [
+          [0.18, 0.25], [0.78, 0.22], [0.88, 0.42], [0.72, 0.58],
+          [0.82, 0.78], [0.48, 0.85], [0.20, 0.70], [0.12, 0.45],
+          [0.18, 0.25]
+        ]
+      },
+      nikko: {
+        name: '日光サーキット',
+        short: 'NIKKO',
+        lat: 36.6875, lon: 139.8406,
+        length: 1047, s1End: 350, s2End: 720,
+        refS1: 11.450, refS2: 14.820, refS3: 13.530,
+        track: [
+          [0.20, 0.30], [0.78, 0.25], [0.85, 0.48], [0.60, 0.55],
+          [0.72, 0.78], [0.35, 0.82], [0.15, 0.62], [0.20, 0.30]
+        ]
+      },
+      sodegaura: {
+        name: '袖ヶ浦フォレストレースウェイ',
+        short: 'SODEGAURA',
+        lat: 35.4083, lon: 140.0711,
+        length: 2436, s1End: 800, s2End: 1650,
+        refS1: 23.500, refS2: 26.800, refS3: 24.200,
+        track: [
+          [0.15, 0.30], [0.80, 0.22], [0.88, 0.45], [0.65, 0.65],
+          [0.75, 0.82], [0.35, 0.80], [0.18, 0.58], [0.15, 0.30]
+        ]
+      },
+      tsukuba: {
+        name: '筑波サーキット TC2000',
+        short: 'TC2000',
+        lat: 36.1797, lon: 139.9889,
+        length: 2045, s1End: 650, s2End: 1350,
+        refS1: 20.150, refS2: 22.400, refS3: 21.250,
+        track: [
+          [0.18, 0.30], [0.72, 0.25], [0.85, 0.45], [0.55, 0.55],
+          [0.82, 0.75], [0.30, 0.82], [0.12, 0.58], [0.18, 0.30]
+        ]
+      },
+      mobara: {
+        name: '茂原ツインサーキット 東',
+        short: 'MOBARA',
+        lat: 35.4307, lon: 140.2518,
+        length: 1170, s1End: 390, s2End: 780,
+        refS1: 15.200, refS2: 16.500, refS3: 15.800,
+        track: [
+          [0.18, 0.28], [0.80, 0.28], [0.86, 0.52], [0.62, 0.60],
+          [0.74, 0.80], [0.32, 0.82], [0.14, 0.58], [0.18, 0.28]
+        ]
+      },
+      honjo: {
+        name: '本庄サーキット',
+        short: 'HONJO',
+        lat: 36.2039, lon: 139.1317,
+        length: 1112, s1End: 370, s2End: 740,
+        refS1: 14.500, refS2: 15.800, refS3: 14.900,
+        track: [
+          [0.16, 0.28], [0.82, 0.26], [0.88, 0.50], [0.64, 0.58],
+          [0.78, 0.78], [0.28, 0.80], [0.14, 0.56], [0.16, 0.28]
+        ]
+      }
+    };
+
+    let currentCourseKey = 'fsw';
+    let courseConfig = {
+      name: CIRCUIT_DB.fsw.name,
+      short: CIRCUIT_DB.fsw.short,
+      length: CIRCUIT_DB.fsw.length,
+      s1End: CIRCUIT_DB.fsw.s1End,
+      s2End: CIRCUIT_DB.fsw.s2End,
+      track: CIRCUIT_DB.fsw.track
+    };
+
+    let refBestData = {
+      sourceName: 'FSW DEFAULT',
+      totalTime: 114.596,
+      s1: 24.810,
+      s2: 43.120,
+      s3: 46.666,
+      distTimeTable: []
+    };
+
+    let sessionBestSectors = {
+      s1: 24.810,
+      s2: 43.120,
+      s3: 46.666,
+      bestLap: 114.596
+    };
+
+    let lapState = {
+      currentLapNum: 1,
+      lapDistM: 0,
+      lapElapsedSec: 0,
+      currentSector: 1,
+      liveDeltaSec: 0,
+      s1Time: null,
+      s2Time: null,
+      s3Time: null,
+      lastLapTime: null,
+      s1DoneThisLap: false,
+      s2DoneThisLap: false,
+      lastFrameMs: performance.now()
+    };
+
+    // --- 保存先フォルダ選択 ---
+    let saveDirHandle = null;
+
+    async function pickSaveDirectory() {
+      if (!window.showDirectoryPicker) {
+        alert('このブラウザはフォルダ直接指定に対応していません（Chrome / Edge推奨）。標準のダウンロードフォルダに保存されます。');
+        return;
+      }
+      try {
+        saveDirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+        const dirName = saveDirHandle.name;
+        document.getElementById('btnSaveDir').textContent = `📁 ${dirName}`;
+        document.getElementById('btnSaveDir').className =
+          'px-2 py-0.5 bg-emerald-700/40 hover:bg-emerald-700/60 text-emerald-300 text-[11px] font-extrabold rounded border border-emerald-400/50';
+        document.getElementById('saveDirStatus').textContent = `保存先フォルダ: ${dirName}/ (直接保存ON)`;
+      } catch (err) {}
+    }
+
+    document.getElementById('btnSaveDir').addEventListener('click', pickSaveDirectory);
+    document.getElementById('btnSaveDirDrawer').addEventListener('click', pickSaveDirectory);
+
+    async function saveBlobToTarget(blob, filename) {
+      if (saveDirHandle) {
+        try {
+          const perm = await saveDirHandle.queryPermission({ mode: 'readwrite' });
+          if (perm === 'granted' || (await saveDirHandle.requestPermission({ mode: 'readwrite' })) === 'granted') {
+            const fileHandle = await saveDirHandle.getFileHandle(filename, { create: true });
+            const writable = await fileHandle.createWritable();
+            await writable.write(blob);
+            await writable.close();
+            return;
+          }
+        } catch (err) {
+          console.warn('フォルダ書き込み失敗、ダウンロードへフォールバック:', err);
+        }
+      }
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+    }
+
+    function formatLapTime(sec) {
+      if (sec === null || sec === undefined || isNaN(sec) || sec < 0) return "--'--.---";
+      const mins = Math.floor(sec / 60);
+      const rem = (sec % 60).toFixed(3).padStart(6, '0');
+      return `${mins}'${rem}`;
+    }
+
+    function updateDeltaBadge(el, deltaSec) {
+      if (deltaSec === null || isNaN(deltaSec)) {
+        el.textContent = 'LIVE';
+        el.className = 'col-span-4 text-center bg-slate-700/80 text-slate-300 rounded-sm py-[1px] text-[calc(0.5rem*var(--ui-scale))]';
+        return;
+      }
+      const sign = deltaSec >= 0 ? '+' : '';
+      el.textContent = `${sign}${deltaSec.toFixed(3)}`;
+      if (deltaSec <= 0) {
+        el.className = 'col-span-4 text-center bg-blue-600 text-white rounded-sm py-[1px] text-[calc(0.52rem*var(--ui-scale))]';
+      } else {
+        el.className = 'col-span-4 text-center bg-rose-600 text-white rounded-sm py-[1px] text-[calc(0.52rem*var(--ui-scale))]';
+      }
+    }
+
+    function buildDefaultRefTable(c) {
+      refBestData.s1 = c.refS1;
+      refBestData.s2 = c.refS2;
+      refBestData.s3 = c.refS3;
+      refBestData.totalTime = c.refS1 + c.refS2 + c.refS3;
+      refBestData.distTimeTable = [
+        { distM: 0, timeSec: 0 },
+        { distM: courseConfig.s1End, timeSec: c.refS1 },
+        { distM: courseConfig.s2End, timeSec: c.refS1 + c.refS2 },
+        { distM: courseConfig.length, timeSec: refBestData.totalTime }
+      ];
+      sessionBestSectors = {
+        s1: c.refS1,
+        s2: c.refS2,
+        s3: c.refS3,
+        bestLap: refBestData.totalTime
+      };
+      refreshTimingBoardStatic();
+    }
+
+    function getRefTimeAtDistance(distM) {
+      const tbl = refBestData.distTimeTable;
+      if (!tbl || tbl.length === 0) return null;
+      if (distM <= 0) return 0;
+      for (let i = 1; i < tbl.length; i++) {
+        if (distM <= tbl[i].distM) {
+          const p0 = tbl[i - 1];
+          const p1 = tbl[i];
+          const span = Math.max(0.1, p1.distM - p0.distM);
+          const ratio = (distM - p0.distM) / span;
+          return p0.timeSec + ratio * (p1.timeSec - p0.timeSec);
+        }
+      }
+      return tbl[tbl.length - 1].timeSec;
+    }
+
+    function refreshTimingBoardStatic() {
+      document.getElementById('timeBest').textContent = formatLapTime(refBestData.totalTime);
+      const opt = sessionBestSectors.s1 + sessionBestSectors.s2 + sessionBestSectors.s3;
+      document.getElementById('timeOpt').textContent = formatLapTime(opt);
+      document.getElementById('headerCourseBadge').textContent = `📍 ${courseConfig.short} (${courseConfig.length.toLocaleString()}m)`;
+      const shortEl = document.getElementById('hudCourseShort');
+      if (shortEl) shortEl.textContent = courseConfig.short;
+      document.getElementById('sectorRangeText').textContent =
+        `S1: 0〜${courseConfig.s1End}m | S2: ${courseConfig.s1End}〜${courseConfig.s2End}m | S3: ${courseConfig.s2End}〜${courseConfig.length}m`;
+    }
+
+    function applyCourseSelection(key) {
+      const c = CIRCUIT_DB[key];
+      if (!c) return;
+      currentCourseKey = key;
+      courseConfig = {
+        name: c.name,
+        short: c.short,
+        length: c.length,
+        s1End: c.s1End,
+        s2End: c.s2End,
+        track: c.track
+      };
+      document.getElementById('selectCourse').value = key;
+      document.getElementById('inputS1End').value = c.s1End;
+      document.getElementById('inputS2End').value = c.s2End;
+      document.getElementById('inputCourseLen').value = c.length;
+      lapState.lapDistM = 0;
+      lapState.lapElapsedSec = 0;
+      lapState.currentSector = 1;
+      lapState.liveDeltaSec = 0;
+      lapState.s1DoneThisLap = false;
+      lapState.s2DoneThisLap = false;
+      buildDefaultRefTable(c);
+    }
+
+    function calcGpsDistanceKm(lat1, lon1, lat2, lon2) {
+      const R = 6371;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    function selectNearestCourseByCoords(lat, lon) {
+      let bestKey = 'fsw';
+      let minKm = Infinity;
+      for (const [key, c] of Object.entries(CIRCUIT_DB)) {
+        const dKm = calcGpsDistanceKm(lat, lon, c.lat, c.lon);
+        if (dKm < minKm) {
+          minKm = dKm;
+          bestKey = key;
+        }
+      }
+      applyCourseSelection(bestKey);
+      document.getElementById('gpsDetectStatus').textContent =
+        `✅ GPS座標から最寄りの「${CIRCUIT_DB[bestKey].name}」(約${minKm.toFixed(1)}km)を自動設定しました！`;
+    }
+
+    document.getElementById('btnDetectGpsCourse').addEventListener('click', () => {
+      if (!navigator.geolocation) {
+        document.getElementById('gpsDetectStatus').textContent = '⚠ このブラウザではGPSが利用できません。';
+        return;
+      }
+      document.getElementById('gpsDetectStatus').textContent = '📡 GPSで現在地を取得中...';
+      navigator.geolocation.getCurrentPosition(
+        (pos) => selectNearestCourseByCoords(pos.coords.latitude, pos.coords.longitude),
+        () => document.getElementById('gpsDetectStatus').textContent = '⚠ GPS取得失敗: 手動でコースを選択してください。',
+        { enableHighAccuracy: true, timeout: 6000 }
+      );
+    });
+
+    document.getElementById('selectCourse').addEventListener('change', (e) => applyCourseSelection(e.target.value));
+
+    ['inputS1End', 'inputS2End', 'inputCourseLen'].forEach(id => {
+      document.getElementById(id).addEventListener('change', () => {
+        const s1 = parseFloat(document.getElementById('inputS1End').value) || 500;
+        const s2 = parseFloat(document.getElementById('inputS2End').value) || 1000;
+        const len = parseFloat(document.getElementById('inputCourseLen').value) || 2000;
+        courseConfig.s1End = Math.min(s1, len - 50);
+        courseConfig.s2End = Math.min(Math.max(s2, courseConfig.s1End + 50), len - 10);
+        courseConfig.length = len;
+        refreshTimingBoardStatic();
+      });
+    });
+
+    function handleReferenceLogFile(file) {
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const text = ev.target.result;
+        let frames = [];
+        try {
+          if (file.name.endsWith('.json')) {
+            const raw = JSON.parse(text);
+            frames = raw.map(r => ({
+              timeSec: (r.offsetMs ?? 0) / 1000,
+              spd: parseFloat(r.spd ?? 0),
+              distM: r.distM
+            }));
+          } else {
+            const lines = text.trim().split(/\r?\n/);
+            for (let i = 1; i < lines.length; i++) {
+              const cols = lines[i].split(',');
+              if (cols.length >= 2) {
+                frames.push({
+                  timeSec: parseFloat(cols[0]) || 0,
+                  spd: parseFloat(cols[1]) || 0,
+                  distM: cols.length >= 11 ? parseFloat(cols[10]) : undefined
+                });
+              }
+            }
+          }
+        } catch (err) {
+          alert('ログの読み込みに失敗しました: ' + err.message);
+          return;
+        }
+
+        if (frames.length < 5) return;
+
+        let dist = 0;
+        const startT = frames[0].timeSec;
+        const distTable = [{ distM: 0, timeSec: 0 }];
+        let s1T = null, s2T = null, totalT = null;
+
+        for (let i = 1; i < frames.length; i++) {
+          const dt = Math.max(0, frames[i].timeSec - frames[i - 1].timeSec);
+          if (frames[i].distM !== undefined && frames[i].distM > dist) {
+            dist = frames[i].distM;
+          } else {
+            const avgSpdMs = ((frames[i].spd + frames[i - 1].spd) / 2) / 3.6;
+            dist += avgSpdMs * dt;
+          }
+          const elapsed = frames[i].timeSec - startT;
+          distTable.push({ distM: dist, timeSec: elapsed });
+
+          if (s1T === null && dist >= courseConfig.s1End) s1T = elapsed;
+          if (s2T === null && dist >= courseConfig.s2End) s2T = elapsed - (s1T || 0);
+          if (totalT === null && dist >= courseConfig.length) {
+            totalT = elapsed;
+            break;
+          }
+        }
+
+        const lastEntry = distTable[distTable.length - 1];
+        if (!totalT && lastEntry.distM > 10) {
+          const scale = courseConfig.length / lastEntry.distM;
+          distTable.forEach(pt => {
+            pt.distM *= scale;
+            pt.timeSec *= scale;
+          });
+          totalT = lastEntry.timeSec * scale;
+          s1T = totalT * (courseConfig.s1End / courseConfig.length);
+          s2T = totalT * ((courseConfig.s2End - courseConfig.s1End) / courseConfig.length);
+        }
+
+        const s3T = Math.max(1, totalT - (s1T || 0) - (s2T || 0));
+
+        refBestData = {
+          sourceName: file.name.slice(0, 14),
+          totalTime: totalT,
+          s1: s1T || totalT * 0.3,
+          s2: s2T || totalT * 0.35,
+          s3: s3T,
+          distTimeTable: distTable
+        };
+
+        sessionBestSectors.s1 = Math.min(sessionBestSectors.s1, refBestData.s1);
+        sessionBestSectors.s2 = Math.min(sessionBestSectors.s2, refBestData.s2);
+        sessionBestSectors.s3 = Math.min(sessionBestSectors.s3, refBestData.s3);
+
+        document.getElementById('labelBestSource').textContent = 'LOG';
+        document.getElementById('refLogStatus').textContent =
+          `✅ 比較ログ読込完了: ${file.name} (BEST ${formatLapTime(refBestData.totalTime)})`;
+        refreshTimingBoardStatic();
+      };
+      reader.readAsText(file);
+    }
+
+    document.getElementById('inputHeaderRefLog').addEventListener('change', (e) => handleReferenceLogFile(e.target.files[0]));
+    document.getElementById('inputRefLogDrawer').addEventListener('change', (e) => handleReferenceLogFile(e.target.files[0]));
+
+    const PEER_CONFIG = {
+      debug: 1,
+      config: {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:stun2.l.google.com:19302' }
+        ]
+      }
+    };
+
+    let peer = null;
+    let dataConn = null;
+    let liveStream = null;
+    let isAutoSim = true;
+    let isWideContain = true;
+    let isReviewMode = false;
+    let isBurnInMode = true;
+    let lastRecWasBurned = false;
+
+    let isAutoRecEnabled = true;
+    let isCarLinked = false;
+    let isSimTrackOutTest = false;
+    let aboveSpeedSince = null;
+    let belowSpeedSince = null;
+
+    let isRecording = false;
+    let mediaRecorder = null;
+    let recordedChunks = [];
+    let recordedTelemetryLog = [];
+    let recStartTime = 0;
+
+    let telem = {
+      spd: 92, rpm: 4580, gear: 4, thr: 0, brk: 59, clt: 0, gx: -0.15, gy: -0.71, steer: -1.2,
+      lap: undefined, distM: undefined, lapTime: undefined, lastLap: undefined, lat: undefined, lon: undefined,
+      water: 88, fuel: 74, volts: 14.2, trk: undefined
+    };
+
+    // --- ドライブモード独自変数 ---
+    let driveModeActive = false;
+    let tripOM = 0;
+    let driveStartTime = Date.now();
+
+    document.getElementById('btnResetTrip').addEventListener('click', () => {
+      tripOM = 0;
+      driveStartTime = Date.now();
+      const tripText = document.getElementById('drvTrip');
+      if (tripText) {
+        tripText.classList.add('scale-105', 'text-amber-400');
+        setTimeout(() => tripText.classList.remove('scale-105', 'text-amber-400'), 400);
+      }
+    });
+
+    const btnToggleMode = document.getElementById('btnToggleMode');
+    btnToggleMode.addEventListener('click', () => {
+      driveModeActive = !driveModeActive;
+      const standardHUD = document.getElementById('standardHUD');
+      const driveHUD = document.getElementById('driveHUD');
+      
+      if (driveModeActive) {
+        standardHUD.classList.add('hidden');
+        driveHUD.classList.remove('hidden');
+        btnToggleMode.textContent = '⏱ HUD: STD';
+        btnToggleMode.className = 'px-2.5 py-0.5 bg-emerald-700 hover:bg-emerald-600 text-white font-extrabold text-[11px] rounded border border-emerald-400/50 tracking-wider shadow';
+        document.getElementById('statusBadge').innerHTML = '<span class="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span> DRIVE // CAR ND-27';
+      } else {
+        standardHUD.classList.remove('hidden');
+        driveHUD.classList.add('hidden');
+        btnToggleMode.textContent = '🚘 P4: DRIVE';
+        btnToggleMode.className = 'px-2.5 py-0.5 bg-indigo-700 hover:bg-indigo-600 text-white font-extrabold text-[11px] rounded border border-indigo-400/50 tracking-wider shadow';
+        document.getElementById('statusBadge').innerHTML = '<span class="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span> LIVE // CAR ND-27';
+      }
+    });
+
+    // --- オシロスコープ履歴（125ms間隔 × 240点） ---
+    const oscilloHistory = [];
+    const MAX_HISTORY = 240;
+    const TRACE_INTERVAL_MS = 125;
+    let lastTracePushMs = 0;
+
+    for (let i = 0; i < MAX_HISTORY; i++) {
+      const p = i * 0.06;
+      const w = Math.sin(p);
+      const b = w < -0.2 ? Math.min(100, Math.round((-w - 0.2) * 130)) : 0;
+      const t = b === 0 ? Math.min(100, Math.max(0, Math.round((w + 0.25) * 85))) : 0;
+      const s = Math.round(125 + w * 55);
+      const d = Number((Math.sin(p * 0.5) * 0.35).toFixed(3));
+      oscilloHistory.push({ thr: t, brk: b, spd: s, delta: d });
+    }
+
+    const hudContainer = document.getElementById('hudContainer');
+    const btnConnectCar = document.getElementById('btnConnectCar');
+    const inputRoomCode = document.getElementById('inputRoomCode');
+    const remoteVideo = document.getElementById('remoteVideo');
+    const simCanvas = document.getElementById('simCanvas');
+    const compositeCanvas = document.getElementById('compositeCanvas');
+    const compCtx = compositeCanvas.getContext('2d');
+    const btnFovMode = document.getElementById('btnFovMode');
+    const btnAutoRec = document.getElementById('btnAutoRec');
+    const btnRec = document.getElementById('btnRec');
+    const btnBurnMode = document.getElementById('btnBurnMode');
+    const btnReviewMode = document.getElementById('btnReviewMode');
+    const reviewBar = document.getElementById('reviewBar');
+    const btnToggleLiveHud = document.getElementById('btnToggleLiveHud');
+    const btnSimPitStop = document.getElementById('btnSimPitStop');
+
+    buildDefaultRefTable(CIRCUIT_DB.fsw);
+
+    btnAutoRec.addEventListener('click', () => {
+      isAutoRecEnabled = !isAutoRecEnabled;
+      aboveSpeedSince = null;
+      belowSpeedSince = null;
+      btnAutoRec.textContent = isAutoRecEnabled ? '⚡ AUTO: ON' : '⚡ AUTO: OFF';
+      btnAutoRec.className = isAutoRecEnabled
+        ? 'px-2 py-0.5 bg-cyan-600/30 hover:bg-cyan-600/50 text-cyan-300 text-[11px] font-extrabold rounded border border-cyan-400/50'
+        : 'px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-400 text-[11px] font-bold rounded border border-white/10';
+    });
+
+    btnSimPitStop.addEventListener('click', () => {
+      isSimTrackOutTest = !isSimTrackOutTest;
+      if (isSimTrackOutTest) {
+        isAutoSim = true;
+        document.getElementById('chkAutoSim').checked = true;
+        btnSimPitStop.textContent = '🛑 ピット停止 (0 km/h) にして自動停止テスト';
+        btnSimPitStop.className = 'w-full py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-extrabold rounded shadow';
+      } else {
+        isAutoSim = false;
+        document.getElementById('chkAutoSim').checked = false;
+        telem = { ...telem, spd: 0, rpm: 850, gear: 1, thr: 0, brk: 0, clt: 0, gx: 0, gy: 0, steer: 0, water: 88, fuel: 74, volts: 14.2 };
+        btnSimPitStop.textContent = '🚀 テスト走行開始 (自動録画テスト)';
+        btnSimPitStop.className = 'w-full py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold rounded shadow';
+      }
+    });
+
+    btnBurnMode.addEventListener('click', () => {
+      isBurnInMode = !isBurnInMode;
+      btnBurnMode.textContent = isBurnInMode ? '🔥 焼込: ON' : '📹 焼込: OFF(元映像)';
+      btnBurnMode.className = isBurnInMode
+        ? 'px-2 py-0.5 bg-amber-600/30 hover:bg-amber-600/50 text-amber-300 text-[11px] font-extrabold rounded border border-amber-400/50'
+        : 'px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-400 text-[11px] font-bold rounded border border-white/10';
+    });
+
+    btnFovMode.addEventListener('click', () => {
+      isWideContain = !isWideContain;
+      remoteVideo.style.setProperty('object-fit', isWideContain ? 'contain' : 'cover', 'important');
+      btnFovMode.textContent = isWideContain ? '📐 FOV: FULL-WIDE' : '📐 FOV: ZOOM-FILL';
+    });
+
+    function attachStreamToFullScreen(stream) {
+      liveStream = stream;
+      if (!isReviewMode) {
+        remoteVideo.srcObject = stream;
+        remoteVideo.style.opacity = '1';
+        simCanvas.style.opacity = '0';
+        remoteVideo.play().catch(() => {});
+      }
+    }
+
+    btnConnectCar.addEventListener('click', () => {
+      const room = inputRoomCode.value.trim().toUpperCase();
+      if (!room) return;
+      if (peer) peer.destroy();
+
+      const pitPeerId = 'RACE-COACH-' + room + '-' + Math.floor(Math.random() * 1000);
+      const targetCarPeerId = 'RACE-CAR-' + room;
+
+      btnConnectCar.textContent = 'CONNECTING...';
+      btnConnectCar.className = 'px-2.5 py-0.5 bg-amber-600 text-white font-extrabold text-[11px] rounded tracking-wider shadow';
+
+      peer = new Peer(pitPeerId, PEER_CONFIG);
+
+      peer.on('open', () => {
+        dataConn = peer.connect(targetCarPeerId, { reliable: false });
+
+        dataConn.on('open', () => {
+          isCarLinked = true;
+          btnConnectCar.textContent = 'LINKED 📡';
+          btnConnectCar.className = 'px-2.5 py-0.5 bg-emerald-600 text-white font-extrabold text-[11px] rounded tracking-wider shadow';
+          isAutoSim = false;
+          document.getElementById('chkAutoSim').checked = false;
+          telem.spd = 0;
+          dataConn.send({ type: 'REQUEST_VIDEO' });
+        });
+
+        dataConn.on('data', (data) => {
+          if (data && typeof data.spd !== 'undefined' && !isReviewMode) {
+            telem = { ...telem, ...data };
+
+            // Tab5側でサーキットが切り替わったらPC側も自動同期
+            if (data.trk && data.trk !== window._lastSyncedTrk) {
+              const matchedEntry = Object.entries(CIRCUIT_DB).find(([k, c]) => c.short === data.trk);
+              if (matchedEntry) {
+                window._lastSyncedTrk = data.trk;
+                window._autoCourseDetected = true;
+                if (matchedEntry[0] !== currentCourseKey) {
+                  applyCourseSelection(matchedEntry[0]);
+                }
+              }
+            }
+
+            if (data.lat && data.lon && Math.abs(data.lat) > 20 && !window._autoCourseDetected) {
+              window._autoCourseDetected = true;
+              selectNearestCourseByCoords(data.lat, data.lon);
+            }
+            if (data.t) {
+              const lat = Math.max(1, Date.now() - data.t);
+              document.getElementById('statLatency').textContent = `${lat}ms`;
+            }
+          }
+        });
+
+        dataConn.on('close', () => {
+          isCarLinked = false;
+        });
+      });
+
+      peer.on('call', (call) => {
+        call.answer();
+        call.on('stream', (stream) => {
+          attachStreamToFullScreen(stream);
+        });
+      });
+    });
+
+    btnRec.addEventListener('click', () => {
+      if (!isRecording) {
+        startSessionRecording();
+      } else {
+        stopSessionRecording();
+      }
+    });
+
+    function startSessionRecording() {
+      if (isRecording) return;
+      lastRecWasBurned = isBurnInMode;
+      const targetStream = isBurnInMode
+        ? compositeCanvas.captureStream(30)
+        : (liveStream || simCanvas.captureStream(30));
+
+      recordedChunks = [];
+      recordedTelemetryLog = [];
+      recStartTime = performance.now();
+      aboveSpeedSince = null;
+      belowSpeedSince = null;
+
+      const mimeTypes = [
+        'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+        'video/mp4;codecs=avc1',
+        'video/mp4',
+        'video/webm;codecs=h264',
+        'video/webm;codecs=vp9',
+        'video/webm'
+      ];
+      let selectedMime = '';
+      for (const m of mimeTypes) {
+        if (MediaRecorder.isTypeSupported(m)) {
+          selectedMime = m;
+          break;
+        }
+      }
+
+      try {
+        mediaRecorder = selectedMime
+          ? new MediaRecorder(targetStream, { mimeType: selectedMime, videoBitsPerSecond: 8000000 })
+          : new MediaRecorder(targetStream);
+      } catch (e) {
+        mediaRecorder = new MediaRecorder(targetStream);
+      }
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) recordedChunks.push(e.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        const ext = (mediaRecorder.mimeType && mediaRecorder.mimeType.includes('mp4')) ? 'mp4' : 'webm';
+        const videoBlob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || 'video/mp4' });
+        const videoUrl = URL.createObjectURL(videoBlob);
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        const suffix = lastRecWasBurned ? 'HUD_BURNED' : 'RAW';
+
+        await saveBlobToTarget(videoBlob, `ND27_${courseConfig.short}_${suffix}_${stamp}.${ext}`);
+
+        const jsonBlob = new Blob([JSON.stringify(recordedTelemetryLog)], { type: 'application/json' });
+        await saveBlobToTarget(jsonBlob, `ND27_${courseConfig.short}_TELEM_${stamp}.json`);
+
+        const csvHeader = 'Time_s,Speed_kmh,RPM,Gear,Throttle_pct,Brake_pct,Delta_s,LonG,LatG,Steer_deg,LapDist_m,Sector,Lap\n';
+        const csvRows = recordedTelemetryLog.map(r =>
+          `${(r.offsetMs / 1000).toFixed(3)},${r.spd},${r.rpm},${r.gear},${r.thr},${r.brk},${(r.delta || 0).toFixed(3)},${r.gx},${r.gy},${r.steer},${Math.round(r.distM || 0)},${r.sector || 1},${r.lapNum || 1}`
+        ).join('\n');
+        const csvBlob = new Blob([csvHeader + csvRows], { type: 'text/csv' });
+        await saveBlobToTarget(csvBlob, `ND27_${courseConfig.short}_LOG_${stamp}.csv`);
+
+        enterReviewModeWithUrl(videoUrl, lastRecWasBurned);
+      };
+
+      mediaRecorder.start(200);
+      isRecording = true;
+      btnRec.textContent = '⏹ STOP REC';
+      btnRec.className = 'px-2.5 py-0.5 bg-rose-500 animate-pulse text-white font-extrabold text-[11px] rounded tracking-wider border border-white shadow';
+    }
+
+    function stopSessionRecording() {
+      if (!isRecording) return;
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+      }
+      isRecording = false;
+      aboveSpeedSince = null;
+      belowSpeedSince = null;
+      btnRec.textContent = '⏺ REC';
+      btnRec.className = 'px-2.5 py-0.5 bg-rose-700 hover:bg-rose-600 text-white font-extrabold text-[11px] rounded tracking-wider border border-rose-400/40 shadow';
+      document.getElementById('recTimerBadge').textContent = '1080p 60FPS';
+    }
+
+    function evaluateAutoRecording(nowMs) {
+      if (!isAutoRecEnabled || isReviewMode) return;
+      if (!isCarLinked && !isSimTrackOutTest && !isRecording) return;
+
+      const startSpd = parseFloat(document.getElementById('inputAutoStartSpd').value) || 10;
+      const stopSpd = parseFloat(document.getElementById('inputAutoStopSpd').value) || 5;
+      const stopHoldMs = (parseFloat(document.getElementById('inputAutoStopSec').value) || 10) * 1000;
+      const startHoldMs = 1500;
+
+      if (!isRecording) {
+        if (telem.spd >= startSpd) {
+          if (aboveSpeedSince === null) {
+            aboveSpeedSince = nowMs;
+          } else {
+            const held = nowMs - aboveSpeedSince;
+            const remain = Math.max(0, (startHoldMs - held) / 1000);
+            document.getElementById('recTimerBadge').textContent = `⚡ AUTO-START ${remain.toFixed(1)}s`;
+            if (held >= startHoldMs) startSessionRecording();
+          }
+        } else {
+          if (aboveSpeedSince !== null) {
+            aboveSpeedSince = null;
+            document.getElementById('recTimerBadge').textContent = '1080p 60FPS';
+          }
+        }
+      } else {
+        if (telem.spd < stopSpd) {
+          if (belowSpeedSince === null) {
+            belowSpeedSince = nowMs;
+          } else {
+            const held = nowMs - belowSpeedSince;
+            const remain = Math.max(0, (stopHoldMs - held) / 1000);
+            document.getElementById('recTimerBadge').textContent = `⏳ AUTO-STOP ${remain.toFixed(1)}s`;
+            if (held >= stopHoldMs) stopSessionRecording();
+          }
+        } else {
+          belowSpeedSince = null;
+        }
+      }
+    }
+
+    function finalizeLapOnLineCross(confirmedLapTimeSec) {
+      const fullLap = confirmedLapTimeSec > 5 ? confirmedLapTimeSec : lapState.lapElapsedSec;
+      const s12 = (lapState.s1Time || refBestData.s1) + (lapState.s2Time || refBestData.s2);
+      lapState.s3Time = Math.max(0.5, fullLap - s12);
+      const deltaS3 = lapState.s3Time - refBestData.s3;
+      document.getElementById('timeS3').textContent = formatLapTime(lapState.s3Time);
+      updateDeltaBadge(document.getElementById('badgeS3'), deltaS3);
+      sessionBestSectors.s3 = Math.min(sessionBestSectors.s3, lapState.s3Time);
+
+      lapState.lastLapTime = fullLap;
+      const deltaLap = fullLap - refBestData.totalTime;
+      document.getElementById('timeLast').textContent = formatLapTime(fullLap);
+      updateDeltaBadge(document.getElementById('badgeLast'), deltaLap);
+
+      if (fullLap < refBestData.totalTime) {
+        refBestData.totalTime = fullLap;
+        document.getElementById('timeBest').textContent = formatLapTime(fullLap);
+        document.getElementById('labelBestSource').textContent = 'SOLO!';
+      }
+      refreshTimingBoardStatic();
+
+      lapState.s1DoneThisLap = false;
+      lapState.s2DoneThisLap = false;
+    }
+
+    function updateLapAndSectorTiming(nowMs) {
+      const dtSec = Math.min(0.2, Math.max(0, (nowMs - lapState.lastFrameMs) / 1000));
+      lapState.lastFrameMs = nowMs;
+
+      if (telem.spd > 1) {
+        tripOM += (telem.spd / 3.6) * dtSec;
+      }
+
+      const hasSoloMasterData = !isAutoSim && (typeof telem.distM === 'number') && (typeof telem.lapTime === 'number');
+
+      if (hasSoloMasterData) {
+        document.getElementById('soloSyncBadge').textContent = 'SOLO2: MASTER SYNC';
+        document.getElementById('soloSyncBadge').className = 'mono text-emerald-400 font-extrabold';
+
+        const prevDist = lapState.lapDistM;
+        const curDist = telem.distM;
+        const incomingLap = telem.lap || lapState.currentLapNum;
+
+        const crossedStartFinish =
+          (incomingLap > lapState.currentLapNum) ||
+          (prevDist > courseConfig.length * 0.65 && curDist < courseConfig.length * 0.15);
+
+        if (crossedStartFinish) {
+          const officialLastLap = (telem.lastLap && telem.lastLap > 5) ? telem.lastLap : lapState.lapElapsedSec;
+          finalizeLapOnLineCross(officialLastLap);
+          lapState.currentLapNum = incomingLap > lapState.currentLapNum ? incomingLap : (lapState.currentLapNum + 1);
+        }
+
+        lapState.lapDistM = curDist;
+        lapState.lapElapsedSec = telem.lapTime;
+
+        if (!lapState.s1DoneThisLap && prevDist < courseConfig.s1End && curDist >= courseConfig.s1End) {
+          lapState.s1DoneThisLap = true;
+          lapState.s1Time = lapState.lapElapsedSec;
+          const deltaS1 = lapState.s1Time - refBestData.s1;
+          document.getElementById('timeS1').textContent = formatLapTime(lapState.s1Time);
+          updateDeltaBadge(document.getElementById('badgeS1'), deltaS1);
+          sessionBestSectors.s1 = Math.min(sessionBestSectors.s1, lapState.s1Time);
+        }
+
+        if (!lapState.s2DoneThisLap && prevDist < courseConfig.s2End && curDist >= courseConfig.s2End) {
+          lapState.s2DoneThisLap = true;
+          lapState.s2Time = lapState.lapElapsedSec - (lapState.s1Time || refBestData.s1);
+          const deltaS2 = lapState.s2Time - refBestData.s2;
+          document.getElementById('timeS2').textContent = formatLapTime(lapState.s2Time);
+          updateDeltaBadge(document.getElementById('badgeS2'), deltaS2);
+          sessionBestSectors.s2 = Math.min(sessionBestSectors.s2, lapState.s2Time);
+        }
+
+      } else {
+        document.getElementById('soloSyncBadge').textContent = isAutoSim ? 'SOLO2: SIM' : 'SOLO2: SPD-CALC';
+        document.getElementById('soloSyncBadge').className = 'mono text-amber-400 font-bold';
+
+        if (telem.spd > 1) {
+          const dMeters = (telem.spd / 3.6) * dtSec;
+          const prevDist = lapState.lapDistM;
+          lapState.lapDistM += dMeters;
+          lapState.lapElapsedSec += dtSec;
+
+          if (prevDist < courseConfig.s1End && lapState.lapDistM >= courseConfig.s1End) {
+            lapState.s1Time = lapState.lapElapsedSec;
+            const deltaS1 = lapState.s1Time - refBestData.s1;
+            document.getElementById('timeS1').textContent = formatLapTime(lapState.s1Time);
+            updateDeltaBadge(document.getElementById('badgeS1'), deltaS1);
+            sessionBestSectors.s1 = Math.min(sessionBestSectors.s1, lapState.s1Time);
+          }
+
+          if (prevDist < courseConfig.s2End && lapState.lapDistM >= courseConfig.s2End) {
+            lapState.s2Time = lapState.lapElapsedSec - (lapState.s1Time || refBestData.s1);
+            const deltaS2 = lapState.s2Time - refBestData.s2;
+            document.getElementById('timeS2').textContent = formatLapTime(lapState.s2Time);
+            updateDeltaBadge(document.getElementById('badgeS2'), deltaS2);
+            sessionBestSectors.s2 = Math.min(sessionBestSectors.s2, lapState.s2Time);
+          }
+
+          if (lapState.lapDistM >= courseConfig.length) {
+            finalizeLapOnLineCross(lapState.lapElapsedSec);
+            lapState.currentLapNum += 1;
+            lapState.lapDistM = lapState.lapDistM % courseConfig.length;
+            lapState.lapElapsedSec = 0;
+          }
+        }
+      }
+
+      if (lapState.lapDistM < courseConfig.s1End) {
+        lapState.currentSector = 1;
+      } else if (lapState.lapDistM < courseConfig.s2End) {
+        lapState.currentSector = 2;
+      } else {
+        lapState.currentSector = 3;
+      }
+
+      document.getElementById('hudLapNum').textContent = `LAP ${String(lapState.currentLapNum).padStart(2, '0')}`;
+      document.getElementById('hudLapDist').textContent =
+        `${Math.round(lapState.lapDistM).toLocaleString()}m [S${lapState.currentSector}]`;
+      document.getElementById('hudCurrentSector').textContent = `SECTOR ${lapState.currentSector}`;
+      document.getElementById('hudLapTime').textContent = formatLapTime(lapState.lapElapsedSec);
+
+      const refTimeNow = getRefTimeAtDistance(lapState.lapDistM);
+      const liveDeltaBadge = document.getElementById('hudLiveDeltaBadge');
+      if (refTimeNow !== null && lapState.lapDistM > 15) {
+        const diff = lapState.lapElapsedSec - refTimeNow;
+        lapState.liveDeltaSec = Math.max(-2.5, Math.min(2.5, diff));
+        const sign = diff >= 0 ? '+' : '';
+        liveDeltaBadge.textContent = `${sign}${diff.toFixed(2)}`;
+        liveDeltaBadge.className = diff <= 0
+          ? 'px-1 py-[1px] rounded-sm bg-blue-600 text-white mono text-[calc(0.45rem*var(--ui-scale))] font-bold'
+          : 'px-1 py-[1px] rounded-sm bg-rose-600 text-white mono text-[calc(0.45rem*var(--ui-scale))] font-bold';
+      } else {
+        lapState.liveDeltaSec = 0;
+        liveDeltaBadge.textContent = 'LIVE';
+        liveDeltaBadge.className = 'px-1 py-[1px] rounded-sm bg-cyan-950 text-cyan-300 mono text-[calc(0.45rem*var(--ui-scale))] font-bold border border-cyan-500/40';
+      }
+    }
+
+    const revSeek = document.getElementById('revSeek');
+    const btnRevPlay = document.getElementById('btnRevPlay');
+    const revTimeLabel = document.getElementById('revTimeLabel');
+    const revSpeed = document.getElementById('revSpeed');
+
+    btnReviewMode.addEventListener('click', () => reviewBar.classList.toggle('hidden'));
+
+    btnToggleLiveHud.addEventListener('click', () => {
+      const isHidden = hudContainer.style.opacity === '0';
+      hudContainer.style.opacity = isHidden ? '1' : '0';
+      btnToggleLiveHud.textContent = isHidden ? '👁 HUD重畳: ON' : '👁 HUD重畳: OFF(焼込済)';
+    });
+
+    function enterReviewModeWithUrl(videoUrl, hideHtmlHud = false) {
+      isReviewMode = true;
+      isAutoSim = false;
+      document.getElementById('chkAutoSim').checked = false;
+      reviewBar.classList.remove('hidden');
+
+      hudContainer.style.opacity = hideHtmlHud ? '0' : '1';
+      btnToggleLiveHud.textContent = hideHtmlHud ? '👁 HUD重畳: OFF(焼込済)' : '👁 HUD重畳: ON';
+
+      document.getElementById('statusBadge').innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-400"></span> REVIEW // DATA-MOVIE';
+      remoteVideo.srcObject = null;
+      remoteVideo.src = videoUrl;
+      remoteVideo.loop = true;
+      remoteVideo.style.opacity = '1';
+      simCanvas.style.opacity = '0';
+      remoteVideo.play().catch(() => {});
+      btnRevPlay.textContent = '⏸ PAUSE';
+    }
+
+    btnRevPlay.addEventListener('click', () => {
+      if (remoteVideo.paused) {
+        remoteVideo.play();
+        btnRevPlay.textContent = '⏸ PAUSE';
+      } else {
+        remoteVideo.pause();
+        btnRevPlay.textContent = '▶ PLAY';
+      }
+    });
+
+    revSpeed.addEventListener('change', (e) => remoteVideo.playbackRate = parseFloat(e.target.value) || 1.0);
+
+    revSeek.addEventListener('input', (e) => {
+      if (remoteVideo.duration) {
+        const targetTime = (parseFloat(e.target.value) / 1000) * remoteVideo.duration;
+        remoteVideo.currentTime = targetTime;
+        syncTelemetryToVideoTime(targetTime * 1000);
+      }
+    });
+
+    document.getElementById('inputLoadVideo').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const isBurnedFile = file.name.includes('HUD_BURNED');
+        enterReviewModeWithUrl(URL.createObjectURL(file), isBurnedFile);
+      }
+    });
+
+    document.getElementById('inputLoadJson').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try { recordedTelemetryLog = JSON.parse(ev.target.result); } catch (err) {}
+      };
+      reader.readAsText(file);
+    });
+
+    document.getElementById('btnExitReview').addEventListener('click', () => {
+      isReviewMode = false;
+      hudContainer.style.opacity = '1';
+      reviewBar.classList.add('hidden');
+      document.getElementById('statusBadge').innerHTML = '<span class="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span> LIVE // CAR ND-27';
+      remoteVideo.pause();
+      remoteVideo.removeAttribute('src');
+      if (liveStream) {
+        remoteVideo.srcObject = liveStream;
+        remoteVideo.play().catch(() => {});
+      } else {
+        remoteVideo.style.opacity = '0';
+        simCanvas.style.opacity = '1';
+      }
+    });
+
+    function syncTelemetryToVideoTime(currentMs) {
+      if (!recordedTelemetryLog || recordedTelemetryLog.length === 0) return;
+      let idx = 0;
+      for (let i = 0; i < recordedTelemetryLog.length; i++) {
+        if (recordedTelemetryLog[i].offsetMs <= currentMs) idx = i;
+        else break;
+      }
+      const frame = recordedTelemetryLog[idx];
+      if (frame) {
+        telem = { ...telem, ...frame };
+        if (frame.distM !== undefined) lapState.lapDistM = frame.distM;
+        if (frame.delta !== undefined) lapState.liveDeltaSec = frame.delta;
+        if (frame.lapNum !== undefined) lapState.currentLapNum = frame.lapNum;
+        for (let j = 0; j < MAX_HISTORY; j++) {
+          const histIdx = idx - (MAX_HISTORY - 1 - j) * 5;
+          if (histIdx >= 0 && recordedTelemetryLog[histIdx]) {
+            oscilloHistory[j] = {
+              thr: recordedTelemetryLog[histIdx].thr ?? 0,
+              brk: recordedTelemetryLog[histIdx].brk ?? 0,
+              spd: recordedTelemetryLog[histIdx].spd ?? 0,
+              delta: recordedTelemetryLog[histIdx].delta ?? 0
+            };
+          } else {
+            oscilloHistory[j] = { thr: 0, brk: 0, spd: 0, delta: 0 };
+          }
+        }
+      }
+    }
+
+    // --- HUDパネル ドラッグ・リサイズ・自動保存 ---
+    const HUD_LAYOUT_KEY = 'pit_hud_layout_v1';
     const panels = document.querySelectorAll('#standardHUD > div, #driveHUD #panelDrive');
 
     function updateScale(panel) {
@@ -8,7 +1641,6 @@ const HUD_LAYOUT_KEY = 'pit_hud_layout_v1';
       panel.style.setProperty('--ui-scale', scale.toFixed(3));
     }
 
-    // レイアウトをブラウザに保存
     function saveHudLayout() {
       const layout = {};
       panels.forEach(panel => {
@@ -28,7 +1660,6 @@ const HUD_LAYOUT_KEY = 'pit_hud_layout_v1';
       } catch (e) {}
     }
 
-    // 保存されたレイアウトを復元
     function loadHudLayout() {
       try {
         const raw = localStorage.getItem(HUD_LAYOUT_KEY);
@@ -105,8 +1736,643 @@ const HUD_LAYOUT_KEY = 'pit_hud_layout_v1';
       });
     });
 
-    // RESETボタンで保存レイアウトを消去して初期配置に戻す
     document.getElementById('btnResetHud').addEventListener('click', () => {
       localStorage.removeItem(HUD_LAYOUT_KEY);
       location.reload();
     });
+
+    const drawerSim = document.getElementById('drawerSim');
+    document.getElementById('btnToggleSim').addEventListener('click', () => drawerSim.classList.toggle('translate-x-full'));
+    document.getElementById('btnCloseSim').addEventListener('click', () => drawerSim.classList.add('translate-x-full'));
+    document.getElementById('chkAutoSim').addEventListener('change', (e) => isAutoSim = e.target.checked);
+
+    let simPhase = 4.2;
+    const oscilloCanvas = document.getElementById('oscilloCanvas');
+    const oscCtx = oscilloCanvas.getContext('2d');
+    const gCanvas = document.getElementById('gCanvas');
+    const gCtx = gCanvas.getContext('2d');
+    const drvGCanvas = document.getElementById('drvGCanvas');
+    const dgCtx = drvGCanvas.getContext('2d');
+    const sCtx = simCanvas.getContext('2d');
+
+    function drawSmoothTrace(ctx, points, color, lineWidth) {
+      if (points.length < 2) return;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = lineWidth;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.moveTo(points[0].x, points[0].y);
+      for (let i = 1; i < points.length - 1; i++) {
+        const xc = (points[i].x + points[i + 1].x) * 0.5;
+        const yc = (points[i].y + points[i + 1].y) * 0.5;
+        ctx.quadraticCurveTo(points[i].x, points[i].y, xc, yc);
+      }
+      const last = points[points.length - 1];
+      ctx.lineTo(last.x, last.y);
+      ctx.stroke();
+    }
+
+    // 録画焼き込み用オフスクリーン合成（1920x1080 Full HD）
+    function renderBurnInCompositeFrame() {
+      const CW = 1920, CH = 1080;
+      compCtx.fillStyle = '#000000';
+      compCtx.fillRect(0, 0, CW, CH);
+
+      if (liveStream && remoteVideo.readyState >= 2 && remoteVideo.videoWidth > 0) {
+        const vw = remoteVideo.videoWidth;
+        const vh = remoteVideo.videoHeight;
+        const videoAspect = vw / vh;
+        const canvasAspect = CW / CH;
+        let drawW = CW, drawH = CH, drawX = 0, drawY = 0;
+
+        if (isWideContain) {
+          if (videoAspect > canvasAspect) {
+            drawW = CW; drawH = CW / videoAspect; drawY = (CH - drawH) / 2;
+          } else {
+            drawH = CH; drawW = CH * videoAspect; drawX = (CW - drawW) / 2;
+          }
+        } else {
+          if (videoAspect > canvasAspect) {
+            drawH = CH; drawW = CH * videoAspect; drawX = (CW - drawW) / 2;
+          } else {
+            drawW = CW; drawH = CW / videoAspect; drawY = (CH - drawH) / 2;
+          }
+        }
+        compCtx.drawImage(remoteVideo, drawX, drawY, drawW, drawH);
+      } else {
+        compCtx.drawImage(simCanvas, 0, 0, CW, CH);
+      }
+
+      const cRect = hudContainer.getBoundingClientRect();
+      if (cRect.width === 0 || cRect.height === 0) return;
+      const sx = CW / cRect.width;
+      const sy = CH / cRect.height;
+
+      function getBox(id) {
+        const el = document.getElementById(id);
+        const r = el.getBoundingClientRect();
+        return {
+          x: (r.left - cRect.left) * sx,
+          y: (r.top - cRect.top) * sy,
+          w: r.width * sx,
+          h: r.height * sy
+        };
+      }
+
+      function drawPanelBg(b) {
+        compCtx.fillStyle = 'rgba(10, 14, 23, 0.88)';
+        compCtx.fillRect(b.x, b.y, b.w, b.h);
+        compCtx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
+        compCtx.lineWidth = 1.5;
+        compCtx.strokeRect(b.x, b.y, b.w, b.h);
+      }
+
+      if (driveModeActive) {
+        // --- 🚘 P4 DRIVE モードの焼き込み ---
+        const bDrv = getBox('panelDrive');
+        compCtx.fillStyle = 'rgba(10, 14, 23, 0.95)';
+        compCtx.fillRect(bDrv.x, bDrv.y, bDrv.w, bDrv.h);
+        compCtx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+        compCtx.lineWidth = 2;
+        compCtx.strokeRect(bDrv.x, bDrv.y, bDrv.w, bDrv.h);
+
+        compCtx.fillStyle = '#6366f1';
+        compCtx.fillRect(bDrv.x + 18, bDrv.y + 18, bDrv.w * 0.16, bDrv.h * 0.045);
+        compCtx.fillStyle = '#ffffff';
+        compCtx.font = `900 ${Math.round(bDrv.h * 0.024)}px "Barlow Condensed", sans-serif`;
+        compCtx.fillText('🚘 DRIVE MODE (P4)', bDrv.x + 26, bDrv.y + bDrv.h * 0.045);
+
+        compCtx.fillStyle = '#94a3b8';
+        compCtx.font = `bold ${Math.round(bDrv.h * 0.028)}px "Barlow Condensed", sans-serif`;
+        compCtx.fillText('STREET HUD & VEHICLE VITALS', bDrv.x + bDrv.w * 0.19, bDrv.y + bDrv.h * 0.045);
+
+        const xLeft = bDrv.x + 20;
+        const wLeft = bDrv.w * 0.24;
+        const hCard = bDrv.h * 0.82;
+        const yTop = bDrv.y + bDrv.h * 0.12;
+
+        compCtx.fillStyle = 'rgba(15, 23, 42, 0.4)';
+        compCtx.fillRect(xLeft, yTop, wLeft, hCard);
+        compCtx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+        compCtx.strokeRect(xLeft, yTop, wLeft, hCard);
+
+        compCtx.fillStyle = '#94a3b8';
+        compCtx.font = `bold ${Math.round(bDrv.h * 0.024)}px "Barlow Condensed", sans-serif`;
+        compCtx.fillText('WATER TEMP', xLeft + 14, yTop + 30);
+        compCtx.fillStyle = '#ffffff';
+        compCtx.font = `bold ${Math.round(bDrv.h * 0.035)}px "Oswald", sans-serif`;
+        compCtx.fillText(`${Math.round(telem.water)}°C`, xLeft + wLeft - 68, yTop + 32);
+
+        compCtx.fillStyle = '#1e293b';
+        compCtx.fillRect(xLeft + 14, yTop + 45, wLeft - 28, 12);
+        compCtx.fillStyle = '#ffffff';
+        compCtx.fillRect(xLeft + 14, yTop + 45, (wLeft - 28) * (telem.water / 130), 12);
+
+        compCtx.fillStyle = '#94a3b8';
+        compCtx.font = `bold ${Math.round(bDrv.h * 0.024)}px "Barlow Condensed", sans-serif`;
+        compCtx.fillText('FUEL', xLeft + 14, yTop + 98);
+        compCtx.fillStyle = '#ffffff';
+        compCtx.font = `bold ${Math.round(bDrv.h * 0.035)}px "Oswald", sans-serif`;
+        compCtx.fillText(`${Math.round(telem.fuel)}%`, xLeft + wLeft - 58, yTop + 100);
+
+        compCtx.fillStyle = '#1e293b';
+        compCtx.fillRect(xLeft + 14, yTop + 112, wLeft - 28, 12);
+        compCtx.fillStyle = '#ffffff';
+        compCtx.fillRect(xLeft + 14, yTop + 112, (wLeft - 28) * (telem.fuel / 100), 12);
+
+        compCtx.fillStyle = '#94a3b8';
+        compCtx.font = `bold ${Math.round(bDrv.h * 0.024)}px "Barlow Condensed", sans-serif`;
+        compCtx.fillText('STEER ANGLE', xLeft + 14, yTop + 172);
+        compCtx.fillStyle = '#ffffff';
+        compCtx.font = `bold ${Math.round(bDrv.h * 0.032)}px "JetBrains Mono", monospace`;
+        compCtx.fillText(`${telem.steer}°`, xLeft + 14, yTop + 210);
+
+        const xMid = bDrv.x + bDrv.w * 0.27;
+        const wMid = bDrv.w * 0.44;
+        const cx = xMid + wMid / 2;
+        const cy = yTop + hCard / 2 + 8;
+        const radius = bDrv.h * 0.28;
+
+        compCtx.strokeStyle = '#ffffff';
+        compCtx.lineWidth = 18;
+        compCtx.beginPath();
+        compCtx.arc(cx, cy, radius, Math.PI * 0.75, Math.PI * 2.25);
+        compCtx.stroke();
+
+        compCtx.strokeStyle = '#f43f5e';
+        compCtx.lineWidth = 18;
+        compCtx.beginPath();
+        compCtx.arc(cx, cy, radius, Math.PI * 2.06, Math.PI * 2.25);
+        compCtx.stroke();
+
+        compCtx.fillStyle = '#02040a';
+        compCtx.beginPath();
+        compCtx.arc(cx, cy, radius - 9, 0, Math.PI * 2);
+        compCtx.fill();
+
+        compCtx.textAlign = 'center';
+        compCtx.fillStyle = '#ffffff';
+        compCtx.font = `italic 900 ${Math.round(bDrv.h * 0.12)}px "Oswald", sans-serif`;
+        compCtx.fillText(String(Math.round(telem.spd)), cx, cy - 8);
+
+        compCtx.fillStyle = '#94a3b8';
+        compCtx.font = `bold ${Math.round(bDrv.h * 0.024)}px "Barlow Condensed", sans-serif`;
+        compCtx.fillText('KM/H', cx, cy + 18);
+
+        compCtx.fillStyle = '#ffffff';
+        compCtx.font = `900 ${Math.round(bDrv.h * 0.07)}px "Oswald", sans-serif`;
+        compCtx.fillText(String(telem.gear), cx, cy + 62);
+
+        compCtx.fillStyle = '#22d3ee';
+        compCtx.font = `bold ${Math.round(bDrv.h * 0.02)}px "Barlow Condensed", sans-serif`;
+        compCtx.fillText('DRIVE', cx, cy + 82);
+
+        compCtx.textAlign = 'left';
+
+        const xRight = bDrv.x + bDrv.w * 0.73;
+        const wRight = bDrv.w * 0.25;
+
+        compCtx.fillStyle = '#ffffff';
+        compCtx.font = `bold ${Math.round(bDrv.h * 0.06)}px "JetBrains Mono", monospace`;
+        compCtx.fillText(document.getElementById('drvClock').textContent, xRight, yTop + 38);
+        compCtx.fillStyle = '#94a3b8';
+        compCtx.font = `bold ${Math.round(bDrv.h * 0.02)}px "Barlow Condensed", sans-serif`;
+        compCtx.fillText(document.getElementById('drvClockSub').textContent, xRight, yTop + 58);
+
+        compCtx.fillStyle = '#ffffff';
+        compCtx.font = `bold ${Math.round(bDrv.h * 0.045)}px "JetBrains Mono", monospace`;
+        compCtx.fillText(`${telem.volts.toFixed(1)}V`, xRight + wRight - 98, yTop + 30);
+        compCtx.fillStyle = '#94a3b8';
+        compCtx.font = `bold ${Math.round(bDrv.h * 0.02)}px "Barlow Condensed", sans-serif`;
+        compCtx.fillText('BATTERY', xRight + wRight - 98, yTop + 48);
+
+        const gy = yTop + 158;
+        compCtx.drawImage(drvGCanvas, xRight, gy, bDrv.w * 0.11, bDrv.w * 0.11);
+
+        compCtx.fillStyle = '#94a3b8';
+        compCtx.font = `bold ${Math.round(bDrv.h * 0.02)}px "Barlow Condensed", sans-serif`;
+        compCtx.fillText('ACCELEROMETER', xRight + bDrv.w * 0.12, gy + 18);
+        compCtx.fillStyle = '#ffffff';
+        compCtx.font = `bold ${Math.round(bDrv.h * 0.026)}px "JetBrains Mono", monospace`;
+        compCtx.fillText(`LAT G: ${telem.gy.toFixed(2)}G`, xRight + bDrv.w * 0.12, gy + 42);
+        compCtx.fillText(`LON G: ${telem.gx.toFixed(2)}G`, xRight + bDrv.w * 0.12, gy + 64);
+
+        const ty = yTop + 240;
+        compCtx.fillStyle = '#ffffff';
+        compCtx.font = `bold ${Math.round(bDrv.h * 0.045)}px "Oswald", sans-serif`;
+        compCtx.fillText(`TRIP A ${((tripOM || 0)/1000).toFixed(1)} km`, xRight, ty + 18);
+        compCtx.font = `bold ${Math.round(bDrv.h * 0.035)}px "JetBrains Mono", monospace`;
+        compCtx.fillText(`TIME ${document.getElementById('drvTimeElapsed').textContent}`, xRight, ty + 46);
+
+      } else {
+        // --- 通常HUD 焼き込み ---
+        const bSpd = getBox('panelSpeedo');
+        drawPanelBg(bSpd);
+        compCtx.fillStyle = '#94a3b8';
+        compCtx.font = `bold ${Math.round(bSpd.h * 0.11)}px "Barlow Condensed", sans-serif`;
+        compCtx.fillText('⠿ ENGINE SPEED', bSpd.x + 12, bSpd.y + bSpd.h * 0.16);
+        compCtx.fillStyle = '#e2e8f0';
+        compCtx.textAlign = 'right';
+        compCtx.font = `bold ${Math.round(bSpd.h * 0.12)}px "JetBrains Mono", monospace`;
+        compCtx.fillText(Math.round(telem.rpm).toLocaleString(), bSpd.x + bSpd.w - 12, bSpd.y + bSpd.h * 0.16);
+        compCtx.textAlign = 'left';
+
+        const barY = bSpd.y + bSpd.h * 0.22;
+        const barW = bSpd.w - 24;
+        compCtx.fillStyle = '#1e293b';
+        compCtx.fillRect(bSpd.x + 12, barY, barW, 9);
+        const rpmRatio = Math.min(1, telem.rpm / 7500);
+        const grad = compCtx.createLinearGradient(bSpd.x + 12, 0, bSpd.x + 12 + barW, 0);
+        grad.addColorStop(0, '#22d3ee');
+        grad.addColorStop(0.5, '#3b82f6');
+        grad.addColorStop(1, '#f43f5e');
+        compCtx.fillStyle = grad;
+        compCtx.fillRect(bSpd.x + 12, barY, barW * rpmRatio, 9);
+
+        compCtx.fillStyle = '#ffffff';
+        compCtx.font = `italic 900 ${Math.round(bSpd.h * 0.46)}px "Oswald", sans-serif`;
+        compCtx.fillText(String(Math.round(telem.spd)), bSpd.x + 12, bSpd.y + bSpd.h * 0.86);
+        compCtx.fillStyle = '#94a3b8';
+        compCtx.font = `bold ${Math.round(bSpd.h * 0.11)}px "Barlow Condensed", sans-serif`;
+        compCtx.fillText('KM/H', bSpd.x + bSpd.w * 0.48, bSpd.y + bSpd.h * 0.86);
+
+        compCtx.textAlign = 'right';
+        compCtx.fillStyle = '#94a3b8';
+        compCtx.font = `bold ${Math.round(bSpd.h * 0.10)}px "Barlow Condensed", sans-serif`;
+        compCtx.fillText('GEAR', bSpd.x + bSpd.w - 12, bSpd.y + bSpd.h * 0.50);
+        compCtx.fillStyle = '#fbbf24';
+        compCtx.font = `900 ${Math.round(bSpd.h * 0.38)}px "Oswald", sans-serif`;
+        compCtx.fillText(String(telem.gear), bSpd.x + bSpd.w - 12, bSpd.y + bSpd.h * 0.88);
+        compCtx.textAlign = 'left';
+
+        compCtx.fillStyle = '#cbd5e1';
+        compCtx.font = `bold ${Math.round(bSpd.h * 0.12)}px "JetBrains Mono", monospace`;
+        compCtx.fillText(`STEER ${telem.steer}°`, bSpd.x, bSpd.y + bSpd.h + 20);
+        compCtx.textAlign = 'right';
+        compCtx.fillText(document.getElementById('hudLapDist').textContent, bSpd.x + bSpd.w, bSpd.y + bSpd.h + 20);
+        compCtx.textAlign = 'left';
+
+        const bTim = getBox('panelTimingBoard');
+        drawPanelBg(bTim);
+        const rows = [
+          { s: '3', t: document.getElementById('timeS3').textContent, d: document.getElementById('badgeS3').textContent, bg: document.getElementById('badgeS3').className.includes('rose') ? '#e11d48' : '#2563eb', c: '#fff' },
+          { s: '2', t: document.getElementById('timeS2').textContent, d: document.getElementById('badgeS2').textContent, bg: document.getElementById('badgeS2').className.includes('rose') ? '#e11d48' : '#2563eb', c: '#fff' },
+          { s: '1', t: document.getElementById('timeS1').textContent, d: document.getElementById('badgeS1').textContent, bg: document.getElementById('badgeS1').className.includes('rose') ? '#e11d48' : '#334155', c: '#fff' },
+          { s: 'LAST', t: document.getElementById('timeLast').textContent, d: document.getElementById('badgeLast').textContent, bg: document.getElementById('badgeLast').className.includes('rose') ? '#e11d48' : '#2563eb', c: '#fff' },
+          { s: 'BEST', t: document.getElementById('timeBest').textContent, d: document.getElementById('labelBestSource').textContent, bg: 'transparent', c: '#34d399' },
+          { s: 'OPT.', t: document.getElementById('timeOpt').textContent, d: 'IDEAL', bg: 'transparent', c: '#fbbf24' }
+        ];
+        const rowH = (bTim.h - 14) / 6;
+        rows.forEach((r, idx) => {
+          const ry = bTim.y + 8 + idx * rowH;
+          compCtx.font = `bold ${Math.round(rowH * 0.68)}px "JetBrains Mono", monospace`;
+          compCtx.fillStyle = r.c === '#34d399' || r.c === '#fbbf24' ? r.c : '#cbd5e1';
+          compCtx.fillText(r.s, bTim.x + 8, ry + rowH * 0.72);
+          compCtx.textAlign = 'right';
+          compCtx.fillText(r.t, bTim.x + bTim.w * 0.64, ry + rowH * 0.72);
+          compCtx.textAlign = 'left';
+
+          if (r.bg !== 'transparent') {
+            compCtx.fillStyle = r.bg;
+            compCtx.fillRect(bTim.x + bTim.w * 0.67, ry + 1, bTim.w * 0.29, rowH - 3);
+          }
+          compCtx.fillStyle = r.c;
+          compCtx.textAlign = 'center';
+          compCtx.fillText(r.d, bTim.x + bTim.w * 0.815, ry + rowH * 0.72);
+          compCtx.textAlign = 'left';
+        });
+
+        const bLap = getBox('panelLap');
+        drawPanelBg(bLap);
+        compCtx.fillStyle = '#fbbf24';
+        compCtx.font = `bold ${Math.round(bLap.h * 0.26)}px "Barlow Condensed", sans-serif`;
+        compCtx.fillText(document.getElementById('hudLapNum').textContent, bLap.x + 12, bLap.y + bLap.h * 0.42);
+        compCtx.fillStyle = '#22d3ee';
+        compCtx.fillText(document.getElementById('hudCurrentSector').textContent, bLap.x + 12, bLap.y + bLap.h * 0.80);
+
+        compCtx.fillStyle = '#ffffff';
+        compCtx.font = `900 ${Math.round(bLap.h * 0.56)}px "JetBrains Mono", monospace`;
+        compCtx.fillText(document.getElementById('hudLapTime').textContent, bLap.x + bLap.w * 0.34, bLap.y + bLap.h * 0.72);
+
+        const bG = getBox('panelGBall');
+        drawPanelBg(bG);
+        compCtx.fillStyle = '#cbd5e1';
+        compCtx.font = `bold ${Math.round(bG.h * 0.14)}px "Barlow Condensed", sans-serif`;
+        compCtx.fillText('G-BALL', bG.x + 8, bG.y + bG.h * 0.20);
+        compCtx.fillStyle = '#fbbf24';
+        compCtx.textAlign = 'right';
+        compCtx.fillText(document.getElementById('hudGTotal').textContent, bG.x + bG.w - 8, bG.y + bG.h * 0.20);
+        compCtx.textAlign = 'left';
+        compCtx.drawImage(gCanvas, bG.x + 6, bG.y + bG.h * 0.24, bG.w - 12, bG.h * 0.72);
+
+        compCtx.fillStyle = '#cbd5e1';
+        compCtx.font = `bold ${Math.round(bG.h * 0.13)}px "JetBrains Mono", monospace`;
+        compCtx.textAlign = 'center';
+        compCtx.fillText(`LAT:${telem.gy.toFixed(2)} LON:${telem.gx.toFixed(2)}`, bG.x + bG.w / 2, bG.y + bG.h + 18);
+        compCtx.textAlign = 'left';
+
+        const bPed = getBox('panelPedals');
+        drawPanelBg(bPed);
+        compCtx.font = `800 ${Math.round(bPed.h * 0.18)}px "Barlow Condensed", sans-serif`;
+        compCtx.fillStyle = '#ffffff';
+        compCtx.fillText('⠿•TELEMETRY TRACE (LAST 30s)', bPed.x + 14, bPed.y + bPed.h * 0.25);
+
+        const thrTxt = `■ THR: ${Math.round(telem.thr)}%`;
+        const brkTxt = `■ BRK: ${Math.round(telem.brk)}% (${(telem.brk * 0.085).toFixed(1)} MPa)`;
+        const spdTxt = `■ SPD: ${Math.round(telem.spd)} km/h`;
+        const dSign = lapState.liveDeltaSec >= 0 ? '+' : '';
+        const dltTxt = `■ BEST Δ: ${dSign}${lapState.liveDeltaSec.toFixed(2)}s`;
+
+        compCtx.fillStyle = '#34d399';
+        compCtx.fillText(thrTxt, bPed.x + bPed.w * 0.24, bPed.y + bPed.h * 0.25);
+        compCtx.fillStyle = '#fb7185';
+        compCtx.fillText(brkTxt, bPed.x + bPed.w * 0.35, bPed.y + bPed.h * 0.25);
+        compCtx.fillStyle = '#38bdf8';
+        compCtx.fillText(spdTxt, bPed.x + bPed.w * 0.53, bPed.y + bPed.h * 0.25);
+        compCtx.fillStyle = '#fbbf24';
+        compCtx.fillText(dltTxt, bPed.x + bPed.w * 0.67, bPed.y + bPed.h * 0.25);
+
+        const miniX = bPed.x + 14;
+        const miniY = bPed.y + bPed.h * 0.34;
+        const miniH = bPed.h * 0.46;
+        const bars = [
+          { val: telem.thr, col: '#34d399', lbl: 'THR' },
+          { val: telem.brk, col: '#f43f5e', lbl: 'BRK' },
+          { val: (telem.spd / 220) * 100, col: '#38bdf8', lbl: 'SPD' }
+        ];
+        bars.forEach((b, i) => {
+          const bx = miniX + i * 28;
+          compCtx.fillStyle = '#1e293b';
+          compCtx.fillRect(bx, miniY, 20, miniH);
+          const hVal = (Math.min(100, Math.max(0, b.val)) / 100) * miniH;
+          compCtx.fillStyle = b.col;
+          compCtx.fillRect(bx, miniY + miniH - hVal, 20, hVal);
+          compCtx.font = `900 ${Math.round(bPed.h * 0.13)}px "Barlow Condensed", sans-serif`;
+          compCtx.fillText(b.lbl, bx, bPed.y + bPed.h * 0.94);
+        });
+
+        const oscX = miniX + 96;
+        const oscY = bPed.y + bPed.h * 0.32;
+        const oscW = bPed.w - 116;
+        const oscH = bPed.h * 0.60;
+        compCtx.fillStyle = 'rgba(6, 9, 17, 0.92)';
+        compCtx.fillRect(oscX, oscY, oscW, oscH);
+        compCtx.drawImage(oscilloCanvas, oscX, oscY, oscW, oscH);
+
+        compCtx.fillStyle = '#94a3b8';
+        compCtx.font = `bold ${Math.round(bPed.h * 0.14)}px "JetBrains Mono", monospace`;
+        compCtx.fillText('-30s', oscX + 8, oscY + oscH - 4);
+        compCtx.fillText('-20s', oscX + oscW * 0.33, oscY + oscH - 4);
+        compCtx.fillText('-10s', oscX + oscW * 0.66, oscY + oscH - 4);
+        compCtx.fillStyle = '#22d3ee';
+        compCtx.textAlign = 'right';
+        compCtx.fillText('0s (NOW)', oscX + oscW - 8, oscY + oscH - 4);
+        compCtx.textAlign = 'left';
+      }
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const nowMs = performance.now();
+
+      const now = new Date();
+      const timeString = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+      const ampmString = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+
+      if (isReviewMode) {
+        if (remoteVideo.duration) {
+          const cur = remoteVideo.currentTime;
+          const dur = remoteVideo.duration;
+          revSeek.value = Math.round((cur / dur) * 1000);
+          revTimeLabel.textContent = `${cur.toFixed(1)}s / ${dur.toFixed(1)}s`;
+          syncTelemetryToVideoTime(cur * 1000);
+        }
+      } else {
+        if (isAutoSim) {
+          simPhase += 0.008;
+          const wave = Math.sin(simPhase);
+          const brk = wave < -0.2 ? Math.min(100, Math.round((-wave - 0.2) * 135)) : 0;
+          const thr = brk === 0 ? Math.min(100, Math.max(0, Math.round((wave + 0.25) * 88))) : 0;
+          const spd = Math.round(125 + wave * 55);
+          telem = {
+            ...telem,
+            spd: spd,
+            rpm: Math.round(3800 + (spd % 45) * 75),
+            gear: spd > 165 ? 5 : spd > 125 ? 4 : spd > 88 ? 3 : 2,
+            thr: thr,
+            brk: brk,
+            clt: 0,
+            gx: Number((brk > 0 ? -brk * 0.011 : thr * 0.004).toFixed(2)),
+            gy: Number((Math.cos(simPhase * 0.7) * 0.95).toFixed(2)),
+            steer: Number((Math.cos(simPhase * 0.7) * 15).toFixed(1)),
+            water: Math.round(88 + Math.sin(simPhase * 0.1) * 2),
+            fuel: Math.max(5, Math.round(74 - (tripOM / 4000))),
+            volts: Number((13.8 + Math.sin(simPhase * 0.3) * 0.4).toFixed(1))
+          };
+        } else {
+          telem.water = telem.wtemp ?? telem.water ?? 88;
+          telem.fuel = telem.fuel ?? 74;
+          telem.volts = telem.volts ?? 14.2;
+        }
+
+        updateLapAndSectorTiming(nowMs);
+        evaluateAutoRecording(nowMs);
+
+        const currentDelta = isAutoSim
+          ? Number((Math.sin(simPhase * 0.45) * 0.45).toFixed(3))
+          : lapState.liveDeltaSec;
+        lapState.liveDeltaSec = currentDelta;
+
+        if (nowMs - lastTracePushMs >= TRACE_INTERVAL_MS) {
+          lastTracePushMs = nowMs;
+          const prev = oscilloHistory[oscilloHistory.length - 1] || { thr: 0, brk: 0, spd: 0, delta: 0 };
+          oscilloHistory.shift();
+          oscilloHistory.push({
+            thr: prev.thr * 0.25 + telem.thr * 0.75,
+            brk: prev.brk * 0.25 + telem.brk * 0.75,
+            spd: prev.spd * 0.25 + telem.spd * 0.75,
+            delta: prev.delta * 0.3 + currentDelta * 0.7
+          });
+        }
+
+        if (isRecording) {
+          const elapsedMs = Math.round(nowMs - recStartTime);
+          recordedTelemetryLog.push({
+            offsetMs: elapsedMs,
+            distM: lapState.lapDistM,
+            sector: lapState.currentSector,
+            lapNum: lapState.currentLapNum,
+            delta: currentDelta,
+            ...telem
+          });
+          if (belowSpeedSince === null) {
+            document.getElementById('recTimerBadge').textContent = `🔴 REC ${(elapsedMs / 1000).toFixed(1)}s`;
+          }
+        }
+      }
+
+      document.getElementById('hudSpeed').textContent = Math.round(telem.spd);
+      document.getElementById('hudGear').textContent = telem.gear;
+      document.getElementById('hudRpm').textContent = Math.round(telem.rpm).toLocaleString();
+      document.getElementById('hudSteer').textContent = `${telem.steer}°`;
+      document.getElementById('hudRpmBar').style.width = Math.min(100, (telem.rpm / 7500) * 100) + '%';
+
+      const spdPct = Math.min(100, Math.max(0, (telem.spd / 220) * 100));
+      document.getElementById('barThr').style.height = telem.thr + '%';
+      document.getElementById('barBrk').style.height = telem.brk + '%';
+      document.getElementById('barSpd').style.height = spdPct + '%';
+
+      document.getElementById('labelThr').textContent = `${Math.round(telem.thr)}%`;
+      document.getElementById('labelBrk').textContent = `${Math.round(telem.brk)}% (${(telem.brk * 0.085).toFixed(1)} MPa)`;
+      document.getElementById('labelSpd').textContent = `${Math.round(telem.spd)} km/h`;
+      const dSign = lapState.liveDeltaSec >= 0 ? '+' : '';
+      document.getElementById('labelDelta').textContent = `${dSign}${lapState.liveDeltaSec.toFixed(2)}s`;
+
+      const gTotal = Math.hypot(telem.gx, telem.gy).toFixed(2);
+      document.getElementById('hudGTotal').textContent = `${gTotal}G`;
+      document.getElementById('hudGLat').textContent = telem.gy.toFixed(2);
+      document.getElementById('hudGLon').textContent = telem.gx.toFixed(2);
+
+      if (driveModeActive) {
+        document.getElementById('drvSpeed').textContent = Math.round(telem.spd);
+        document.getElementById('drvGear').textContent = telem.gear;
+        document.getElementById('drvRpm').textContent = Math.round(telem.rpm).toLocaleString();
+        
+        const offset = 552.92 - (Math.min(8000, telem.rpm) / 8000) * 410;
+        document.getElementById('svgTachoBar').setAttribute('stroke-dashoffset', offset);
+
+        document.getElementById('drvWaterText').textContent = `${Math.round(telem.water)}°C`;
+        document.getElementById('drvWaterBar').style.width = `${Math.min(100, (telem.water / 130) * 100)}%`;
+        
+        document.getElementById('drvFuelText').textContent = `${Math.round(telem.fuel)}%`;
+        document.getElementById('drvFuelBar').style.width = `${telem.fuel}%`;
+        const resAlert = document.getElementById('drvFuelReserve');
+        if (telem.fuel <= 15) {
+          resAlert.classList.remove('hidden');
+        } else {
+          resAlert.classList.add('hidden');
+        }
+
+        document.getElementById('drvSteerText').textContent = `${telem.steer}°`;
+        document.getElementById('drvSteerSvg').style.transform = `rotate(${telem.steer}deg)`;
+
+        document.getElementById('drvClock').textContent = timeString;
+        document.getElementById('drvClockSub').textContent = ampmString;
+
+        document.getElementById('drvVoltage').textContent = `${telem.volts.toFixed(1)}V`;
+        document.getElementById('drvVoltsBar').style.width = `${Math.min(100, ((telem.volts - 10) / 5) * 100)}%`;
+
+        document.getElementById('drvGLat').textContent = `${telem.gy.toFixed(2)}G`;
+        document.getElementById('drvGLon').textContent = `${telem.gx.toFixed(2)}G`;
+
+        document.getElementById('drvTrip').textContent = `${(tripOM / 1000).toFixed(1)} km`;
+        
+        const dtDiffMs = Date.now() - driveStartTime;
+        const diffHrs = Math.floor(dtDiffMs / 3600000);
+        const diffMins = Math.floor((dtDiffMs % 3600000) / 60000);
+        document.getElementById('drvTimeElapsed').textContent = `${diffHrs}h ${String(diffMins).padStart(2, '0')}m`;
+
+        document.getElementById('drvThrBar').style.width = `${telem.thr}%`;
+        document.getElementById('drvBrkBar').style.width = `${telem.brk}%`;
+
+        drvGCanvas.width = drvGCanvas.offsetWidth;
+        drvGCanvas.height = drvGCanvas.offsetHeight;
+        const dgw = drvGCanvas.width, dgh = drvGCanvas.height;
+        const dcx = dgw / 2, dcy = dgh / 2, dr = Math.min(dcx, dcy) - 2;
+        dgCtx.clearRect(0, 0, dgw, dgh);
+        dgCtx.strokeStyle = 'rgba(255,255,255,0.12)';
+        dgCtx.lineWidth = 1;
+        dgCtx.beginPath(); dgCtx.arc(dcx, dcy, dr * 0.4, 0, Math.PI*2); dgCtx.stroke();
+        dgCtx.beginPath(); dgCtx.arc(dcx, dcy, dr * 0.7, 0, Math.PI*2); dgCtx.stroke();
+        dgCtx.beginPath(); dgCtx.arc(dcx, dcy, dr, 0, Math.PI*2); dgCtx.stroke();
+        dgCtx.beginPath(); dgCtx.moveTo(dcx, 0); dgCtx.lineTo(dcx, dgh); dgCtx.moveTo(0, dcy); dgCtx.lineTo(dgw, dcy); dgCtx.stroke();
+
+        const dbx = dcx + (telem.gy / 0.8) * dr;
+        const dby = dcy - (telem.gx / 0.8) * dr;
+        dgCtx.fillStyle = '#f59e0b';
+        dgCtx.beginPath();
+        dgCtx.arc(Math.max(3, Math.min(dgw - 3, dbx)), Math.max(3, Math.min(dgh - 3, dby)), 4, 0, Math.PI * 2);
+        dgCtx.fill();
+      }
+
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const cssW = oscilloCanvas.offsetWidth;
+      const cssH = oscilloCanvas.offsetHeight;
+      if (oscilloCanvas.width !== Math.round(cssW * dpr) || oscilloCanvas.height !== Math.round(cssH * dpr)) {
+        oscilloCanvas.width = Math.round(cssW * dpr);
+        oscilloCanvas.height = Math.round(cssH * dpr);
+      }
+      oscCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      oscCtx.clearRect(0, 0, cssW, cssH);
+
+      oscCtx.save();
+      oscCtx.strokeStyle = 'rgba(255, 255, 255, 0.14)';
+      oscCtx.lineWidth = 1;
+      oscCtx.setLineDash([4, 4]);
+      oscCtx.beginPath();
+      oscCtx.moveTo(0, cssH * 0.5);
+      oscCtx.lineTo(cssW, cssH * 0.5);
+      oscCtx.stroke();
+      oscCtx.restore();
+
+      const n = oscilloHistory.length;
+      const ptsSpd = [], ptsThr = [], ptsBrk = [], ptsDel = [];
+      for (let i = 0; i < n; i++) {
+        const x = (i / (n - 1)) * cssW;
+        const item = oscilloHistory[i];
+        const normSpd = Math.min(1, Math.max(0, (item.spd || 0) / 220));
+        ptsSpd.push({ x, y: cssH - normSpd * (cssH - 8) - 4 });
+        ptsThr.push({ x, y: cssH - ((item.thr || 0) / 100) * (cssH - 8) - 4 });
+        ptsBrk.push({ x, y: cssH - ((item.brk || 0) / 100) * (cssH - 8) - 4 });
+        const d = Math.max(-2.0, Math.min(2.0, item.delta || 0));
+        ptsDel.push({ x, y: (cssH * 0.5) + (d / 2.0) * (cssH * 0.42) });
+      }
+
+      drawSmoothTrace(oscCtx, ptsSpd, '#38bdf8', 2.0);
+      drawSmoothTrace(oscCtx, ptsThr, '#10b981', 2.0);
+      drawSmoothTrace(oscCtx, ptsBrk, '#f43f5e', 2.0);
+      drawSmoothTrace(oscCtx, ptsDel, '#fbbf24', 2.0);
+
+      gCanvas.width = gCanvas.offsetWidth;
+      gCanvas.height = gCanvas.offsetHeight;
+      const gw = gCanvas.width, gh = gCanvas.height;
+      const cx = gw / 2, cy = gh / 2, r = Math.min(cx, cy) - 3;
+      gCtx.clearRect(0, 0, gw, gh);
+      gCtx.strokeStyle = 'rgba(255,255,255,0.18)';
+      gCtx.lineWidth = 1;
+      gCtx.beginPath(); gCtx.arc(cx, cy, r * 0.6, 0, Math.PI * 2); gCtx.stroke();
+      gCtx.beginPath(); gCtx.arc(cx, cy, r, 0, Math.PI * 2); gCtx.stroke();
+      gCtx.beginPath(); gCtx.moveTo(cx, 0); gCtx.lineTo(cx, gh); gCtx.moveTo(0, cy); gCtx.lineTo(gw, cy); gCtx.stroke();
+
+      const bx = cx + (telem.gy / 1.5) * r;
+      const by = cy - (telem.gx / 1.5) * r;
+      gCtx.fillStyle = '#f59e0b';
+      gCtx.beginPath();
+      gCtx.arc(Math.max(3, Math.min(gw - 3, bx)), Math.max(3, Math.min(gh - 3, by)), 3.5, 0, Math.PI * 2);
+      gCtx.fill();
+
+      if (simCanvas.style.opacity !== '0') {
+        simCanvas.width = simCanvas.offsetWidth;
+        simCanvas.height = simCanvas.offsetHeight;
+        const sw = simCanvas.width, sh = simCanvas.height;
+        sCtx.fillStyle = '#080c16';
+        sCtx.fillRect(0, 0, sw, sh);
+        sCtx.fillStyle = '#141d2f';
+        sCtx.beginPath();
+        sCtx.moveTo(sw * 0.45, sh * 0.45);
+        sCtx.lineTo(sw * 0.55, sh * 0.45);
+        sCtx.lineTo(sw * 0.85, sh);
+        sCtx.lineTo(sw * 0.15, sh);
+        sCtx.fill();
+      }
+
+      if (isRecording && isBurnInMode) {
+        renderBurnInCompositeFrame();
+      }
+    }
+
+    animate();
+  </script>
+</body>
+</html>
