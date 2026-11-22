@@ -91,7 +91,7 @@
 2. START TX (配信開始)
       </button>
     </div>
-    <div id="logBox" class="text-[11px] mono text-slate-400 truncate">Solo 2 DL優先＋スマホ内蔵GPSでのライン通過自動検知に対応しています。</div>
+    <div id="logBox" class="text-[11px] mono text-slate-400 truncate">BLE自動再接続＋Solo 2 DL優先＋スマホ内蔵GPSライン検知対応。</div>
   </div>
 
   <script>
@@ -131,6 +131,15 @@
     let bleConnected = false;
     let hasSoloTimingStream = false;
     let demoPhase = 0;
+
+    // BLE自動再接続用ステート
+    let bleDevice = null;
+    let bleTxChar = null;
+    let bleRxBuffer = '';
+    let bleAutoReconnect = false;
+    let bleReconnectTimer = null;
+    let bleReconnectAttempts = 0;
+    let isBleConnecting = false;
 
     // スマホ内蔵GPSによるライン通過＆ラップ計測用ステート（Solo 2 DL未接続時のフォールバック）
     let phoneGpsState = {
@@ -348,65 +357,156 @@
         : 'px-2.5 py-2 bg-slate-800 border border-white/10 text-slate-400 text-xs font-bold rounded shrink-0';
     });
 
+    // BLE受信データハンドラ（再接続時にリスナー重複しないよう関数化）
+    function onBleDataReceived(e) {
+      const chunk = new TextDecoder().decode(e.target.value);
+      bleRxBuffer += chunk;
+      let lines = bleRxBuffer.split('\n');
+      bleRxBuffer = lines.pop();
+      for (let line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const d = JSON.parse(line);
+          if (typeof d.distM === 'number' && typeof d.lapTime === 'number') {
+            hasSoloTimingStream = true;
+          }
+          latestTelemetry = {
+            spd: d.spd ?? 0,
+            rpm: d.rpm ?? 0,
+            gear: d.gear ?? 1,
+            thr: d.thr ?? 0,
+            brk: d.brk ?? 0,
+            gx: d.gx ?? 0,
+            gy: d.gy ?? 0,
+            steer: d.steer ?? 0,
+            wtemp: d.wtemp ?? 85,
+            fuel: d.fuel ?? 0,
+            trk: d.trk ?? undefined,
+            // Solo 2 DLのタイム・距離・GPSがあれば優先し、無ければスマホ内蔵GPSのライン検知値を使用
+            lap: d.lap ?? phoneGpsState.lap,
+            distM: d.distM ?? phoneGpsState.distM,
+            lapTime: d.lapTime ?? phoneGpsState.lapTime,
+            lastLap: d.lastLap ?? phoneGpsState.lastLap,
+            lat: (d.lat && Math.abs(d.lat) > 20) ? d.lat : phoneGpsState.lat,
+            lon: (d.lon && Math.abs(d.lon) > 20) ? d.lon : phoneGpsState.lon
+          };
+        } catch (err) {}
+      }
+    }
+
+    function setBleBadgeState(state, detail = '') {
+      const badge = document.getElementById('bleBadge');
+      if (state === 'linked') {
+        badge.textContent = 'M5 BLE: LINKED';
+        badge.className = 'px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 font-bold';
+      } else if (state === 'reconnecting') {
+        badge.textContent = `M5 BLE: RETRY${detail ? ' #' + detail : '...'}`;
+        badge.className = 'px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-400/50 font-bold animate-pulse';
+      } else {
+        badge.textContent = 'M5 BLE: OFF';
+        badge.className = 'px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-white/10';
+      }
+    }
+
+    function clearBleReconnectTimer() {
+      if (bleReconnectTimer) {
+        clearTimeout(bleReconnectTimer);
+        bleReconnectTimer = null;
+      }
+    }
+
+    function scheduleBleReconnect() {
+      if (!bleAutoReconnect || !bleDevice || bleConnected) return;
+      clearBleReconnectTimer();
+      bleReconnectAttempts += 1;
+      setBleBadgeState('reconnecting', bleReconnectAttempts);
+      logMsg(`BLE切断検知: Tab5復帰待ちで自動再接続中... (${bleReconnectAttempts}回目)`);
+
+      bleReconnectTimer = setTimeout(async () => {
+        if (!bleAutoReconnect || !bleDevice || bleConnected) return;
+        const ok = await connectBleDevice(bleDevice, true);
+        if (!ok && bleAutoReconnect && !bleConnected) {
+          scheduleBleReconnect();
+        }
+      }, 2000);
+    }
+
+    function onBleDisconnected() {
+      bleConnected = false;
+      bleRxBuffer = '';
+      if (bleTxChar) {
+        try { bleTxChar.removeEventListener('characteristicvaluechanged', onBleDataReceived); } catch (e) {}
+        bleTxChar = null;
+      }
+      if (bleAutoReconnect) {
+        bleReconnectAttempts = 0;
+        scheduleBleReconnect();
+      } else {
+        setBleBadgeState('off');
+        logMsg('M5Stack BLE が切断されました');
+      }
+    }
+
+    async function connectBleDevice(device, isRetry = false) {
+      if (isBleConnecting) return false;
+      isBleConnecting = true;
+      try {
+        if (!device._hasDisconnectListener) {
+          device.addEventListener('gattserverdisconnected', onBleDisconnected);
+          device._hasDisconnectListener = true;
+        }
+
+        const server = await device.gatt.connect();
+        const service = await server.getPrimaryService(NUS_SERVICE_UUID);
+        const char = await service.getCharacteristic(NUS_TX_CHAR_UUID);
+
+        if (bleTxChar && bleTxChar !== char) {
+          try { bleTxChar.removeEventListener('characteristicvaluechanged', onBleDataReceived); } catch (e) {}
+        }
+        bleTxChar = char;
+        bleRxBuffer = '';
+        bleTxChar.removeEventListener('characteristicvaluechanged', onBleDataReceived);
+        bleTxChar.addEventListener('characteristicvaluechanged', onBleDataReceived);
+        await bleTxChar.startNotifications();
+
+        clearBleReconnectTimer();
+        bleConnected = true;
+        bleAutoReconnect = true;
+        bleReconnectAttempts = 0;
+        isDemoMode = false;
+        btnDemo.textContent = 'DEMO: OFF';
+        btnDemo.className = 'px-2.5 py-2 bg-slate-800 border border-white/10 text-slate-400 text-xs font-bold rounded shrink-0';
+        setBleBadgeState('linked');
+        logMsg(isRetry ? '✅ M5Stack BLE 自動再接続に成功しました！' : 'M5Stack & Solo 2 DL Linked! (自動再接続ON)');
+        return true;
+      } catch (err) {
+        if (!isRetry) {
+          logMsg('BLE Error: ' + err.message);
+        }
+        return false;
+      } finally {
+        isBleConnecting = false;
+      }
+    }
+
     document.getElementById('btnBle').addEventListener('click', async () => {
       if (!navigator.bluetooth) {
         logMsg('Web Bluetooth非対応ブラウザです（Android Chrome / iOS Bluefy推奨）');
         return;
       }
+      clearBleReconnectTimer();
       try {
         logMsg('M5Stackを検索中...');
         const device = await navigator.bluetooth.requestDevice({
           filters: [{ namePrefix: 'M5' }],
           optionalServices: [NUS_SERVICE_UUID]
         });
-        const server = await device.gatt.connect();
-        const service = await server.getPrimaryService(NUS_SERVICE_UUID);
-        const char = await service.getCharacteristic(NUS_TX_CHAR_UUID);
-        await char.startNotifications();
-
-        bleConnected = true;
-        isDemoMode = false;
-        btnDemo.textContent = 'DEMO: OFF';
-        document.getElementById('bleBadge').textContent = 'M5 BLE: LINKED';
-        document.getElementById('bleBadge').className = 'px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 font-bold';
-        logMsg('M5Stack & Solo 2 DL Linked!');
-
-        let buffer = '';
-        char.addEventListener('characteristicvaluechanged', (e) => {
-          const chunk = new TextDecoder().decode(e.target.value);
-          buffer += chunk;
-          let lines = buffer.split('\n');
-          buffer = lines.pop();
-          for (let line of lines) {
-            if (!line.trim()) continue;
-            try {
-              const d = JSON.parse(line);
-              if (typeof d.distM === 'number' && typeof d.lapTime === 'number') {
-                hasSoloTimingStream = true;
-              }
-              latestTelemetry = {
-                spd: d.spd ?? 0,
-                rpm: d.rpm ?? 0,
-                gear: d.gear ?? 1,
-                thr: d.thr ?? 0,
-                brk: d.brk ?? 0,
-                gx: d.gx ?? 0,
-                gy: d.gy ?? 0,
-                steer: d.steer ?? 0,
-                wtemp: d.wtemp ?? 85,
-                fuel: d.fuel ?? 0,
-                trk: d.trk ?? undefined,
-                // Solo 2 DLのタイム・距離・GPSがあれば優先し、無ければスマホ内蔵GPSのライン検知値を使用
-                lap: d.lap ?? phoneGpsState.lap,
-                distM: d.distM ?? phoneGpsState.distM,
-                lapTime: d.lapTime ?? phoneGpsState.lapTime,
-                lastLap: d.lastLap ?? phoneGpsState.lastLap,
-                lat: (d.lat && Math.abs(d.lat) > 20) ? d.lat : phoneGpsState.lat,
-                lon: (d.lon && Math.abs(d.lon) > 20) ? d.lon : phoneGpsState.lon
-              };
-            } catch (err) {}
-          }
-        });
+        if (bleDevice && bleDevice !== device && bleDevice._hasDisconnectListener) {
+          try { bleDevice.removeEventListener('gattserverdisconnected', onBleDisconnected); } catch (e) {}
+          bleDevice._hasDisconnectListener = false;
+        }
+        bleDevice = device;
+        await connectBleDevice(bleDevice, false);
       } catch (err) {
         logMsg('BLE Error: ' + err.message);
       }
