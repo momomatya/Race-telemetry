@@ -1,3 +1,7 @@
+
+pit_telemetry_hud.html
+
+100%
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -80,11 +84,11 @@
       </span>
       <span id="headerCourseBadge" class="text-cyan-300 font-extrabold tracking-wide">📍 FSW (4,563m)</span>
       <span class="text-slate-600">|</span>
-      <span id="soloSyncBadge" class="mono text-emerald-400 font-bold">SOLO2: SIM</span>
+      <span id="soloSyncBadge" class="mono text-slate-400 font-bold">SOLO2: WAIT</span>
       <span class="text-slate-600">|</span>
-      <span id="statLatency" class="mono text-cyan-400 font-bold">244ms</span>
+      <span id="statLatency" class="mono text-cyan-400 font-bold">--ms</span>
       <span class="text-slate-600">|</span>
-      <span id="recTimerBadge" class="mono text-slate-300">1080p 60FPS</span>
+      <span id="recTimerBadge" class="mono text-slate-300">1080p READY</span>
     </div>
 
     <div class="flex items-center gap-1.5">
@@ -92,8 +96,8 @@
         <span class="text-[10px] text-slate-400 mr-1 font-bold">ROOM</span>
         <input id="inputRoomCode" type="text" value="ND-27" class="bg-transparent text-white font-bold mono text-[11px] w-12 focus:outline-none uppercase" />
       </div>
-      <button id="btnConnectCar" class="px-2.5 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-[11px] rounded tracking-wider shadow">
-        CONNECT 📡
+      <button id="btnConnectCar" class="px-2.5 py-0.5 bg-amber-600 hover:bg-amber-500 text-white font-extrabold text-[11px] rounded tracking-wider shadow animate-pulse">
+        AUTO WAIT...
       </button>
       <button id="btnSaveDir" class="px-2 py-0.5 bg-[#161f33] hover:bg-slate-700 text-amber-300 text-[11px] font-extrabold rounded border border-amber-500/40" title="録画ファイル・ログの保存先フォルダを指定">
         📁 保存先: 標準
@@ -169,34 +173,34 @@
         <div>
           <div class="hud-handle flex justify-between items-center text-[calc(0.5rem*var(--ui-scale))] font-bold text-slate-400 tracking-wider mb-0.5">
             <span>⠿ ENGINE SPEED</span>
-            <span id="hudRpm" class="mono text-slate-200">4,580</span>
+            <span id="hudRpm" class="mono text-slate-200">0</span>
           </div>
           <div class="w-full bg-slate-800 h-1.5 rounded-sm overflow-hidden">
-            <div id="hudRpmBar" class="bg-gradient-to-r from-cyan-400 via-blue-500 to-rose-500 h-full w-[62%] transition-all duration-75"></div>
+            <div id="hudRpmBar" class="bg-gradient-to-r from-cyan-400 via-blue-500 to-rose-500 h-full w-[0%] transition-all duration-75"></div>
           </div>
         </div>
 
         <div class="flex items-end justify-between pt-1">
           <div>
             <div class="flex items-baseline gap-0.5">
-              <span id="hudSpeed" class="text-[calc(2.1rem*var(--ui-scale))] font-black italic oswald text-white leading-none tracking-tight">92</span>
+              <span id="hudSpeed" class="text-[calc(2.1rem*var(--ui-scale))] font-black italic oswald text-white leading-none tracking-tight">0</span>
               <span class="text-[calc(0.5rem*var(--ui-scale))] text-slate-400 font-bold">KM/H</span>
             </div>
           </div>
           <div class="text-right leading-none">
             <div class="text-[calc(0.45rem*var(--ui-scale))] font-bold text-slate-400">GEAR</div>
-            <span id="hudGear" class="text-[calc(1.75rem*var(--ui-scale))] font-black oswald text-amber-400 leading-none">4</span>
+            <span id="hudGear" class="text-[calc(1.75rem*var(--ui-scale))] font-black oswald text-amber-400 leading-none">1</span>
           </div>
         </div>
 
         <div class="absolute left-0 right-0 -bottom-7 flex justify-between text-[calc(0.52rem*var(--ui-scale))] mono text-slate-300 pointer-events-none">
           <div>
             <div class="text-[calc(0.42rem*var(--ui-scale))] text-slate-400 font-bold">STEER</div>
-            <div id="hudSteer" class="font-bold text-white">-1.2°</div>
+            <div id="hudSteer" class="font-bold text-white">0.0°</div>
           </div>
           <div class="text-right">
             <div class="text-[calc(0.42rem*var(--ui-scale))] text-slate-400 font-bold">LAP DIST</div>
-            <div id="hudLapDist" class="font-bold text-white">1,637m [S1]</div>
+            <div id="hudLapDist" class="font-bold text-white">0m [S1]</div>
           </div>
         </div>
 
@@ -210,23 +214,23 @@
         <div class="hud-handle space-y-[2px] text-[calc(0.58rem*var(--ui-scale))] mono font-bold leading-tight">
           <div class="grid grid-cols-12 items-center">
             <span class="col-span-2 text-slate-400 text-center bg-slate-800/80 rounded-sm text-[calc(0.5rem*var(--ui-scale))]">3</span>
-            <span id="timeS3" class="col-span-6 text-right pr-1.5 text-slate-100">0'21.549</span>
-            <span id="badgeS3" class="col-span-4 text-center bg-blue-600 text-white rounded-sm py-[1px] text-[calc(0.52rem*var(--ui-scale))]">-0.210</span>
+            <span id="timeS3" class="col-span-6 text-right pr-1.5 text-slate-100">--'--.---</span>
+            <span id="badgeS3" class="col-span-4 text-center bg-slate-700/80 text-slate-300 rounded-sm py-[1px] text-[calc(0.5rem*var(--ui-scale))]">LIVE</span>
           </div>
           <div class="grid grid-cols-12 items-center">
             <span class="col-span-2 text-slate-400 text-center bg-slate-800/80 rounded-sm text-[calc(0.5rem*var(--ui-scale))]">2</span>
-            <span id="timeS2" class="col-span-6 text-right pr-1.5 text-slate-100">0'38.183</span>
-            <span id="badgeS2" class="col-span-4 text-center bg-blue-600 text-white rounded-sm py-[1px] text-[calc(0.52rem*var(--ui-scale))]">-0.340</span>
+            <span id="timeS2" class="col-span-6 text-right pr-1.5 text-slate-100">--'--.---</span>
+            <span id="badgeS2" class="col-span-4 text-center bg-slate-700/80 text-slate-300 rounded-sm py-[1px] text-[calc(0.5rem*var(--ui-scale))]">LIVE</span>
           </div>
           <div class="grid grid-cols-12 items-center">
             <span class="col-span-2 text-slate-200 text-center bg-slate-700 rounded-sm text-[calc(0.5rem*var(--ui-scale))]">1</span>
-            <span id="timeS1" class="col-span-6 text-right pr-1.5 text-white font-extrabold">0'24.699</span>
+            <span id="timeS1" class="col-span-6 text-right pr-1.5 text-white font-extrabold">--'--.---</span>
             <span id="badgeS1" class="col-span-4 text-center bg-slate-700/80 text-slate-300 rounded-sm py-[1px] text-[calc(0.5rem*var(--ui-scale))]">LIVE</span>
           </div>
           <div class="grid grid-cols-12 items-center pt-0.5 border-t border-white/10">
             <span class="col-span-3 text-slate-400 text-[calc(0.48rem*var(--ui-scale))]">LAST</span>
-            <span id="timeLast" class="col-span-5 text-right pr-1 text-slate-300 text-[calc(0.52rem*var(--ui-scale))]">1'55.016</span>
-            <span id="badgeLast" class="col-span-4 text-center bg-rose-600 text-white rounded-sm py-[1px] text-[calc(0.52rem*var(--ui-scale))]">+0.420</span>
+            <span id="timeLast" class="col-span-5 text-right pr-1 text-slate-300 text-[calc(0.52rem*var(--ui-scale))]">--'--.---</span>
+            <span id="badgeLast" class="col-span-4 text-center bg-slate-700/80 text-slate-300 rounded-sm py-[1px] text-[calc(0.5rem*var(--ui-scale))]">LIVE</span>
           </div>
           <div class="grid grid-cols-12 items-center">
             <span class="col-span-3 text-emerald-400 text-[calc(0.48rem*var(--ui-scale))]">BEST</span>
@@ -235,7 +239,7 @@
           </div>
           <div class="grid grid-cols-12 items-center">
             <span class="col-span-3 text-amber-400 text-[calc(0.48rem*var(--ui-scale))]">OPT.</span>
-            <span id="timeOpt" class="col-span-6 text-right pr-1 text-amber-400 text-[calc(0.52rem*var(--ui-scale))]">1'54.120</span>
+            <span id="timeOpt" class="col-span-6 text-right pr-1 text-amber-400 text-[calc(0.52rem*var(--ui-scale))]">1'54.596</span>
             <span id="labelOpt" class="col-span-3 text-right text-slate-500 text-[calc(0.45rem*var(--ui-scale))]">IDEAL</span>
           </div>
         </div>
@@ -250,7 +254,7 @@
           <div id="hudLapNum" class="text-[calc(0.44rem*var(--ui-scale))] font-extrabold text-amber-400">LAP 01</div>
           <div id="hudCurrentSector" class="text-[calc(0.45rem*var(--ui-scale))] font-extrabold text-cyan-400">SECTOR 1</div>
         </div>
-        <div id="hudLapTime" class="text-[calc(1.05rem*var(--ui-scale))] font-black mono text-white leading-none tracking-tight">0'10.883</div>
+        <div id="hudLapTime" class="text-[calc(1.05rem*var(--ui-scale))] font-black mono text-white leading-none tracking-tight">0'00.000</div>
         <span id="hudLiveDeltaBadge" class="px-1 py-[1px] rounded-sm bg-cyan-950 text-cyan-300 mono text-[calc(0.45rem*var(--ui-scale))] font-bold border border-cyan-500/40">LIVE</span>
         <div class="resize-handle">⤡</div>
       </div>
@@ -273,11 +277,11 @@
            style="top: 14px; right: 88px; width: 68px; height: 68px; --ui-scale: 1;">
         <div class="hud-handle flex justify-between items-center text-[calc(0.45rem*var(--ui-scale))] font-bold">
           <span class="text-slate-300">⠿ G-BALL</span>
-          <span id="hudGTotal" class="mono text-amber-400 font-extrabold">1.14G</span>
+          <span id="hudGTotal" class="mono text-amber-400 font-extrabold">0.00G</span>
         </div>
         <canvas id="gCanvas" class="w-full flex-1"></canvas>
         <div class="absolute left-0 right-0 -bottom-4 text-[calc(0.42rem*var(--ui-scale))] mono text-center text-slate-300 whitespace-nowrap pointer-events-none">
-          LAT:<span id="hudGLat" class="text-cyan-300 font-bold">-0.71</span> LON:<span id="hudGLon" class="text-rose-400 font-bold">-0.15</span>
+          LAT:<span id="hudGLat" class="text-cyan-300 font-bold">0.00</span> LON:<span id="hudGLon" class="text-rose-400 font-bold">0.00</span>
         </div>
         <div class="resize-handle">⤡</div>
       </div>
@@ -291,8 +295,8 @@
           <div class="flex items-center gap-3">
             <span class="text-white flex items-center gap-1"><span class="text-cyan-400">⠿</span>•TELEMETRY TRACE (LAST 30s)</span>
             <span class="text-emerald-400">■ THR: <span id="labelThr" class="mono">0%</span></span>
-            <span class="text-rose-400">■ BRK: <span id="labelBrk" class="mono">59% (5.0 MPa)</span></span>
-            <span class="text-sky-400">■ SPD: <span id="labelSpd" class="mono">92 km/h</span></span>
+            <span class="text-rose-400">■ BRK: <span id="labelBrk" class="mono">0% (0.0 MPa)</span></span>
+            <span class="text-sky-400">■ SPD: <span id="labelSpd" class="mono">0 km/h</span></span>
             <span class="text-amber-400">■ BEST Δ: <span id="labelDelta" class="mono">+0.00s</span></span>
           </div>
           <span class="text-slate-400 text-[calc(0.56rem*var(--ui-scale))] tracking-widest">THR / BRK / SPD / DELTA</span>
@@ -308,13 +312,13 @@
             </div>
             <div class="flex flex-col items-center h-full justify-end">
               <div class="w-4 flex-1 bg-slate-800/90 rounded-sm overflow-hidden flex flex-col justify-end border border-white/10">
-                <div id="barBrk" class="w-full bg-rose-500" style="height: 59%;"></div>
+                <div id="barBrk" class="w-full bg-rose-500" style="height: 0%;"></div>
               </div>
               <span class="text-[calc(0.55rem*var(--ui-scale))] font-black text-rose-500 leading-none mt-0.5">BRK</span>
             </div>
             <div class="flex flex-col items-center h-full justify-end">
               <div class="w-4 flex-1 bg-slate-800/90 rounded-sm overflow-hidden flex flex-col justify-end border border-white/10">
-                <div id="barSpd" class="w-full bg-sky-400" style="height: 42%;"></div>
+                <div id="barSpd" class="w-full bg-sky-400" style="height: 0%;"></div>
               </div>
               <span class="text-[calc(0.55rem*var(--ui-scale))] font-black text-sky-400 leading-none mt-0.5">SPD</span>
             </div>
@@ -354,7 +358,6 @@
         </div>
 
         <div class="flex-1 grid grid-cols-12 gap-4 overflow-hidden">
-          <!-- 左エリア：水温・燃料・ステアリング角 -->
           <div class="col-span-3 flex flex-col justify-around bg-slate-900/40 border border-white/5 rounded-md p-2.5">
             <div>
               <div class="flex justify-between items-baseline mb-0.5">
@@ -380,9 +383,9 @@
             <div class="pt-2 border-t border-white/5 flex items-center justify-between">
               <div>
                 <span class="text-[9px] text-slate-400 font-extrabold block leading-tight">STEER ANGLE</span>
-                <span id="drvSteerText" class="text-[14px] text-white font-bold mono">-1.2°</span>
+                <span id="drvSteerText" class="text-[14px] text-white font-bold mono">0.0°</span>
               </div>
-              <svg id="drvSteerSvg" class="w-9 h-9 text-white opacity-90 transition-transform duration-75" viewBox="0 0 100 100" style="transform: rotate(-1.2deg);">
+              <svg id="drvSteerSvg" class="w-9 h-9 text-white opacity-90 transition-transform duration-75" viewBox="0 0 100 100" style="transform: rotate(0deg);">
                 <circle cx="50" cy="50" r="42" stroke="currentColor" stroke-width="5" fill="none" stroke-dasharray="10 4" />
                 <line x1="15" y1="50" x2="85" y2="50" stroke="currentColor" stroke-width="7" />
                 <line x1="50" y1="50" x2="50" y2="8" stroke="currentColor" stroke-width="6" />
@@ -391,26 +394,25 @@
             </div>
           </div>
 
-          <!-- 中央エリア：ホワイトタコ＆スピード・ギア -->
           <div class="col-span-5 flex flex-col items-center justify-center relative bg-slate-900/20 border border-white/5 rounded-md overflow-hidden p-2">
             <svg class="w-[205px] h-[205px] -rotate-90 select-none" viewBox="0 0 200 200">
               <circle cx="100" cy="100" r="88" stroke="rgba(255, 255, 255, 0.08)" stroke-width="12" fill="none" />
-              <circle id="svgTachoBar" cx="100" cy="100" r="88" stroke="#ffffff" stroke-width="12" fill="none" stroke-dasharray="552.92" stroke-dashoffset="240" stroke-linecap="round" />
+              <circle id="svgTachoBar" cx="100" cy="100" r="88" stroke="#ffffff" stroke-width="12" fill="none" stroke-dasharray="552.92" stroke-dashoffset="552.92" stroke-linecap="round" />
               <circle cx="100" cy="100" r="88" stroke="#f43f5e" stroke-width="12" fill="none" stroke-dasharray="69 483" stroke-dashoffset="483" transform="rotate(248 100 100)" />
               <circle cx="100" cy="100" r="76" fill="#02040a" />
             </svg>
 
             <div class="absolute inset-0 flex flex-col justify-center items-center text-center pointer-events-none select-none">
               <div class="leading-none mt-2 select-none">
-                <span id="drvSpeed" class="text-[54px] font-black oswald italic text-white tracking-tight leading-none">82</span>
+                <span id="drvSpeed" class="text-[54px] font-black oswald italic text-white tracking-tight leading-none">0</span>
                 <span class="text-[12px] text-slate-400 font-extrabold block">KM/H</span>
               </div>
               <div class="text-center leading-none mt-1">
-                <span id="drvGear" class="text-[34px] font-black text-white leading-none">4</span>
+                <span id="drvGear" class="text-[34px] font-black text-white leading-none">1</span>
                 <span class="text-[9px] text-cyan-400 font-bold block tracking-widest mt-0.5">DRIVE</span>
               </div>
               <div class="absolute bottom-6 font-bold mono text-[10px] text-slate-400">
-                <span id="drvRpm" class="text-white">4,580</span> RPM
+                <span id="drvRpm" class="text-white">0</span> RPM
               </div>
             </div>
 
@@ -427,12 +429,11 @@
             </div>
           </div>
 
-          <!-- 右エリア：時計・電圧・0.8G Gボール・TRIP -->
           <div class="col-span-4 flex flex-col justify-between bg-slate-900/40 border border-white/5 rounded-md p-2.5">
             <div class="flex justify-between items-start border-b border-white/5 pb-2">
               <div>
-                <div id="drvClock" class="text-[28px] font-bold text-white mono leading-none tracking-wider">22:42</div>
-                <div id="drvClockSub" class="text-[10px] text-slate-400 font-extrabold tracking-widest uppercase mt-0.5">10:42 PM</div>
+                <div id="drvClock" class="text-[28px] font-bold text-white mono leading-none tracking-wider">00:00</div>
+                <div id="drvClockSub" class="text-[10px] text-slate-400 font-extrabold tracking-widest uppercase mt-0.5">12:00 AM</div>
               </div>
               <div class="text-right">
                 <div id="drvVoltage" class="text-[18px] font-bold text-white mono leading-none">14.2V</div>
@@ -452,11 +453,11 @@
                 <div class="text-[9px] text-slate-400 font-extrabold uppercase">ACCELEROMETER</div>
                 <div class="flex items-baseline justify-between">
                   <span class="text-[10px] text-slate-400">LAT G:</span>
-                  <span id="drvGLat" class="text-[14px] text-white font-bold mono">0.05G</span>
+                  <span id="drvGLat" class="text-[14px] text-white font-bold mono">0.00G</span>
                 </div>
                 <div class="flex items-baseline justify-between">
                   <span class="text-[10px] text-slate-400">LON G:</span>
-                  <span id="drvGLon" class="text-[14px] text-white font-bold mono">-0.12G</span>
+                  <span id="drvGLon" class="text-[14px] text-white font-bold mono">0.00G</span>
                 </div>
                 <div class="grid grid-cols-2 gap-1.5 pt-1">
                   <div>
@@ -502,7 +503,6 @@
       <button id="btnCloseSim" class="text-slate-400 hover:text-white text-sm">✕</button>
     </div>
 
-    <!-- 1. GPSコース選択 ＆ セクター距離設定 -->
     <div class="space-y-2 bg-slate-900/90 p-2.5 rounded border border-cyan-500/30">
       <div class="flex items-center justify-between">
         <span class="font-extrabold text-cyan-300">1. サーキット選択 & GPS検索</span>
@@ -545,7 +545,6 @@
       </div>
     </div>
 
-    <!-- 2. 過去ログ（BEST基準データ）読み込み -->
     <div class="space-y-2 bg-slate-900/90 p-2.5 rounded border border-emerald-500/30">
       <div class="font-extrabold text-emerald-300">2. 比較ベストデータ (REF LOG) 設定</div>
       <div class="text-[11px] text-slate-300 leading-snug">
@@ -560,7 +559,6 @@
       </div>
     </div>
 
-    <!-- 3. 録画保存先フォルダ ＆ 自動録画トリガー設定 -->
     <div class="space-y-2 bg-slate-900/90 p-2.5 rounded border border-white/15">
       <div class="font-extrabold text-slate-200">3. ⚡ 保存先 & 自動録画トリガー</div>
       <button id="btnSaveDirDrawer" class="w-full py-1.5 bg-amber-600 hover:bg-amber-500 text-white font-extrabold rounded shadow">
@@ -587,11 +585,10 @@
       </div>
     </div>
 
-    <!-- 4. 机上テスト用シミュレーター操作 -->
     <div class="space-y-2 bg-slate-900/90 p-2.5 rounded border border-white/10">
       <div class="font-extrabold text-slate-300">4. 🏎 机上テスト用シミュレーター</div>
       <label class="flex items-center gap-2 cursor-pointer">
-        <input id="chkAutoSim" type="checkbox" checked class="rounded" />
+        <input id="chkAutoSim" type="checkbox" class="rounded" />
         <span class="font-bold text-slate-200">AUTO DEMO WAVEFORM</span>
       </label>
       <button id="btnSimPitStop" class="w-full py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold rounded shadow">
@@ -736,7 +733,6 @@
       lastFrameMs: performance.now()
     };
 
-    // --- 保存先フォルダ選択 ---
     let saveDirHandle = null;
 
     async function pickSaveDirectory() {
@@ -1034,7 +1030,7 @@
     let peer = null;
     let dataConn = null;
     let liveStream = null;
-    let isAutoSim = true;
+    let isAutoSim = false; // 本番仕様：デフォルトOFF
     let isWideContain = true;
     let isReviewMode = false;
     let isBurnInMode = true;
@@ -1046,6 +1042,11 @@
     let aboveSpeedSince = null;
     let belowSpeedSince = null;
 
+    // 自動再接続・ハートビート監視用ステート
+    let reconnectTimer = null;
+    let lastDataReceivedMs = 0;
+    let lastVideoReqMs = 0;
+
     let isRecording = false;
     let mediaRecorder = null;
     let recordedChunks = [];
@@ -1053,12 +1054,11 @@
     let recStartTime = 0;
 
     let telem = {
-      spd: 92, rpm: 4580, gear: 4, thr: 0, brk: 59, clt: 0, gx: -0.15, gy: -0.71, steer: -1.2,
+      spd: 0, rpm: 0, gear: 1, thr: 0, brk: 0, clt: 0, gx: 0, gy: 0, steer: 0,
       lap: undefined, distM: undefined, lapTime: undefined, lastLap: undefined, lat: undefined, lon: undefined,
       water: 88, fuel: 74, volts: 14.2, trk: undefined
     };
 
-    // --- ドライブモード独自変数 ---
     let driveModeActive = false;
     let tripOM = 0;
     let driveStartTime = Date.now();
@@ -1094,20 +1094,13 @@
       }
     });
 
-    // --- オシロスコープ履歴（125ms間隔 × 240点） ---
     const oscilloHistory = [];
     const MAX_HISTORY = 240;
     const TRACE_INTERVAL_MS = 125;
     let lastTracePushMs = 0;
 
     for (let i = 0; i < MAX_HISTORY; i++) {
-      const p = i * 0.06;
-      const w = Math.sin(p);
-      const b = w < -0.2 ? Math.min(100, Math.round((-w - 0.2) * 130)) : 0;
-      const t = b === 0 ? Math.min(100, Math.max(0, Math.round((w + 0.25) * 85))) : 0;
-      const s = Math.round(125 + w * 55);
-      const d = Number((Math.sin(p * 0.5) * 0.35).toFixed(3));
-      oscilloHistory.push({ thr: t, brk: b, spd: s, delta: d });
+      oscilloHistory.push({ thr: 0, brk: 0, spd: 0, delta: 0 });
     }
 
     const hudContainer = document.getElementById('hudContainer');
@@ -1148,7 +1141,7 @@
       } else {
         isAutoSim = false;
         document.getElementById('chkAutoSim').checked = false;
-        telem = { ...telem, spd: 0, rpm: 850, gear: 1, thr: 0, brk: 0, clt: 0, gx: 0, gy: 0, steer: 0, water: 88, fuel: 74, volts: 14.2 };
+        telem = { ...telem, spd: 0, rpm: 0, gear: 1, thr: 0, brk: 0, clt: 0, gx: 0, gy: 0, steer: 0, water: 88, fuel: 74, volts: 14.2 };
         btnSimPitStop.textContent = '🚀 テスト走行開始 (自動録画テスト)';
         btnSimPitStop.className = 'w-full py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold rounded shadow';
       }
@@ -1178,33 +1171,82 @@
       }
     }
 
-    btnConnectCar.addEventListener('click', () => {
+    // --- スマホへピット接続＆録画状態を通知 (Tab5のALL OK / RECランプ用) ---
+    function sendPitStatusToCar() {
+      if (dataConn && dataConn.open) {
+        try {
+          dataConn.send({ type: 'PIT_STATUS', rec: isRecording, t: Date.now() });
+        } catch (e) {}
+      }
+    }
+
+    // --- 自動接続 & リロード不要の完全自動再接続 ---
+    function clearReconnectTimer() {
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+    }
+
+    function scheduleAutoReconnect(delayMs = 3000) {
+      if (reconnectTimer) return;
+      isCarLinked = false;
+      btnConnectCar.textContent = 'RETRYING...';
+      btnConnectCar.className = 'px-2.5 py-0.5 bg-amber-600 text-white font-extrabold text-[11px] rounded tracking-wider shadow animate-pulse';
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        connectToCar(true);
+      }, delayMs);
+    }
+
+    function connectToCar(isAutoRetry = false) {
       const room = inputRoomCode.value.trim().toUpperCase();
       if (!room) return;
-      if (peer) peer.destroy();
 
-      const pitPeerId = 'RACE-COACH-' + room + '-' + Math.floor(Math.random() * 1000);
+      clearReconnectTimer();
+      isCarLinked = false;
+      if (dataConn) {
+        try { dataConn.close(); } catch (e) {}
+        dataConn = null;
+      }
+      if (peer) {
+        try { peer.destroy(); } catch (e) {}
+        peer = null;
+      }
+
+      const pitPeerId = 'RACE-COACH-' + room + '-' + Math.floor(Math.random() * 9000 + 1000);
       const targetCarPeerId = 'RACE-CAR-' + room;
 
-      btnConnectCar.textContent = 'CONNECTING...';
-      btnConnectCar.className = 'px-2.5 py-0.5 bg-amber-600 text-white font-extrabold text-[11px] rounded tracking-wider shadow';
+      btnConnectCar.textContent = isAutoRetry ? 'RETRYING...' : 'AUTO WAIT...';
+      btnConnectCar.className = 'px-2.5 py-0.5 bg-amber-600 text-white font-extrabold text-[11px] rounded tracking-wider shadow animate-pulse';
 
       peer = new Peer(pitPeerId, PEER_CONFIG);
 
       peer.on('open', () => {
         dataConn = peer.connect(targetCarPeerId, { reliable: false });
 
+        // 5秒以内に開かなければリトライ
+        const openTimeout = setTimeout(() => {
+          if (!isCarLinked) {
+            scheduleAutoReconnect(3000);
+          }
+        }, 5000);
+
         dataConn.on('open', () => {
+          clearTimeout(openTimeout);
+          clearReconnectTimer();
           isCarLinked = true;
+          lastDataReceivedMs = Date.now();
           btnConnectCar.textContent = 'LINKED 📡';
-          btnConnectCar.className = 'px-2.5 py-0.5 bg-emerald-600 text-white font-extrabold text-[11px] rounded tracking-wider shadow';
+          btnConnectCar.className = 'px-2.5 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-[11px] rounded tracking-wider shadow';
           isAutoSim = false;
           document.getElementById('chkAutoSim').checked = false;
-          telem.spd = 0;
           dataConn.send({ type: 'REQUEST_VIDEO' });
+          sendPitStatusToCar();
         });
 
         dataConn.on('data', (data) => {
+          lastDataReceivedMs = Date.now();
           if (data && typeof data.spd !== 'undefined' && !isReviewMode) {
             telem = { ...telem, ...data };
 
@@ -1232,7 +1274,13 @@
         });
 
         dataConn.on('close', () => {
-          isCarLinked = false;
+          clearTimeout(openTimeout);
+          scheduleAutoReconnect(2500);
+        });
+
+        dataConn.on('error', () => {
+          clearTimeout(openTimeout);
+          scheduleAutoReconnect(3000);
         });
       });
 
@@ -1242,7 +1290,40 @@
           attachStreamToFullScreen(stream);
         });
       });
+
+      peer.on('disconnected', () => {
+        scheduleAutoReconnect(3000);
+      });
+
+      peer.on('error', () => {
+        scheduleAutoReconnect(3000);
+      });
+    }
+
+    btnConnectCar.addEventListener('click', () => {
+      connectToCar(false);
     });
+
+    // 1秒ごとのハートビート送信 & データ途絶・映像切れ監視
+    setInterval(() => {
+      if (isCarLinked && dataConn && dataConn.open) {
+        sendPitStatusToCar();
+
+        // 5秒以上データが途絶えたらリロードなしで自動再接続
+        if (lastDataReceivedMs > 0 && (Date.now() - lastDataReceivedMs > 5000)) {
+          console.warn('データ途絶を検知: 自動再接続を開始します');
+          scheduleAutoReconnect(1500);
+          return;
+        }
+
+        // 映像が来ていない・止まっている場合は4秒おきに映像再要求
+        const hasVideo = liveStream && liveStream.active && remoteVideo.readyState >= 2;
+        if (!hasVideo && !isReviewMode && (Date.now() - lastVideoReqMs > 4000)) {
+          lastVideoReqMs = Date.now();
+          try { dataConn.send({ type: 'REQUEST_VIDEO' }); } catch (e) {}
+        }
+      }
+    }, 1000);
 
     btnRec.addEventListener('click', () => {
       if (!isRecording) {
@@ -1319,6 +1400,7 @@
       isRecording = true;
       btnRec.textContent = '⏹ STOP REC';
       btnRec.className = 'px-2.5 py-0.5 bg-rose-500 animate-pulse text-white font-extrabold text-[11px] rounded tracking-wider border border-white shadow';
+      sendPitStatusToCar(); // 即座にTab5のRECランプを赤に点灯
     }
 
     function stopSessionRecording() {
@@ -1331,7 +1413,8 @@
       belowSpeedSince = null;
       btnRec.textContent = '⏺ REC';
       btnRec.className = 'px-2.5 py-0.5 bg-rose-700 hover:bg-rose-600 text-white font-extrabold text-[11px] rounded tracking-wider border border-rose-400/40 shadow';
-      document.getElementById('recTimerBadge').textContent = '1080p 60FPS';
+      document.getElementById('recTimerBadge').textContent = '1080p READY';
+      sendPitStatusToCar(); // 即座にTab5のランプをALL OK（緑）に戻す
     }
 
     function evaluateAutoRecording(nowMs) {
@@ -1356,7 +1439,7 @@
         } else {
           if (aboveSpeedSince !== null) {
             aboveSpeedSince = null;
-            document.getElementById('recTimerBadge').textContent = '1080p 60FPS';
+            document.getElementById('recTimerBadge').textContent = '1080p READY';
           }
         }
       } else {
@@ -1408,7 +1491,7 @@
         tripOM += (telem.spd / 3.6) * dtSec;
       }
 
-      const hasSoloMasterData = !isAutoSim && (typeof telem.distM === 'number') && (typeof telem.lapTime === 'number');
+      const hasSoloMasterData = !isAutoSim && isCarLinked && (typeof telem.distM === 'number') && (typeof telem.lapTime === 'number');
 
       if (hasSoloMasterData) {
         document.getElementById('soloSyncBadge').textContent = 'SOLO2: MASTER SYNC';
@@ -1450,8 +1533,8 @@
         }
 
       } else {
-        document.getElementById('soloSyncBadge').textContent = isAutoSim ? 'SOLO2: SIM' : 'SOLO2: SPD-CALC';
-        document.getElementById('soloSyncBadge').className = 'mono text-amber-400 font-bold';
+        document.getElementById('soloSyncBadge').textContent = isAutoSim ? 'SOLO2: SIM' : (isCarLinked ? 'SOLO2: SPD-CALC' : 'SOLO2: WAIT');
+        document.getElementById('soloSyncBadge').className = isAutoSim ? 'mono text-amber-400 font-bold' : 'mono text-slate-400 font-bold';
 
         if (telem.spd > 1) {
           const dMeters = (telem.spd / 3.6) * dtSec;
@@ -1773,7 +1856,6 @@
       ctx.stroke();
     }
 
-    // 録画焼き込み用オフスクリーン合成（1920x1080 Full HD）
     function renderBurnInCompositeFrame() {
       const CW = 1920, CH = 1080;
       compCtx.fillStyle = '#000000';
@@ -1829,7 +1911,6 @@
       }
 
       if (driveModeActive) {
-        // --- 🚘 P4 DRIVE モードの焼き込み ---
         const bDrv = getBox('panelDrive');
         compCtx.fillStyle = 'rgba(10, 14, 23, 0.95)';
         compCtx.fillRect(bDrv.x, bDrv.y, bDrv.w, bDrv.h);
@@ -1966,7 +2047,6 @@
         compCtx.fillText(`TIME ${document.getElementById('drvTimeElapsed').textContent}`, xRight, ty + 46);
 
       } else {
-        // --- 通常HUD 焼き込み ---
         const bSpd = getBox('panelSpeedo');
         drawPanelBg(bSpd);
         compCtx.fillStyle = '#94a3b8';
@@ -2016,10 +2096,10 @@
         const bTim = getBox('panelTimingBoard');
         drawPanelBg(bTim);
         const rows = [
-          { s: '3', t: document.getElementById('timeS3').textContent, d: document.getElementById('badgeS3').textContent, bg: document.getElementById('badgeS3').className.includes('rose') ? '#e11d48' : '#2563eb', c: '#fff' },
-          { s: '2', t: document.getElementById('timeS2').textContent, d: document.getElementById('badgeS2').textContent, bg: document.getElementById('badgeS2').className.includes('rose') ? '#e11d48' : '#2563eb', c: '#fff' },
-          { s: '1', t: document.getElementById('timeS1').textContent, d: document.getElementById('badgeS1').textContent, bg: document.getElementById('badgeS1').className.includes('rose') ? '#e11d48' : '#334155', c: '#fff' },
-          { s: 'LAST', t: document.getElementById('timeLast').textContent, d: document.getElementById('badgeLast').textContent, bg: document.getElementById('badgeLast').className.includes('rose') ? '#e11d48' : '#2563eb', c: '#fff' },
+          { s: '3', t: document.getElementById('timeS3').textContent, d: document.getElementById('badgeS3').textContent, bg: document.getElementById('badgeS3').className.includes('rose') ? '#e11d48' : (document.getElementById('badgeS3').className.includes('blue') ? '#2563eb' : '#334155'), c: '#fff' },
+          { s: '2', t: document.getElementById('timeS2').textContent, d: document.getElementById('badgeS2').textContent, bg: document.getElementById('badgeS2').className.includes('rose') ? '#e11d48' : (document.getElementById('badgeS2').className.includes('blue') ? '#2563eb' : '#334155'), c: '#fff' },
+          { s: '1', t: document.getElementById('timeS1').textContent, d: document.getElementById('badgeS1').textContent, bg: document.getElementById('badgeS1').className.includes('rose') ? '#e11d48' : (document.getElementById('badgeS1').className.includes('blue') ? '#2563eb' : '#334155'), c: '#fff' },
+          { s: 'LAST', t: document.getElementById('timeLast').textContent, d: document.getElementById('badgeLast').textContent, bg: document.getElementById('badgeLast').className.includes('rose') ? '#e11d48' : (document.getElementById('badgeLast').className.includes('blue') ? '#2563eb' : '#334155'), c: '#fff' },
           { s: 'BEST', t: document.getElementById('timeBest').textContent, d: document.getElementById('labelBestSource').textContent, bg: 'transparent', c: '#34d399' },
           { s: 'OPT.', t: document.getElementById('timeOpt').textContent, d: 'IDEAL', bg: 'transparent', c: '#fbbf24' }
         ];
@@ -2371,6 +2451,11 @@
         renderBurnInCompositeFrame();
       }
     }
+
+    // ページを開いたら自動で車両(ND-27)へ接続開始
+    window.addEventListener('load', () => {
+      connectToCar(false);
+    });
 
     animate();
   </script>
