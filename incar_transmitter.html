@@ -1,3 +1,7 @@
+
+incar_transmitter.html
+
+100%
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -27,14 +31,14 @@
 
     <div class="absolute top-3 left-3 right-3 flex flex-wrap items-center justify-between gap-2 bg-slate-950/80 backdrop-blur-md border border-white/15 px-3 py-2 rounded">
       <div class="flex items-center gap-2">
-        <span id="txDot" class="w-3 h-3 rounded-full bg-slate-500"></span>
-        <span id="txStatus" class="text-sm font-bold tracking-wider uppercase">STANDBY</span>
+        <span id="txDot" class="w-3 h-3 rounded-full bg-amber-400 animate-pulse"></span>
+        <span id="txStatus" class="text-sm font-bold tracking-wider uppercase">STARTING...</span>
       </div>
       <div class="flex items-center gap-1.5 text-xs mono">
         <span id="gpsBadge" class="px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-white/10">GPS: INIT</span>
         <span id="lensBadge" class="px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-500/30">LENS: AUTO</span>
         <span id="bleBadge" class="px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-white/10">M5 BLE: OFF</span>
-        <span id="pitBadge" class="px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-white/10">PIT PC: 0</span>
+        <span id="pitBadge" class="px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-white/10">PIT PC: WAIT</span>
       </div>
     </div>
 
@@ -78,24 +82,25 @@
       <button id="btnWideLens" class="px-2.5 py-2 bg-cyan-700 hover:bg-cyan-600 active:bg-cyan-800 text-white text-xs font-extrabold rounded border border-cyan-400/40 shadow shrink-0">
         📐 レンズ
       </button>
-      <button id="btnDemo" class="px-2.5 py-2 bg-amber-500/20 border border-amber-400/50 text-amber-300 text-xs font-bold rounded shrink-0">
-        DEMO: ON
+      <button id="btnDemo" class="px-2.5 py-2 bg-slate-800 border border-white/10 text-slate-400 text-xs font-bold rounded shrink-0">
+        DEMO: OFF
       </button>
     </div>
 
     <div class="grid grid-cols-2 gap-2">
-      <button id="btnBle" class="py-2.5 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-bold text-sm rounded tracking-wider shadow">
-1. CONNECT M5 BLE
+      <button id="btnBle" class="py-2.5 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-extrabold text-sm rounded tracking-wider shadow">
+        1. CONNECT M5 BLE
       </button>
-      <button id="btnStartTx" class="py-2.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-extrabold text-base rounded tracking-wider shadow-lg">
-2. START TX (配信開始)
+      <button id="btnStartTx" class="py-2.5 bg-cyan-700 hover:bg-cyan-600 active:bg-cyan-800 text-white font-extrabold text-sm rounded tracking-wider shadow-lg">
+        AUTO TX 起動中...
       </button>
     </div>
-    <div id="logBox" class="text-[11px] mono text-slate-400 truncate">BLE自動再接続＋Solo 2 DL優先＋スマホ内蔵GPSライン検知対応。</div>
+    <div id="logBox" class="text-[11px] mono text-slate-400 truncate">自動配信＆BLE/PC自動再接続モード（本番仕様：DEMO OFF）</div>
   </div>
 
   <script>
     const NUS_SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
+    const NUS_RX_CHAR_UUID = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
     const NUS_TX_CHAR_UUID = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
 
     const PEER_CONFIG = {
@@ -109,7 +114,6 @@
       }
     };
 
-    // 各サーキットのコントロールライン（スタート/フィニッシュライン）中心座標・検知半径(m)・最小ラップ秒数（8サーキット対応）
     const CIRCUIT_START_LINES = {
       fsw:       { name: 'FSW',       lat: 35.37222, lon: 138.92694, radiusM: 28, minLapSec: 85, lengthM: 4563 },
       motegi:    { name: 'MOTEGI',    lat: 36.53310, lon: 140.22665, radiusM: 28, minLapSec: 90, lengthM: 4801 },
@@ -126,22 +130,29 @@
     let currentDeviceIndex = -1;
     let is1080p = false;
     let peer = null;
+    let peerRetryTimer = null;
     let activeDataConns = [];
-    let isDemoMode = true;
+    let isDemoMode = false; // 本番仕様：デフォルトOFF
     let bleConnected = false;
     let hasSoloTimingStream = false;
     let demoPhase = 0;
 
-    // BLE自動再接続用ステート
+    // BLE自動再接続 & Tab5ステータス送信ステート
     let bleDevice = null;
     let bleTxChar = null;
+    let bleRxChar = null;
     let bleRxBuffer = '';
     let bleAutoReconnect = false;
     let bleReconnectTimer = null;
     let bleReconnectAttempts = 0;
     let isBleConnecting = false;
+    let isBleWriting = false;
 
-    // スマホ内蔵GPSによるライン通過＆ラップ計測用ステート（Solo 2 DL未接続時のフォールバック）
+    // ピットPC接続＆録画状態（Tab5のALL OK / RECランプ用）
+    let pitRecordingState = false;
+    let lastPitStatusRxMs = 0;
+    let wakeLockObj = null;
+
     let phoneGpsState = {
       active: false,
       nearestCircuitKey: 'fsw',
@@ -158,7 +169,7 @@
     };
 
     let latestTelemetry = {
-      spd: 0, rpm: 850, gear: 1, thr: 0, brk: 0, gx: 0, gy: 0, steer: 0,
+      spd: 0, rpm: 0, gear: 1, thr: 0, brk: 0, gx: 0, gy: 0, steer: 0,
       wtemp: 85, fuel: 0, trk: undefined, lap: 1, distM: 0, lapTime: 0, lastLap: 0, lat: undefined, lon: undefined
     };
 
@@ -167,7 +178,20 @@
       document.getElementById('logBox').textContent = msg;
     }
 
-    // 2点間の距離(m)を計算
+    // 画面スリープ防止 (Wake Lock)
+    async function requestWakeLock() {
+      if (!('wakeLock' in navigator)) return;
+      try {
+        wakeLockObj = await navigator.wakeLock.request('screen');
+        wakeLockObj.addEventListener('release', () => { wakeLockObj = null; });
+      } catch (e) {}
+    }
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        requestWakeLock();
+      }
+    });
+
     function calcDistMeters(lat1, lon1, lat2, lon2) {
       const R = 6371000;
       const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -178,7 +202,6 @@
       return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     }
 
-    // スマホ内蔵GPSウォッチャー（Solo 2 DLからタイム情報が来ていない時にライン通過を自動検知）
     function initPhoneGpsTracker() {
       if (!navigator.geolocation) return;
       navigator.geolocation.watchPosition(
@@ -197,7 +220,6 @@
             phoneGpsState.spdKmh = pos.coords.speed * 3.6;
           }
 
-          // 最寄りサーキットの特定
           let bestKey = phoneGpsState.nearestCircuitKey;
           let minD = Infinity;
           for (const [k, c] of Object.entries(CIRCUIT_START_LINES)) {
@@ -210,7 +232,6 @@
           phoneGpsState.nearestCircuitKey = bestKey;
           const targetLine = CIRCUIT_START_LINES[bestKey];
 
-          // スタート/フィニッシュライン半径内を通過したか判定
           const distToLineM = calcDistMeters(lat, lon, targetLine.lat, targetLine.lon);
           const elapsedSinceLastCrossSec = (nowMs - phoneGpsState.lastCrossMs) / 1000;
 
@@ -306,7 +327,7 @@
         await videoEl.play().catch(() => {});
 
         activeDataConns.forEach(conn => {
-          if (conn.open && peer) {
+          if (conn.open && peer && !peer.destroyed) {
             peer.call(conn.peer, localStream);
           }
         });
@@ -318,7 +339,6 @@
       }
     }
 
-    // 720p / 1080p 画質切替ボタン
     const btnQuality = document.getElementById('btnQuality');
     btnQuality.addEventListener('click', async () => {
       is1080p = !is1080p;
@@ -357,7 +377,29 @@
         : 'px-2.5 py-2 bg-slate-800 border border-white/10 text-slate-400 text-xs font-bold rounded shrink-0';
     });
 
-    // BLE受信データハンドラ（再接続時にリスナー重複しないよう関数化）
+    // --- Tab5へのステータス返送 ("S:<pc>,<rec>\n") ---
+    async function sendStatusToTab5() {
+      if (!bleConnected || !bleRxChar || isBleWriting) return;
+      const pcCount = activeDataConns.filter(c => c.open).length;
+      const pcFresh = (pcCount > 0) && (Date.now() - lastPitStatusRxMs < 6000 || lastPitStatusRxMs === 0);
+      const pcFlag  = pcCount > 0 ? 1 : 0;
+      const recFlag = (pcFlag === 1 && pcFresh && pitRecordingState) ? 1 : 0;
+      const msg = `S:${pcFlag},${recFlag}\n`;
+
+      isBleWriting = true;
+      try {
+        const bytes = new TextEncoder().encode(msg);
+        if (bleRxChar.writeValueWithoutResponse) {
+          await bleRxChar.writeValueWithoutResponse(bytes);
+        } else {
+          await bleRxChar.writeValue(bytes);
+        }
+      } catch (e) {
+      } finally {
+        isBleWriting = false;
+      }
+    }
+
     function onBleDataReceived(e) {
       const chunk = new TextDecoder().decode(e.target.value);
       bleRxBuffer += chunk;
@@ -382,7 +424,6 @@
             wtemp: d.wtemp ?? 85,
             fuel: d.fuel ?? 0,
             trk: d.trk ?? undefined,
-            // Solo 2 DLのタイム・距離・GPSがあれば優先し、無ければスマホ内蔵GPSのライン検知値を使用
             lap: d.lap ?? phoneGpsState.lap,
             distM: d.distM ?? phoneGpsState.distM,
             lapTime: d.lapTime ?? phoneGpsState.lapTime,
@@ -434,10 +475,14 @@
     function onBleDisconnected() {
       bleConnected = false;
       bleRxBuffer = '';
+      bleRxChar = null;
       if (bleTxChar) {
         try { bleTxChar.removeEventListener('characteristicvaluechanged', onBleDataReceived); } catch (e) {}
         bleTxChar = null;
       }
+      // BLE切断時は勝手にDEMOに戻さず 0km/h 待機にする
+      latestTelemetry.spd = 0;
+      latestTelemetry.rpm = 0;
       if (bleAutoReconnect) {
         bleReconnectAttempts = 0;
         scheduleBleReconnect();
@@ -458,12 +503,17 @@
 
         const server = await device.gatt.connect();
         const service = await server.getPrimaryService(NUS_SERVICE_UUID);
-        const char = await service.getCharacteristic(NUS_TX_CHAR_UUID);
+        const txChar = await service.getCharacteristic(NUS_TX_CHAR_UUID);
+        try {
+          bleRxChar = await service.getCharacteristic(NUS_RX_CHAR_UUID);
+        } catch (e) {
+          bleRxChar = null;
+        }
 
-        if (bleTxChar && bleTxChar !== char) {
+        if (bleTxChar && bleTxChar !== txChar) {
           try { bleTxChar.removeEventListener('characteristicvaluechanged', onBleDataReceived); } catch (e) {}
         }
-        bleTxChar = char;
+        bleTxChar = txChar;
         bleRxBuffer = '';
         bleTxChar.removeEventListener('characteristicvaluechanged', onBleDataReceived);
         bleTxChar.addEventListener('characteristicvaluechanged', onBleDataReceived);
@@ -478,6 +528,7 @@
         btnDemo.className = 'px-2.5 py-2 bg-slate-800 border border-white/10 text-slate-400 text-xs font-bold rounded shrink-0';
         setBleBadgeState('linked');
         logMsg(isRetry ? '✅ M5Stack BLE 自動再接続に成功しました！' : 'M5Stack & Solo 2 DL Linked! (自動再接続ON)');
+        sendStatusToTab5();
         return true;
       } catch (err) {
         if (!isRetry) {
@@ -494,6 +545,7 @@
         logMsg('Web Bluetooth非対応ブラウザです（Android Chrome / iOS Bluefy推奨）');
         return;
       }
+      requestWakeLock();
       clearBleReconnectTimer();
       try {
         logMsg('M5Stackを検索中...');
@@ -512,47 +564,112 @@
       }
     });
 
-    document.getElementById('btnStartTx').addEventListener('click', async () => {
+    // --- PeerJS 自動起動 & 自動再接続 ---
+    function schedulePeerRestart(delayMs = 3000) {
+      if (peerRetryTimer) clearTimeout(peerRetryTimer);
+      peerRetryTimer = setTimeout(() => {
+        peerRetryTimer = null;
+        startPeerTx(true);
+      }, delayMs);
+    }
+
+    async function startPeerTx(isAutoRetry = false) {
       const roomCode = document.getElementById('roomInput').value.trim().toUpperCase();
       if (!roomCode) return;
 
       if (!localStream) {
-        const ok = await startCamera();
-        if (!ok) return;
+        await startCamera();
       }
 
-      if (peer) peer.destroy();
+      if (peerRetryTimer) {
+        clearTimeout(peerRetryTimer);
+        peerRetryTimer = null;
+      }
+      if (peer) {
+        try { peer.destroy(); } catch (e) {}
+        peer = null;
+      }
       activeDataConns = [];
+      pitRecordingState = false;
+      updatePitCount();
 
       const peerId = 'RACE-CAR-' + roomCode;
+      document.getElementById('txDot').className = 'w-3 h-3 rounded-full bg-amber-400 animate-pulse';
+      document.getElementById('txStatus').textContent = isAutoRetry ? 'RECONNECTING...' : 'STARTING...';
+
       peer = new Peer(peerId, PEER_CONFIG);
 
       peer.on('open', () => {
         document.getElementById('txDot').className = 'w-3 h-3 rounded-full bg-emerald-400 animate-ping';
         document.getElementById('txStatus').textContent = 'ON AIR: ' + roomCode;
-        document.getElementById('btnStartTx').textContent = 'TRANSMITTING (配信中)';
-        document.getElementById('btnStartTx').className = 'py-2.5 bg-cyan-600 text-white font-extrabold text-base rounded tracking-wider shadow-lg';
+        document.getElementById('btnStartTx').textContent = 'ON AIR (TX再起動)';
+        document.getElementById('btnStartTx').className = 'py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white font-extrabold text-sm rounded tracking-wider shadow-lg';
+        logMsg(`📡 配信待機OK (ROOM: ${roomCode}) — PCを開けば自動接続します`);
+      });
+
+      peer.on('disconnected', () => {
+        document.getElementById('txDot').className = 'w-3 h-3 rounded-full bg-amber-400 animate-pulse';
+        document.getElementById('txStatus').textContent = 'NET RETRY...';
+        logMsg('PeerJSサーバー切断検知: 2秒後に自動再接続します...');
+        setTimeout(() => {
+          if (peer && !peer.destroyed && peer.disconnected) {
+            try { peer.reconnect(); } catch (e) { schedulePeerRestart(3000); }
+          }
+        }, 2000);
+      });
+
+      peer.on('error', (err) => {
+        console.warn('PeerJS Error:', err.type, err.message);
+        document.getElementById('txDot').className = 'w-3 h-3 rounded-full bg-rose-500';
+        document.getElementById('txStatus').textContent = 'TX RETRY...';
+        if (err.type === 'unavailable-id') {
+          logMsg('前回セッションの解放待ち... 3秒後に自動再接続します');
+          schedulePeerRestart(3000);
+        } else if (err.type === 'network' || err.type === 'server-error' || err.type === 'socket-error' || err.type === 'socket-closed') {
+          logMsg('通信エラー検知: 3秒後に自動再接続します...');
+          schedulePeerRestart(3000);
+        }
       });
 
       peer.on('connection', (conn) => {
+        activeDataConns = activeDataConns.filter(c => c.open && c.peer !== conn.peer);
         activeDataConns.push(conn);
         updatePitCount();
 
         conn.on('open', () => {
-          if (localStream) {
+          updatePitCount();
+          sendStatusToTab5();
+          if (localStream && peer && !peer.destroyed) {
             peer.call(conn.peer, localStream);
           }
         });
 
         conn.on('data', (data) => {
-          if (data && data.type === 'REQUEST_VIDEO' && localStream) {
+          if (!data) return;
+          if (data.type === 'REQUEST_VIDEO' && localStream && peer && !peer.destroyed) {
             peer.call(conn.peer, localStream);
+          } else if (data.type === 'PIT_STATUS') {
+            lastPitStatusRxMs = Date.now();
+            const newRec = !!data.rec;
+            const changed = (newRec !== pitRecordingState);
+            pitRecordingState = newRec;
+            updatePitCount();
+            if (changed) sendStatusToTab5();
           }
         });
 
         conn.on('close', () => {
-          activeDataConns = activeDataConns.filter(c => c !== conn);
+          activeDataConns = activeDataConns.filter(c => c !== conn && c.open);
+          if (activeDataConns.length === 0) pitRecordingState = false;
           updatePitCount();
+          sendStatusToTab5();
+        });
+
+        conn.on('error', () => {
+          activeDataConns = activeDataConns.filter(c => c !== conn && c.open);
+          if (activeDataConns.length === 0) pitRecordingState = false;
+          updatePitCount();
+          sendStatusToTab5();
         });
       });
 
@@ -561,17 +678,38 @@
           call.answer(localStream);
         }
       });
+    }
+
+    document.getElementById('btnStartTx').addEventListener('click', () => {
+      requestWakeLock();
+      startPeerTx(false);
     });
 
     function updatePitCount() {
       const count = activeDataConns.filter(c => c.open).length;
       const badge = document.getElementById('pitBadge');
-      badge.textContent = `PIT PC: ${count}`;
-      badge.className = count > 0
-        ? 'px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-400/50 font-bold'
-        : 'px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-white/10';
+      if (count > 0 && pitRecordingState) {
+        badge.textContent = 'PIT: ● REC';
+        badge.className = 'px-2 py-0.5 rounded bg-rose-600 text-white border border-rose-300 font-extrabold animate-pulse';
+      } else if (count > 0) {
+        badge.textContent = `PIT PC: OK (${count})`;
+        badge.className = 'px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/50 font-bold';
+      } else {
+        badge.textContent = 'PIT PC: WAIT';
+        badge.className = 'px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-white/10';
+      }
     }
 
+    // 1秒ごとにTab5へピット接続・録画状態を返送（＆タイムアウト監視）
+    setInterval(() => {
+      if (pitRecordingState && lastPitStatusRxMs > 0 && (Date.now() - lastPitStatusRxMs > 6000)) {
+        pitRecordingState = false;
+        updatePitCount();
+      }
+      sendStatusToTab5();
+    }, 1000);
+
+    // 25Hz テレメトリ送信ループ
     setInterval(() => {
       if (!bleConnected) {
         if (isDemoMode) {
@@ -593,10 +731,11 @@
             lon: phoneGpsState.lon
           };
         } else {
-          // DEMO OFF かつ BLE未接続時はスマホ内蔵GPSの車速・ライン通過判定で動作
+          // 本番待機：BLE未接続時は 0km/h（GPS走行中のみGPS車速）
           latestTelemetry = {
-            spd: Math.round(phoneGpsState.spdKmh || 0),
-            rpm: 850,
+            ...latestTelemetry,
+            spd: phoneGpsState.active ? Math.round(phoneGpsState.spdKmh || 0) : 0,
+            rpm: 0,
             gear: 1,
             thr: 0,
             brk: 0,
@@ -626,19 +765,23 @@
       };
       activeDataConns.forEach(conn => {
         if (conn.open) {
-          conn.send(payload);
+          try { conn.send(payload); } catch (e) {}
         }
       });
     }, 40);
 
+    // ページを開いたら自動でカメラ起動＋配信待機(START TX)まで完了させる
     window.addEventListener('load', async () => {
+      requestWakeLock();
       initPhoneGpsTracker();
       await startCamera();
       await loadVideoDevices();
       if (currentDeviceIndex > 0 && videoDevices[currentDeviceIndex]) {
         await startCamera(videoDevices[currentDeviceIndex].deviceId);
       }
+      await startPeerTx(false);
     });
   </script>
 </body>
 </html>
+incar_transmitter.html を表示しています。
